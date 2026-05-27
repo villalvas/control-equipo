@@ -104,10 +104,123 @@ if df_raw is not None and not df_raw.empty:
     comerciales_disponibles = ["TODOS"] + list(df_raw[col_comercial].dropna().unique())
     filtro_comercial = st.sidebar.selectbox(f"Filtrar por Comercial:", comerciales_disponibles)
 
-    # 4. Filtro: Recurrencia de Boletín
+    # 4. Filtro Lateral de Recurrencia (Corregido sin errores de sintaxis)
     st.sidebar.markdown("---")
     st.sidebar.header("🔄 Frecuencia de Entrega")
     recurrencias_disponibles = ["TODOS"]
     if col_recurrencia in df_raw.columns:
         recurrencias_disponibles += list(df_raw[col_recurrencia].dropna().unique())
-    filtro_recurrencia = st.sidebar.selectbox("Selecciona Recurren
+    filtro_recurrencia = st.sidebar.selectbox("Selecciona Recurrencia:", recurrencias_disponibles)
+
+    # ---------------------------------------------------------------------
+    # APLICACIÓN DE FILTROS EN CASCADA Y CÁLCULO BASE DEL TOTAL
+    # ---------------------------------------------------------------------
+    df_base_universo = df_raw.copy()
+    if filtro_recurrencia != "TODOS":
+        df_base_universo = df_base_universo[df_base_universo[col_recurrencia] == filtro_recurrencia]
+
+    total_boletines_vivos = len(df_base_universo)
+
+    df_filtrado = df_base_universo.copy()
+    if filtro_estatus != "TODOS":
+        df_filtrado = df_filtrado[df_filtrado['Estatus de Entrega'] == filtro_estatus]
+    if filtro_comercial != "TODOS":
+        df_filtrado = df_filtrado[df_filtrado[col_comercial] == filtro_comercial]
+
+    # ---------------------------------------------------------------------
+    # TARJETAS DE INDICADORES (KPIs)
+    # ---------------------------------------------------------------------
+    a_tiempo = len(df_base_universo[df_base_universo['Evaluación de Entrega Raw'] == "Entregado a Tiempo"])
+    atrasados = len(df_base_universo[df_base_universo['Evaluación de Entrega Raw'] == "Entregado Atrasado"])
+    pendientes = len(df_base_universo[df_base_universo['Evaluación de Entrega Raw'] == "Pendiente de Carga"])
+
+    efectividad_pct = int((a_tiempo / total_boletines_vivos) * 100) if total_boletines_vivos > 0 else 0
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.metric(label="Total Casos del Mes", value=f"{total_boletines_vivos} Cuentas")
+    with c2:
+        st.metric(label="Efectividad de Gestión", value=f"{efectividad_pct}% A Tiempo", delta=f"{a_tiempo} de {total_boletines_vivos} Boletines")
+    with c3:
+        st.metric(label="Pendientes de Carga", value=f"{pendientes} Pendientes", delta=f"{atrasados} con Retraso", delta_color="inverse")
+
+    st.markdown("---")
+
+    # ---------------------------------------------------------------------
+    # BLOQUE GRÁFICO: GRÁFICO DE AUDITORÍA DE SLA (HORIZONTAL)
+    # ---------------------------------------------------------------------
+    st.write("### 📊 Auditoría de SLA (Tiempos de Respuesta)")
+    
+    conteo_tiempos = df_filtrado['Estatus de Entrega'].value_counts().reset_index()
+    conteo_tiempos.columns = ['Estatus de Entrega', 'Cantidad']
+    
+    if not conteo_tiempos.empty:
+        conteo_tiempos['Porcentaje'] = ((conteo_tiempos['Cantidad'] / total_boletines_vivos) * 100).round(1)
+        conteo_tiempos['Etiqueta'] = conteo_tiempos.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']}%)", axis=1)
+        
+        fig_sla = px.bar(conteo_tiempos, x='Cantidad', y='Estatus de Entrega', text='Etiqueta',
+                         orientation='h', color='Estatus de Entrega',
+                         color_discrete_map={
+                             "🚀 Entregado a Tiempo": "#2ca02c",
+                             "⚠️ Entregado Atrasado": "#d62728",
+                             "⏳ Pendiente de Carga": "#ff7f0e",
+                             "✅ Entregado (Formato Variable)": "#1f77b4"
+                         })
+        fig_sla.update_traces(textposition='outside')
+        fig_sla.update_layout(xaxis_title="Cantidad de Boletines", yaxis_title=None, showlegend=False, height=240, margin=dict(t=10, b=10, l=10, r=10))
+        st.plotly_chart(fig_sla, use_container_width=True)
+    else:
+        st.info("Sin datos para graficar.")
+
+    st.markdown("---")
+
+    # ---------------------------------------------------------------------
+    # SECCIÓN: TABLA CON FILA DE TOTALES GENERALES (CANTIDAD + PORCENTAJE)
+    # ---------------------------------------------------------------------
+    st.write("### 🗂️ Resumen Ejecutivo de Cumplimiento por Cliente e Institución")
+    st.write("Distribución de estados y porcentajes de cumplimiento agrupados de forma estratégica:")
+    
+    if col_grupo in df_filtrado.columns and col_cliente in df_filtrado.columns:
+        # Generamos la matriz cruzada de conteos puros
+        matrix_raw = pd.crosstab(
+            index=[df_filtrado[col_grupo], df_filtrado[col_cliente]],
+            columns=df_filtrado['Estatus de Entrega']
+        ).reset_index()
+        
+        columnas_estados = [c for c in matrix_raw.columns if c not in [col_grupo, col_cliente]]
+        
+        # Calculamos el total horizontal matemático por fila
+        matrix_raw['Total General'] = matrix_raw[columnas_estados].sum(axis=1)
+        
+        # Estructuramos la fila de Totales Generales para el fondo de la tabla
+        fila_total = {col_grupo: "TOTAL GENERAL", col_cliente: ""}
+        gran_total_casos = matrix_raw['Total General'].sum()
+        
+        for est in columnas_estados:
+            fila_total[est] = matrix_raw[est].sum()
+        fila_total['Total General'] = gran_total_casos
+        
+        # Unimos la fila de totales reales al DataFrame original
+        df_total_fila = pd.DataFrame([fila_total])
+        pivot_df = pd.concat([matrix_raw, df_total_fila], ignore_index=True)
+        
+        # Formateamos dinámicamente cada celda convirtiéndola a texto seguro 'Cantidad (Porcentaje%)'
+        for estado in columnas_estados:
+            def formatear_celda(row):
+                tot_fila = row['Total General']
+                actual = row[estado]
+                if tot_fila > 0:
+                    pct = (actual / tot_fila) * 100
+                    return f"{int(actual)} ({pct:.1f}%)"
+                return "0 (0.0%)"
+            pivot_df[estado] = pivot_df.apply(formatear_celda, axis=1)
+            
+        # Formateamos la última columna de totales horizontales
+        pivot_df['Total General'] = pivot_df['Total General'].apply(lambda x: f"{int(x)} (100%)")
+        
+        st.dataframe(pivot_df, use_container_width=True, hide_index=True)
+    else:
+        st.warning("No se encontraron las columnas de Grupo/Área o Cliente Institucional para procesar el resumen.")
+
+else:
+    st.warning(f"La pestaña '{mes_seleccionado}' está vacía o aún no ha sido creada en Google Drive.")
