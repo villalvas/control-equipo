@@ -112,7 +112,7 @@ if df_raw is not None and not df_raw.empty:
         df_filtrado = df_filtrado[df_filtrado[col_comercial] == filtro_comercial]
 
     # ---------------------------------------------------------------------
-    # TARJETAS DE INDICADORES (KPIs)
+    # TARJETAS DE INDICADORES (KPIs) - ENFOQUE EN EFECTIVIDAD
     # ---------------------------------------------------------------------
     total_boletines = len(df_raw)
     a_tiempo = len(df_raw[df_raw['Evaluación de Entrega Raw'] == "Entregado a Tiempo"])
@@ -121,13 +121,16 @@ if df_raw is not None and not df_raw.empty:
     pendientes = len(df_raw[df_raw['Evaluación de Entrega Raw'] == "Pendiente de Carga"])
     total_entregados = a_tiempo + atrasados + formato_var
 
+    # Cálculo matemático de la efectividad de puntualidad sobre el total del mes
+    efectividad_pct = int((a_tiempo / total_boletines) * 100) if total_boletines > 0 else 0
+
     c1, c2, c3 = st.columns(3)
     with c1:
         st.metric(label=f"📋 Total Casos ({mes_seleccionado})", value=f"{total_boletines} Cuentas")
     with c2:
-        st.metric(label="✅ Total Boletines Entregados", value=f"{total_entregados} Cuentas", delta=f"{a_tiempo} a Tiempo / {atrasados} Atrasados")
+        st.metric(label="🎯 Efectividad de Gestión", value=f"{efectividad_pct}% A Tiempo", delta=f"{a_tiempo} de {total_boletines} Boletines cumplidos")
     with c3:
-        st.metric(label="⏳ Pendientes de Carga", value=f"{pendientes} Activos", delta="Requieren Gestión", delta_color="inverse")
+        st.metric(label="⏳ Pendientes de Carga", value=f"{pendientes} Activos", delta=f"{atrasados} con Retraso", delta_color="inverse")
 
     st.markdown("---")
 
@@ -156,8 +159,6 @@ if df_raw is not None and not df_raw.empty:
     # ---------------------------------------------------------------------
     st.write(f"### 🔍 Matriz del Equipo Operativo ({mes_seleccionado}) - Vista: {filtro_estatus}")
     
-    # Definimos la lista exacta de las columnas solicitadas por el usuario.
-    # El sistema buscará estas columnas en tu Excel sin importar minúsculas o espacios.
     columnas_deseadas = [
         "GRUPOAREA COMMERCIAL",
         "CLIENTE INSTITUCIONAL",
@@ -166,25 +167,21 @@ if df_raw is not None and not df_raw.empty:
         "Gerente Comercial / Director",
         "FECHA DE ENTREGA DE BOLETIN",
         "FECHA DE CARGA ODOO",
-        "Estatus de Entrega" # Nuestra columna calculada va al final automáticamente
+        "Estatus de Entrega"
     ]
     
-    # Mapeo dinámico y tolerante para asegurar que coincidan los nombres del Excel
     columnas_a_mostrar = []
     for deseada in columnas_deseadas:
         if deseada == "Estatus de Entrega":
             columnas_a_mostrar.append(deseada)
         else:
-            # Busca una columna en el dataframe que se parezca al nombre deseado
             coincidencia = next((c for c in df_filtrado.columns if deseada.lower().replace(" ", "") in c.lower().replace(" ", "") or c.lower().replace(" ", "") in deseada.lower().replace(" ", "")), None)
             if coincidencia:
                 columnas_a_mostrar.append(coincidencia)
     
-    # Si por alguna razón no encuentra los mapeos exactos, usamos las columnas del dataframe que coincidan
     if len(columnas_a_mostrar) > 1:
         df_compacto = df_filtrado[columnas_a_mostrar]
     else:
-        # Respaldo en caso de que los nombres varíen drásticamente
         df_compacto = df_filtrado.drop(columns=['Evaluación de Entrega Raw'], errors='ignore')
 
     st.dataframe(df_compacto, use_container_width=True, hide_index=True)
