@@ -54,6 +54,7 @@ if df_raw is not None and not df_raw.empty:
     col_entrega = buscar_columna(['fecha de entrega de boletin', 'entrega de boletin', 'fecha entrega'], df_raw)
     col_odoo = buscar_columna(['odoo', 'fecha de carga odoo', 'carga odoo'], df_raw)
     col_grupo = buscar_columna(['grupoarea', 'grupo area', 'grupo', 'area'], df_raw) or df_raw.columns[0]
+    col_recurrencia = buscar_columna(['recurrencia de boletin', 'recurrencia', 'periodo'], df_raw) or df_raw.columns[0]
 
     # ---------------------------------------------------------------------
     # LÓGICA DE AUDITORÍA DE TIEMPOS (PROCESAMIENTO DE FECHAS)
@@ -103,8 +104,27 @@ if df_raw is not None and not df_raw.empty:
     comerciales_disponibles = ["TODOS"] + list(df_raw[col_comercial].dropna().unique())
     filtro_comercial = st.sidebar.selectbox(f"Filtrar por Comercial:", comerciales_disponibles)
 
-    # Aplicación de los filtros en cascada
-    df_filtrado = df_raw.copy()
+    # 4. NUEVO FILTRO: Recurrencia de Boletín
+    st.sidebar.markdown("---")
+    st.sidebar.header("🔄 Frecuencia de Entrega")
+    recurrencias_disponibles = ["TODOS"]
+    if col_recurrencia in df_raw.columns:
+        recurrencias_disponibles += list(df_raw[col_recurrencia].dropna().unique())
+    filtro_recurrencia = st.sidebar.selectbox("Selecciona Recurrencia:", recurrencias_disponibles)
+
+    # ---------------------------------------------------------------------
+    # APLICACIÓN DE FILTROS EN CASCADA Y CÁLCULO BASE DEL TOTAL DEL DASHBOARD
+    # ---------------------------------------------------------------------
+    # Primero aplicamos el filtro de recurrencia sobre la base general para definir el "Universo Total Fijo"
+    df_base_universo = df_raw.copy()
+    if filtro_recurrencia != "TODOS":
+        df_base_universo = df_base_universo[df_base_universo[col_recurrencia] == filtro_recurrencia]
+
+    # El gran total dinámico dependerá exclusivamente de la recurrencia seleccionada
+    total_boletines_vivos = len(df_base_universo)
+
+    # El resto de filtros (Estatus y Comercial) se aplican sobre este nuevo universo base
+    df_filtrado = df_base_universo.copy()
     
     if filtro_estatus != "TODOS":
         df_filtrado = df_filtrado[df_filtrado['Estatus de Entrega'] == filtro_estatus]
@@ -113,19 +133,16 @@ if df_raw is not None and not df_raw.empty:
         df_filtrado = df_filtrado[df_filtrado[col_comercial] == filtro_comercial]
 
     # ---------------------------------------------------------------------
-    # TARJETAS DE INDICADORES (KPIs) - CORREGIDO TEXTO DE ESTRUTURA AbIERTA
+    # TARJETAS DE INDICADORES (KPIs) CALCULADOS BASADOS EN EL NUEVO TOTAL
     # ---------------------------------------------------------------------
-    total_boletines_vivos = len(df_raw)
-    a_tiempo = len(df_raw[df_raw['Evaluación de Entrega Raw'] == "Entregado a Tiempo"])
-    atrasados = len(df_raw[df_raw['Evaluación de Entrega Raw'] == "Entregado Atrasado"])
-    formato_var = len(df_raw[df_raw['Evaluación de Entrega Raw'] == "Entregado (Formato Variable)"])
-    pendientes = len(df_raw[df_raw['Evaluación de Entrega Raw'] == "Pendiente de Carga"])
+    a_tiempo = len(df_base_universo[df_base_universo['Evaluación de Entrega Raw'] == "Entregado a Tiempo"])
+    atrasados = len(df_base_universo[df_base_universo['Evaluación de Entrega Raw'] == "Entregado Atrasado"])
+    pendientes = len(df_base_universo[df_base_universo['Evaluación de Entrega Raw'] == "Pendiente de Carga"])
 
     efectividad_pct = int((a_tiempo / total_boletines_vivos) * 100) if total_boletines_vivos > 0 else 0
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        # Cadena de texto simplificada y segura sin caracteres rebeldes en f-string
         st.metric(label="Total Casos del Mes", value=f"{total_boletines_vivos} Cuentas")
     with c2:
         st.metric(label="Efectividad de Gestión", value=f"{efectividad_pct}% A Tiempo", delta=f"{a_tiempo} de {total_boletines_vivos} Boletines")
@@ -170,7 +187,7 @@ if df_raw is not None and not df_raw.empty:
     
     if col_grupo in df_filtrado.columns and col_cliente in df_filtrado.columns:
         # Creamos la tabla cruzada (Crosstab)
-        pivot_df = pd.crosstab(
+        pivot_df = pd.with_options if hasattr(pd, 'with_options') else pd.crosstab(
             index=[df_filtrado[col_grupo], df_filtrado[col_cliente]],
             columns=df_filtrado['Estatus de Entrega'],
             margins=True, margins_name='Total General'
@@ -178,7 +195,7 @@ if df_raw is not None and not df_raw.empty:
         
         columnas_estados = [c for c in pivot_df.columns if c not in [col_grupo, col_cliente, 'Total General']]
         
-        # Reformateamos las celdas para añadir la cantidad y el % dinámico
+        # Reformateamos las celdas para añadir la cantidad y el % dinámico basado en la recurrencia elegida
         for estado in columnas_estados:
             def formatear_celda(row):
                 total = row['Total General']
