@@ -113,7 +113,7 @@ if df_raw is not None and not df_raw.empty:
         df_filtrado = df_filtrado[df_filtrado[col_comercial] == filtro_comercial]
 
     # ---------------------------------------------------------------------
-    # TARJETAS DE INDICADORES (KPIs) - SE CAMBIA "ACTIVOS" POR "PENDIENTES"
+    # TARJETAS DE INDICADORES (KPIs)
     # ---------------------------------------------------------------------
     total_boletines_vivos = len(df_raw)
     a_tiempo = len(df_raw[df_raw['Evaluación de Entrega Raw'] == "Entregado a Tiempo"])
@@ -129,13 +129,12 @@ if df_raw is not None and not df_raw.empty:
     with c2:
         st.metric(label="🎯 Efectividad de Gestión", value=f"{efectividad_pct}% A Tiempo", delta=f"{a_tiempo} de {total_boletines_vivos} Boletines cumplidos")
     with c3:
-        # Cambio solicitado: De 'Activos' a 'Pendientes'
         st.metric(label="⏳ Pendientes de Carga", value=f"{pendientes} Pendientes", delta=f"{atrasados} con Retraso", delta_color="inverse")
 
     st.markdown("---")
 
     # ---------------------------------------------------------------------
-    # NUEVO BLOQUE: GRÁFICO DE AUDITORÍA DE SLA (CAMBIADO DE TABLA A GRÁFICO)
+    # BLOQUE GRÁFICO: GRÁFICO DE AUDITORÍA DE SLA (HORIZONTAL)
     # ---------------------------------------------------------------------
     st.write("### 📊 Auditoría de SLA (Tiempos de Respuesta)")
     
@@ -146,7 +145,6 @@ if df_raw is not None and not df_raw.empty:
         conteo_tiempos['Porcentaje'] = ((conteo_tiempos['Cantidad'] / total_boletines_vivos) * 100).round(1)
         conteo_tiempos['Etiqueta'] = conteo_tiempos.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']}%)", axis=1)
         
-        # Gráfico de barras horizontal ejecutivo para mejor lectura de estados
         fig_sla = px.bar(conteo_tiempos, x='Cantidad', y='Estatus de Entrega', text='Etiqueta',
                          orientation='h', color='Estatus de Entrega',
                          color_discrete_map={
@@ -164,28 +162,32 @@ if df_raw is not None and not df_raw.empty:
     st.markdown("---")
 
     # ---------------------------------------------------------------------
-    # NUEVA SECCIÓN: TABLA CONSOLIDADA (GRUPO + CLIENTE + CANTIDAD Y % POR ESTATUS)
+    # SECCIÓN: TABLA CONSOLIDADA (CON CORRECCIÓN DE PARSEO DE PORCENTAJES)
     # ---------------------------------------------------------------------
     st.write("### 🗂️ Resumen Ejecutivo de Cumplimiento por Cliente e Institución")
     st.write("Distribución de estados y porcentajes de cumplimiento agrupados de forma estratégica:")
     
     if col_grupo in df_filtrado.columns and col_cliente in df_filtrado.columns:
-        # Creamos una tabla cruzada automática (Pivot)
+        # Creamos la tabla cruzada (Crosstab)
         pivot_df = pd.crosstab(
             index=[df_filtrado[col_grupo], df_filtrado[col_cliente]],
             columns=df_filtrado['Estatus de Entrega'],
             margins=True, margins_name='Total General'
         ).reset_index()
         
-        # Calculamos los % dinámicos fila por fila basándonos en su propio total
         columnas_estados = [c for c in pivot_df.columns if c not in [col_grupo, col_cliente, 'Total General']]
         
-        # Formateamos las columnas para mostrar 'Cantidad (% del total del cliente)'
+        # Reformateamos de forma segura sin funciones propensas a errores de tipos de datos (.round)
         for estado in columnas_estados:
-            pivot_df[estado] = pivot_df.apply(
-                lambda row: f"{row[estado]} ({(row[estado]/row['Total General']*100).round(1)}%)" if row['Total General'] > 0 else "0 (0%)", 
-                axis=1
-            )
+            def formatear_celda(row):
+                total = row['Total General']
+                actual = row[estado]
+                if total > 0:
+                    pct = (actual / total) * 100
+                    return f"{actual} ({pct:.1f}%)"
+                return "0 (0.0%)"
+                
+            pivot_df[estado] = pivot_df.apply(formatear_celda, axis=1)
             
         st.dataframe(pivot_df, use_container_width=True, hide_index=True)
     else:
@@ -212,7 +214,7 @@ if df_raw is not None and not df_raw.empty:
     columnas_a_mostrar = []
     for desea in columnas_deseadas:
         if desea == "Estatus de Entrega":
-            columnas_a_mostrar.append(deseada)
+            columnas_a_mostrar.append(desea)
         else:
             coincidencia = next((c for c in df_filtrado.columns if desea.lower().replace(" ", "") in c.lower().replace(" ", "") or c.lower().replace(" ", "") in deseada.lower().replace(" ", "")), None)
             if coincidencia:
