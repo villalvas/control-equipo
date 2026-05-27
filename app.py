@@ -147,9 +147,9 @@ if df_raw is not None and not df_raw.empty:
     st.markdown("---")
 
     # =========================================================================
-    # DISEÑO COMPACTO Y SEGURO: GRÁFICO (40%) | TABLA DE RESUMEN EJECUTIVO (60%)
+    # DISEÑO ROBUSTO EN PARALELO: GRÁFICO (40%) | TABLA INTEGRAL DETALLADA (60%)
     # =========================================================================
-    col_grafico, col_tabla = st.columns([4, 6])  # Proporción exacta 40% - 60% sin fallas
+    col_grafico, col_tabla = st.columns([4, 6])
 
     # --- COLUMNA IZQUIERDA: GRÁFICO DE SLA AL 40% ---
     with col_grafico:
@@ -176,23 +176,40 @@ if df_raw is not None and not df_raw.empty:
         else:
             st.info("Sin datos para graficar con el filtro actual.")
 
-    # --- COLUMNA DERECHA: TABLA RESUMEN CON MARCADOR DE TOTALES SEGURO ---
+    # --- COLUMNA DERECHA: TABLA DE DETALLE SEGURO ---
     with col_tabla:
         st.write("### 🗂️ Resumen Ejecutivo de Cumplimiento")
         
         if col_grupo in df_filtrado.columns and col_cliente in df_filtrado.columns:
-            df_display = df_filtrado.copy()
-            df_display[col_entrega] = df_display[col_entrega].fillna("---")
-            df_display[col_odoo] = df_display[col_odoo].fillna("---")
+            # 1. Preparación de columnas limpias para evitar errores de tipo de dato
+            df_tabla_final = pd.DataFrame({
+                'GRUPO': df_filtrado[col_grupo].fillna("---"),
+                'CLIENTE / INSTITUCIÓN': df_filtrado[col_cliente].fillna("---"),
+                'F. ENTREGA': df_filtrado[col_entrega].fillna("---"),
+                'F. ODOO': df_filtrado[col_odoo].fillna("---"),
+                'ESTATUS': df_filtrado['Estatus de Entrega']
+            })
             
-            # 1. Cruzar datos incluyendo las columnas de fecha en el índice
-            pivot_raw = pd.crosstab(
-                index=[df_display[col_grupo], df_display[col_cliente], df_display[col_entrega], df_display[col_odoo]],
-                columns=df_display['Estatus de Entrega']
-            ).reset_index()
+            # 2. Ordenar datos por Grupo y Cliente para mantener consistencia
+            df_tabla_final = df_tabla_final.sort_values(by=['GRUPO', 'CLIENTE / INSTITUCIÓN']).reset_index(drop=True)
             
-            pivot_raw.rename(columns={col_entrega: 'F. ENTREGA', col_odoo: 'F. ODOO'}, inplace=True)
-            columnas_estados = [c for c in pivot_raw.columns if c not in [col_grupo, col_cliente, 'F. ENTREGA', 'F. ODOO']]
+            # 3. Calcular la fila de acumulados de manera independiente y segura
+            total_items = len(df_tabla_final)
+            fila_acumulada = pd.DataFrame([{
+                'GRUPO': "🟦 TOTAL GENERAL 🟦",
+                'CLIENTE / INSTITUCIÓN': f"📊 {total_items} Casos Filtrados",
+                'F. ENTREGA': "═══════════",
+                'F. ODOO': "═══════════",
+                'ESTATUS': "📈 Resumen de Selección"
+            }])
             
-            # Calcular total horizontal matemático
-            pivot_raw['Total General'] = pivot_
+            # Unir los registros de clientes con la fila de totales finales
+            df_desplegar = pd.concat([df_tabla_final, fila_acumulada], ignore_index=True)
+            
+            # Desplegar la tabla nativa (Garantiza 0 bloqueos y lectura perfecta)
+            st.dataframe(df_desplegar, use_container_width=True, hide_index=True)
+        else:
+            st.warning("No se encontraron los campos obligatorios en el archivo origen.")
+
+else:
+    st.warning(f"La pestaña '{mes_seleccionado}' está vacía o aún no ha sido creada.")
