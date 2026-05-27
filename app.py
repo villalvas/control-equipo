@@ -90,10 +90,9 @@ if df_raw is not None and not df_raw.empty:
         df_raw['Evaluación de Entrega Raw'] = "Pendiente de Carga"
         df_raw['Estatus de Entrega'] = "⏳ Pendiente de Carga"
 
-    # 2. NUEVO FILTRO LATERAL INTERACTIVO DE ESTATUS (REQUERIDO)
+    # 2. Filtro Lateral Interactivos de Estatus
     st.sidebar.markdown("---")
     st.sidebar.header("🔍 Filtrar Clientes por Estado")
-    
     opciones_estatus = ["TODOS", "🚀 Entregado a Tiempo", "⚠️ Entregado Atrasado", "⏳ Pendiente de Carga"]
     filtro_estatus = st.sidebar.selectbox("Selecciona un Estatus:", opciones_estatus)
 
@@ -103,7 +102,7 @@ if df_raw is not None and not df_raw.empty:
     comerciales_disponibles = ["TODOS"] + list(df_raw[col_comercial].dropna().unique())
     filtro_comercial = st.sidebar.selectbox(f"Filtrar por Comercial:", comerciales_disponibles)
 
-    # APLICACIÓN DE LOS FILTROS EN CASCADA
+    # Aplicación de los filtros en cascada
     df_filtrado = df_raw.copy()
     
     if filtro_estatus != "TODOS":
@@ -113,7 +112,7 @@ if df_raw is not None and not df_raw.empty:
         df_filtrado = df_filtrado[df_filtrado[col_comercial] == filtro_comercial]
 
     # ---------------------------------------------------------------------
-    # TARJETAS DE INDICADORES (KPIs) - MUESTRAN SIEMPRE EL GLOBAL DEL MES
+    # TARJETAS DE INDICADORES (KPIs)
     # ---------------------------------------------------------------------
     total_boletines = len(df_raw)
     a_tiempo = len(df_raw[df_raw['Evaluación de Entrega Raw'] == "Entregado a Tiempo"])
@@ -153,14 +152,42 @@ if df_raw is not None and not df_raw.empty:
     st.markdown("---")
 
     # ---------------------------------------------------------------------
-    # MATRIZ OPERATIVA DINÁMICA CON FILTRADO EN TIEMPO REAL
+    # MATRIZ OPERATIVA COMPACTA (COLUMNAS PRINCIPALES SELECCIONADAS)
     # ---------------------------------------------------------------------
     st.write(f"### 🔍 Matriz del Equipo Operativo ({mes_seleccionado}) - Vista: {filtro_estatus}")
-    st.write(f"Mostrando un total de **{len(df_filtrado)}** registros según tus filtros de la izquierda.")
     
-    # Quitamos columnas técnicas de procesamiento interno antes de mostrar la tabla
-    columnas_finales = df_filtrado.drop(columns=['Evaluación de Entrega Raw'], errors='ignore')
-    st.dataframe(columnas_finales, use_container_width=True, hide_index=True)
+    # Definimos la lista exacta de las columnas solicitadas por el usuario.
+    # El sistema buscará estas columnas en tu Excel sin importar minúsculas o espacios.
+    columnas_deseadas = [
+        "GRUPOAREA COMMERCIAL",
+        "CLIENTE INSTITUCIONAL",
+        "RECURRENCIA DE BOLETIN",
+        "Ejecutivo Comercial / Coordinador",
+        "Gerente Comercial / Director",
+        "FECHA DE ENTREGA DE BOLETIN",
+        "FECHA DE CARGA ODOO",
+        "Estatus de Entrega" # Nuestra columna calculada va al final automáticamente
+    ]
+    
+    # Mapeo dinámico y tolerante para asegurar que coincidan los nombres del Excel
+    columnas_a_mostrar = []
+    for deseada in columnas_deseadas:
+        if deseada == "Estatus de Entrega":
+            columnas_a_mostrar.append(deseada)
+        else:
+            # Busca una columna en el dataframe que se parezca al nombre deseado
+            coincidencia = next((c for c in df_filtrado.columns if deseada.lower().replace(" ", "") in c.lower().replace(" ", "") or c.lower().replace(" ", "") in deseada.lower().replace(" ", "")), None)
+            if coincidencia:
+                columnas_a_mostrar.append(coincidencia)
+    
+    # Si por alguna razón no encuentra los mapeos exactos, usamos las columnas del dataframe que coincidan
+    if len(columnas_a_mostrar) > 1:
+        df_compacto = df_filtrado[columnas_a_mostrar]
+    else:
+        # Respaldo en caso de que los nombres varíen drásticamente
+        df_compacto = df_filtrado.drop(columns=['Evaluación de Entrega Raw'], errors='ignore')
+
+    st.dataframe(df_compacto, use_container_width=True, hide_index=True)
 
 else:
     st.warning(f"La pestaña '{mes_seleccionado}' está vacía o aún no ha sido creada en Google Drive. Cuando agregues los datos en tu Excel, el tablero aparecerá automáticamente aquí.")
