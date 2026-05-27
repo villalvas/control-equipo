@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px  # Librería avanzada para gráficos dinámicos con etiquetas
 
 # Configuración estética del Dashboard estilo Ejecutivo
 st.set_page_config(page_title="Control de Boletines", layout="wide", initial_sidebar_state="expanded")
@@ -112,45 +113,66 @@ if df_raw is not None and not df_raw.empty:
         df_filtrado = df_filtrado[df_filtrado[col_comercial] == filtro_comercial]
 
     # ---------------------------------------------------------------------
-    # TARJETAS DE INDICADORES (KPIs) - ENFOQUE EN EFECTIVIDAD
+    # TARJETAS DE INDICADORES (KPIs) - TOTALES VIVOS
     # ---------------------------------------------------------------------
-    total_boletines = len(df_raw)
+    total_boletines_vivos = len(df_raw) # El total real dinámico (ej: 71)
     a_tiempo = len(df_raw[df_raw['Evaluación de Entrega Raw'] == "Entregado a Tiempo"])
     atrasados = len(df_raw[df_raw['Evaluación de Entrega Raw'] == "Entregado Atrasado"])
     formato_var = len(df_raw[df_raw['Evaluación de Entrega Raw'] == "Entregado (Formato Variable)"])
     pendientes = len(df_raw[df_raw['Evaluación de Entrega Raw'] == "Pendiente de Carga"])
     total_entregados = a_tiempo + atrasados + formato_var
 
-    # Cálculo matemático de la efectividad de puntualidad sobre el total del mes
-    efectividad_pct = int((a_tiempo / total_boletines) * 100) if total_boletines > 0 else 0
+    efectividad_pct = int((a_tiempo / total_boletines_vivos) * 100) if total_boletines_vivos > 0 else 0
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        st.metric(label=f"📋 Total Casos ({mes_seleccionado})", value=f"{total_boletines} Cuentas")
+        st.metric(label=f"📋 Total Casos ({mes_seleccionado})", value=f"{total_boletines_vivos} Cuentas")
     with c2:
-        st.metric(label="🎯 Efectividad de Gestión", value=f"{efectividad_pct}% A Tiempo", delta=f"{a_tiempo} de {total_boletines} Boletines cumplidos")
+        st.metric(label="🎯 Efectividad de Gestión", value=f"{efectividad_pct}% A Tiempo", delta=f"{a_tiempo} de {total_boletines_vivos} Boletines cumplidos")
     with c3:
         st.metric(label="⏳ Pendientes de Carga", value=f"{pendientes} Activos", delta=f"{atrasados} con Retraso", delta_color="inverse")
 
     st.markdown("---")
 
     # ---------------------------------------------------------------------
-    # BLOQUE GRÁFICO
+    # BLOQUE GRÁFICO AVANZADO CON PORCENTAJES DINÁMICOS
     # ---------------------------------------------------------------------
     col_izq, col_der = st.columns([1, 1])
 
     with col_izq:
         st.write(f"### 📈 Volumen de Cuentas por Comercial - {mes_seleccionado}")
-        conteo_comerciales = df_filtrado[col_comercial].value_counts()
+        
+        # Agrupamos por comercial y calculamos cantidad y porcentaje sobre el total del mes
+        conteo_comerciales = df_filtrado[col_comercial].value_counts().reset_index()
+        conteo_comerciales.columns = ['Comercial / Región', 'Cantidad']
+        
         if not conteo_comerciales.empty:
-            st.bar_chart(conteo_comerciales)
+            # Calculamos el % de forma dinámica basándonos en el total absoluto del mes
+            conteo_comerciales['Porcentaje'] = (conteo_comerciales['Cantidad'] / total_boletines_vivos * 100).round(1)
+            # Creamos un texto combinando la Cantidad y el % para mostrar encima de cada barra
+            conteo_comerciales['Etiqueta'] = conteo_comerciales.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']}%)", axis=1)
+            
+            # Dibujamos un gráfico elegante usando Plotly
+            fig = px.bar(conteo_comerciales, x='Comercial / Región', y='Cantidad', text='Etiqueta',
+                         color_discrete_sequence=['#2b5c8f'])
+            fig.update_traces(textposition='outside') # Coloca las etiquetas arriba de las barras
+            fig.update_layout(xaxis_title=None, yaxis_title="Cantidad de Cuentas", margin=dict(t=10, b=10, l=10, r=10), height=320)
+            st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Sin datos para los filtros seleccionados.")
 
     with col_der:
         st.write("### 📊 Auditoría de SLA (Tiempos de Respuesta)")
-        conteo_tiempos = df_filtrado['Estatus de Entrega'].value_counts().to_frame().rename(columns={'Estatus de Entrega': "Cantidad"})
-        st.dataframe(conteo_tiempos, use_container_width=True)
+        # Construimos la tabla dinámica sumando la columna de Porcentajes matemáticos exactos
+        conteo_tiempos = df_filtrado['Estatus de Entrega'].value_counts().reset_index()
+        conteo_tiempos.columns = ['Estatus de Entrega', 'Cantidad']
+        
+        if not conteo_tiempos.empty:
+            # % dinámico basado en el total absoluto que cambie en Drive
+            conteo_tiempos['Porcentaje (%)'] = ((conteo_tiempos['Cantidad'] / total_boletines_vivos) * 100).round(1).astype(str) + '%'
+            st.dataframe(conteo_tiempos.set_index('Estatus de Entrega'), use_container_width=True)
+        else:
+            st.info("Sin datos.")
 
     st.markdown("---")
 
@@ -171,11 +193,11 @@ if df_raw is not None and not df_raw.empty:
     ]
     
     columnas_a_mostrar = []
-    for deseada in columnas_deseadas:
-        if deseada == "Estatus de Entrega":
-            columnas_a_mostrar.append(deseada)
+    for desea in columnas_deseadas:
+        if desea == "Estatus de Entrega":
+            columnas_a_mostrar.append(desea)
         else:
-            coincidencia = next((c for c in df_filtrado.columns if deseada.lower().replace(" ", "") in c.lower().replace(" ", "") or c.lower().replace(" ", "") in deseada.lower().replace(" ", "")), None)
+            coincidencia = next((c for c in df_filtrado.columns if desea.lower().replace(" ", "") in c.lower().replace(" ", "") or c.lower().replace(" ", "") in desea.lower().replace(" ", "")), None)
             if coincidencia:
                 columnas_a_mostrar.append(coincidencia)
     
