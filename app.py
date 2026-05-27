@@ -2,10 +2,10 @@ import streamlit as st
 import pandas as pd
 
 # Configuración estética del Dashboard estilo Ejecutivo
-st.set_page_config(page_title="Dashboard Operativo Anual", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Control de Boletines", layout="wide", initial_sidebar_state="expanded")
 
-st.title("📊 Tablero de Control Operativo Anual")
-st.subheader("Monitoreo estratégico, KPIs y gestión de boletines (Enero - Diciembre)")
+st.title("📊 Control de Boletines")
+st.subheader("Monitoreo estratégico, KPIs y gestión operativa (Enero - Diciembre)")
 st.markdown("---")
 
 # =========================================================================
@@ -66,7 +66,7 @@ if df_raw is not None and not df_raw.empty:
         df_filtrado = df_filtrado[df_filtrado[col_comercial] == filtro_comercial]
 
     # ---------------------------------------------------------------------
-    # TARJETAS DE INDICADORES (KPIs) - CORREGIDO BASADO EN ODOO
+    # TARJETAS DE INDICADORES (KPIs) - BASADO EN ODOO
     # ---------------------------------------------------------------------
     total_boletines = len(df_filtrado)
     
@@ -106,7 +106,6 @@ if df_raw is not None and not df_raw.empty:
     with col_der:
         st.write("### 📊 Estatus de Carga en Odoo")
         if col_odoo and col_odoo in df_filtrado.columns:
-            # Creamos una clasificación rápida en vivo para el gráfico resumido
             status_odoo = df_filtrado[col_odoo].notna() & (df_filtrado[col_odoo].astype(str).str.strip() != "")
             df_status = status_odoo.map({True: "Cargado en Odoo", False: "Pendiente"}).value_counts().to_frame().rename(columns={"index": "Estado", "count": "Cantidad"})
             st.dataframe(df_status, use_container_width=True)
