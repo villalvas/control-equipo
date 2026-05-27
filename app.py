@@ -114,16 +114,19 @@ if df_raw is not None and not df_raw.empty:
     total_boletines = len(df_filtrado)
     a_tiempo = len(df_filtrado[df_filtrado['Evaluación de Entrega Raw'] == "Entregado a Tiempo"])
     atrasados = len(df_filtrado[df_filtrado['Evaluación de Entrega Raw'] == "Entregado Atrasado"])
+    formato_var = len(df_filtrado[df_filtrado['Evaluación de Entrega Raw'] == "Entregado (Formato Variable)"])
     pendientes = len(df_filtrado[df_filtrado['Evaluación de Entrega Raw'] == "Pendiente de Carga"])
+    
+    # Cuántos ya fueron entregados en total (sin importar si fue a tiempo o tarde)
+    total_entregados = a_tiempo + atrasados + formato_var
 
     c1, c2, c3 = st.columns(3)
     with c1:
         st.metric(label=f"📋 Total Casos ({mes_seleccionado})", value=f"{total_boletines} Cuentas")
     with c2:
-        eficiencia_pct = int((a_tiempo / total_boletines) * 100) if total_boletines > 0 else 0
-        st.metric(label="🚀 Eficiencia (A Tiempo)", value=f"{a_tiempo} Boletines", delta=f"{eficiencia_pct}% Puntualidad")
+        st.metric(label="✅ Total Boletines Entregados", value=f"{total_entregados} Cuentas", delta=f"{a_tiempo} a Tiempo / {atrasados} Atrasados")
     with c3:
-        st.metric(label="⏳ Pendientes de Carga", value=f"{pendientes} Activos", delta=f"{atrasados} con Retraso", delta_color="inverse")
+        st.metric(label="⏳ Pendientes de Carga", value=f"{pendientes} Activos", delta="Requieren Gestión", delta_color="inverse")
 
     st.markdown("---")
 
@@ -147,7 +150,25 @@ if df_raw is not None and not df_raw.empty:
 
     st.markdown("---")
 
-    # Tabla general detallada
+    # ---------------------------------------------------------------------
+    # NUEVA SECCIÓN: AUDITORÍA DE CLIENTES PENDIENTES
+    # ---------------------------------------------------------------------
+    st.write("### 🚨 Listado Estratégico de Clientes Pendientes de Carga")
+    st.write("A continuación se muestran únicamente los clientes institucionales que el equipo aún **no ha subido a Odoo**:")
+    
+    # Filtramos las filas que están exclusivamente en estado Pendiente
+    df_solo_pendientes = df_filtrado[df_filtrado['Evaluación de Entrega Raw'] == "Pendiente de Carga"]
+    
+    if not df_solo_pendientes.empty:
+        # Seleccionamos columnas útiles para mostrar en el reporte de alertas
+        columnas_visibles = [c for c in [col_comercial, col_cliente, col_entrega, 'Evaluación de Entrega'] if c in df_solo_pendientes.columns]
+        st.dataframe(df_solo_pendientes[columnas_visibles], use_container_width=True, hide_index=True)
+    else:
+        st.success("🎉 ¡Excelente trabajo! No hay clientes pendientes de carga en este período.")
+
+    st.markdown("---")
+
+    # Tabla general detallada (Abajo de todo)
     st.write(f"### 🔍 Matriz General del Equipo Operativo ({mes_seleccionado})")
     st.dataframe(df_filtrado.drop(columns=['Evaluación de Entrega Raw'], errors='ignore'), use_container_width=True, hide_index=True)
 
