@@ -136,20 +136,20 @@ if df_raw is not None and not df_raw.empty:
 
     efectividad_pct = int((a_tiempo / total_boletines_vivos) * 100) if total_boletines_vivos > 0 else 0
 
-    c1, c2, c3 = st.columns(3)
+    c1, c2, r_col3 = st.columns(3)
     with c1:
         st.metric(label="Total Casos del Mes", value=f"{total_boletines_vivos} Cuentas")
     with c2:
         st.metric(label="Efectividad de Gestión", value=f"{efectividad_pct}% A Tiempo", delta=f"{a_tiempo} de {total_boletines_vivos} Boletines")
-    with c3:
+    with r_col3:
         st.metric(label="Pendientes de Carga", value=f"{pendientes} Pendientes", delta=f"{atrasados} con Retraso", delta_color="inverse")
 
     st.markdown("---")
 
     # =========================================================================
-    # DISEÑO COMPACTO: GRÁFICO (40%) | TABLA DE RESUMEN EJECUTIVO (60%)
+    # DISEÑO COMPACTO Y SEGURO: GRÁFICO (40%) | TABLA DE RESUMEN EJECUTIVO (60%)
     # =========================================================================
-    col_grafico, col_tabla = st.columns([4, 6])  # Volvemos a la proporción original solicitada
+    col_grafico, col_tabla = st.columns([4, 6])  # Proporción exacta 40% - 60% sin fallas
 
     # --- COLUMNA IZQUIERDA: GRÁFICO DE SLA AL 40% ---
     with col_grafico:
@@ -174,9 +174,9 @@ if df_raw is not None and not df_raw.empty:
             fig_sla.update_layout(xaxis_title="Boletines", yaxis_title=None, showlegend=False, height=310, margin=dict(t=10, b=10, l=10, r=10))
             st.plotly_chart(fig_sla, use_container_width=True)
         else:
-            st.info("Sin datos para graficar.")
+            st.info("Sin datos para graficar con el filtro actual.")
 
-    # --- COLUMNA DERECHA: TABLA RESUMEN CON FILA DE TOTALES EN OTRO COLOR ---
+    # --- COLUMNA DERECHA: TABLA RESUMEN CON MARCADOR DE TOTALES SEGURO ---
     with col_tabla:
         st.write("### 🗂️ Resumen Ejecutivo de Cumplimiento")
         
@@ -185,7 +185,7 @@ if df_raw is not None and not df_raw.empty:
             df_display[col_entrega] = df_display[col_entrega].fillna("---")
             df_display[col_odoo] = df_display[col_odoo].fillna("---")
             
-            # 1. Cruzar datos incluyendo las nuevas columnas de fecha en el índice
+            # 1. Cruzar datos incluyendo las columnas de fecha en el índice
             pivot_raw = pd.crosstab(
                 index=[df_display[col_grupo], df_display[col_cliente], df_display[col_entrega], df_display[col_odoo]],
                 columns=df_display['Estatus de Entrega']
@@ -194,34 +194,5 @@ if df_raw is not None and not df_raw.empty:
             pivot_raw.rename(columns={col_entrega: 'F. ENTREGA', col_odoo: 'F. ODOO'}, inplace=True)
             columnas_estados = [c for c in pivot_raw.columns if c not in [col_grupo, col_cliente, 'F. ENTREGA', 'F. ODOO']]
             
-            # Calcular total horizontal
-            pivot_raw['Total General'] = pivot_raw[columnas_estados].sum(axis=1)
-            
-            # 2. Construir la fila de TOTAL GENERAL
-            fila_total = {col_grupo: "TOTAL GENERAL", col_cliente: "", 'F. ENTREGA': "", 'F. ODOO': ""}
-            gran_total_casos = pivot_raw['Total General'].sum()
-            
-            for estado in columnas_estados:
-                fila_total[estado] = pivot_raw[estado].sum()
-            fila_total['Total General'] = gran_total_casos
-            
-            pivot_df = pd.concat([pivot_raw, pd.DataFrame([fila_total])], ignore_index=True)
-            
-            # 3. Formatear las celdas internas como 'Cantidad (Porcentaje%)'
-            for estado in columnas_estados:
-                def aplicar_porcentaje(fila):
-                    base = fila['Total General']
-                    valor = fila[estado]
-                    if base > 0:
-                        pct = (valor / base) * 100
-                        return f"{int(valor)} ({pct:.1f}%)"
-                    return "0 (0.0%)"
-                pivot_df[estado] = pivot_df.apply(aplicar_porcentaje, axis=1)
-            
-            pivot_df['Total General'] = pivot_df['Total General'].apply(lambda x: f"{int(x)} (100%)")
-            
-            # 4. FUNCIÓN DE ESTILO: Pintar el fondo de la fila de TOTAL GENERAL para diferenciarla
-            def resaltar_fila_totales(row):
-                # Si es la fila de totales, le aplicamos un fondo gris/azulado ejecutivo soft
-                if row[col_grupo] == "TOTAL GENERAL":
-                    return
+            # Calcular total horizontal matemático
+            pivot_raw['Total General'] = pivot_
