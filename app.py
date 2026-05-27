@@ -16,7 +16,6 @@ URL_DRIVE = "https://docs.google.com/spreadsheets/d/1aGFtjIeJQ0ZyNCoTvJzfHtM3gQ6
 
 def cargar_datos_pestana(url, nombre_pestana):
     try:
-        # Formateamos el URL para extraer la pestaña seleccionada por su nombre
         csv_url = url.replace('/edit?usp=sharing', f'/gviz/tq?tqx=out:csv&sheet={nombre_pestana}').replace('/edit', f'/gviz/tq?tqx=out:csv&sheet={nombre_pestana}')
         df = pd.read_csv(csv_url)
         df.columns = df.columns.str.strip()  # Limpia espacios rebeldes en los encabezados
@@ -30,22 +29,19 @@ def cargar_datos_pestana(url, nombre_pestana):
 # ---------------------------------------------------------------------
 st.sidebar.header("📅 Calendario Operativo")
 
-# Ya quedan definidos los 12 meses del año. 
-# NOTA: En tu Drive, las pestañas deben llamarse exactamente así (Enero, Febrero, Marzo...)
 meses_anuales = [
     "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", 
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
 ] 
 
-# Selecciona por defecto "Mayo" que es el mes actual para que no aparezca vacío
+# Selecciona por defecto "Mayo" como mes inicial
 mes_seleccionado = st.sidebar.selectbox("Selecciona el Mes a consultar:", meses_anuales, index=4)
 
-# Cargamos la data del mes elegido
 df_raw = cargar_datos_pestana(URL_DRIVE, mes_seleccionado)
 
 if df_raw is not None and not df_raw.empty:
     
-    # Asistente inteligente para mapear columnas (Comercial, Gestión, Cliente)
+    # Asistente inteligente para mapear columnas principales de forma flexible
     def buscar_columna(opciones, df):
         for opcion in opciones:
             for col in df.columns:
@@ -54,8 +50,10 @@ if df_raw is not None and not df_raw.empty:
         return None
 
     col_comercial = buscar_columna(['comercial', 'region', 'vendedor', 'zona'], df_raw) or df_raw.columns[0]
-    col_gestion = buscar_columna(['gestion', 'novedad', 'estado', 'estatus', 'etapa'], df_raw) or df_raw.columns[0]
     col_cliente = buscar_columna(['cliente', 'institucion', 'empresa', 'cuenta'], df_raw) or df_raw.columns[0]
+    
+    # Buscamos específicamente tu columna de Odoo
+    col_odoo = buscar_columna(['odoo', 'fecha de carga odoo', 'carga odoo'], df_raw)
 
     # Filtro Secundario por Comercial
     st.sidebar.markdown("---")
@@ -68,10 +66,17 @@ if df_raw is not None and not df_raw.empty:
         df_filtrado = df_filtrado[df_filtrado[col_comercial] == filtro_comercial]
 
     # ---------------------------------------------------------------------
-    # TARJETAS DE INDICADORES (KPIs)
+    # TARJETAS DE INDICADORES (KPIs) - CORREGIDO BASADO EN ODOO
     # ---------------------------------------------------------------------
     total_boletines = len(df_filtrado)
-    terminados = len(df_filtrado[df_filtrado[col_gestion].astype(str).str.contains('termina|finalizado|ok|hecho|entregado', na=False, case=False)])
+    
+    if col_odoo and col_odoo in df_filtrado.columns:
+        # Un caso está terminado si la celda de Odoo NO está vacía (notna) y no contiene solo espacios en blanco
+        terminados = len(df_filtrado[df_filtrado[col_odoo].notna() & (df_filtrado[col_odoo].astype(str).str.strip() != "")])
+    else:
+        st.warning("⚠️ No se encontró una columna que contenga la palabra 'odoo'. Usando conteo por defecto.")
+        terminados = 0
+        
     pendientes = total_boletines - terminados
 
     c1, c2, c3 = st.columns(3)
@@ -79,9 +84,9 @@ if df_raw is not None and not df_raw.empty:
         st.metric(label=f"📋 Total Casos ({mes_seleccionado})", value=f"{total_boletines} Cuentas")
     with c2:
         avance_pct = int((terminados / total_boletines) * 100) if total_boletines > 0 else 0
-        st.metric(label="✅ Gestión Finalizada", value=f"{terminados} Boletines", delta=f"{avance_pct}% de Eficiencia")
+        st.metric(label="✅ Cargados en Odoo (Finalizados)", value=f"{terminados} Boletines", delta=f"{avance_pct}% de Eficiencia")
     with c3:
-        st.metric(label="⏳ Pendientes de Gestión", value=f"{pendientes} Cuentas", delta="Requires Atención", delta_color="inverse")
+        st.metric(label="⏳ Pendientes de Carga", value=f"{pendientes} Cuentas", delta="Requiere Atención", delta_color="inverse")
 
     st.markdown("---")
 
@@ -99,9 +104,14 @@ if df_raw is not None and not df_raw.empty:
             st.info("Sin datos suficientes en este mes para generar gráficos.")
 
     with col_der:
-        st.write("### 📊 Resumen Ejecutivo de Estatus")
-        conteo_estados = df_filtrado[col_gestion].value_counts().to_frame().rename(columns={col_gestion: "Cantidad"})
-        st.dataframe(conteo_estados, use_container_width=True)
+        st.write("### 📊 Estatus de Carga en Odoo")
+        if col_odoo and col_odoo in df_filtrado.columns:
+            # Creamos una clasificación rápida en vivo para el gráfico resumido
+            status_odoo = df_filtrado[col_odoo].notna() & (df_filtrado[col_odoo].astype(str).str.strip() != "")
+            df_status = status_odoo.map({True: "Cargado en Odoo", False: "Pendiente"}).value_counts().to_frame().rename(columns={"index": "Estado", "count": "Cantidad"})
+            st.dataframe(df_status, use_container_width=True)
+        else:
+            st.info("Columna 'fecha de carga odoo' no disponible para resumen.")
 
     st.markdown("---")
 
