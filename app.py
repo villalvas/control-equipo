@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px  # Librería para los gráficos interactivos
+import plotly.express as px
 
 # Configuración estética del Dashboard estilo Ejecutivo
 st.set_page_config(page_title="Control de Boletines", layout="wide", initial_sidebar_state="expanded")
@@ -9,7 +9,7 @@ st.title("📊 Control de Boletines")
 st.markdown("---")
 
 # =========================================================================
-# CONEXIÓN EN VIVO A GOOGLE DRIVE (CONFIGURACIÓN PARA PESTAÑAS ANUALES)
+# CONEXIÓN EN VIVO A GOOGLE DRIVE
 # =========================================================================
 # ⚠️ CAMBIA EL LINK DE ABAJO CON TU ENLACE REAL DEL BOTÓN AZUL "COMPARTIR":
 URL_DRIVE = "https://docs.google.com/spreadsheets/d/1aGFtjIeJQ0ZyNCoTvJzfHtM3gQ6JdWKgiVHP5i-Pjj8/edit?usp=sharing"
@@ -34,14 +34,13 @@ meses_anuales = [
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
 ] 
 
-# 1. Filtro de Mes
 mes_seleccionado = st.sidebar.selectbox("Selecciona el Mes a consultar:", meses_anuales, index=4)
 
 df_raw = cargar_datos_pestana(URL_DRIVE, mes_seleccionado)
 
 if df_raw is not None and not df_raw.empty:
     
-    # Asistente inteligente para mapear columnas principales de forma flexible
+    # Asistente inteligente para mapear columnas principales
     def buscar_columna(opciones, df):
         for opcion in opciones:
             for col in df.columns:
@@ -55,12 +54,10 @@ if df_raw is not None and not df_raw.empty:
     col_odoo = buscar_columna(['odoo', 'fecha de carga odoo', 'carga odoo'], df_raw)
     col_grupo = buscar_columna(['grupoarea', 'grupo area', 'grupo', 'area'], df_raw) or df_raw.columns[0]
     col_recurrencia = buscar_columna(['recurrencia de boletin', 'recurrencia', 'periodo'], df_raw) or df_raw.columns[0]
-    
-    # Identificar la nueva columna de observaciones por retraso de forma flexible
     col_observacion = buscar_columna(['observacion retraso', 'observaciones retraso', 'observacion'], df_raw)
 
     # ---------------------------------------------------------------------
-    # LÓGICA DE AUDITORÍA DE TIEMPOS (PROCESAMIENTO DE FECHAS)
+    # LÓGICA DE AUDITORÍA DE TIEMPOS
     # ---------------------------------------------------------------------
     if col_entrega and col_odoo and col_entrega in df_raw.columns and col_odoo in df_raw.columns:
         f_entrega_parsed = pd.to_datetime(df_raw[col_entrega], errors='coerce', dayfirst=True)
@@ -95,19 +92,17 @@ if df_raw is not None and not df_raw.empty:
         df_raw['Evaluación de Entrega Raw'] = "Pendiente de Carga"
         df_raw['Estatus de Entrega'] = "⏳ Pendiente de Carga"
 
-    # 2. Filtro Lateral Interactivos de Estatus
+    # Filtros Secundarios en Barra Lateral
     st.sidebar.markdown("---")
     st.sidebar.header("🔍 Filtrar Clientes por Estado")
     opciones_estatus = ["TODOS", "🚀 Entregado a Tiempo", "⚠️ Entregado Atrasado", "⏳ Pendiente de Carga"]
     filtro_estatus = st.sidebar.selectbox("Selecciona un Estatus:", opciones_estatus)
 
-    # 3. Filtro de Comercial
     st.sidebar.markdown("---")
     st.sidebar.header("🎯 Filtros de Equipo")
     comerciales_disponibles = ["TODOS"] + list(df_raw[col_comercial].dropna().unique())
-    filtro_comercial = st.sidebar.selectbox(f"Filtrar por Comercial:", comerciales_disponibles)
+    filtro_comercial = st.sidebar.selectbox("Filtrar por Comercial:", comerciales_disponibles)
 
-    # 4. Filtro Lateral de Recurrencia
     st.sidebar.markdown("---")
     st.sidebar.header("🔄 Frecuencia de Entrega")
     recurrencias_disponibles = ["TODOS"]
@@ -116,7 +111,7 @@ if df_raw is not None and not df_raw.empty:
     filtro_recurrencia = st.sidebar.selectbox("Selecciona Recurrencia:", recurrencias_disponibles)
 
     # ---------------------------------------------------------------------
-    # APLICACIÓN DE FILTROS EN CASCADA Y CÁLCULO BASE DEL TOTAL
+    # PROCESAMIENTO DE FILTROS EN CASCADA
     # ---------------------------------------------------------------------
     df_base_universo = df_raw.copy()
     if filtro_recurrencia != "TODOS":
@@ -139,22 +134,22 @@ if df_raw is not None and not df_raw.empty:
 
     efectividad_pct = int((a_tiempo / total_boletines_vivos) * 100) if total_boletines_vivos > 0 else 0
 
-    c1, c2, r_col3 = st.columns(3)
+    c1, c2, c3 = st.columns(3)
     with c1:
         st.metric(label="Total Casos del Mes", value=f"{total_boletines_vivos} Cuentas")
     with c2:
         st.metric(label="Efectividad de Gestión", value=f"{efectividad_pct}% A Tiempo", delta=f"{a_tiempo} de {total_boletines_vivos} Boletines")
-    with r_col3:
+    with c3:
         st.metric(label="Pendientes de Carga", value=f"{pendientes} Pendientes", delta=f"{atrasados} con Retraso", delta_color="inverse")
 
     st.markdown("---")
 
     # =========================================================================
-    # DISEÑO ROBUSTO EN PARALELO: GRÁFICO (40%) | TABLA INTEGRAL DETALLADA (60%)
+    # MAQUETACIÓN: GRÁFICO (40%) | TABLA DETALLADA (60%)
     # =========================================================================
     col_grafico, col_tabla = st.columns([4, 6])
 
-    # --- COLUMNA IZQUIERDA: GRÁFICO DE SLA AL 40% ---
+    # --- COLUMNA IZQUIERDA: GRÁFICO DE SLA (40%) ---
     with col_grafico:
         st.write("### 📊 Auditoría de SLA")
         
@@ -165,4 +160,69 @@ if df_raw is not None and not df_raw.empty:
             conteo_tiempos['Porcentaje'] = ((conteo_tiempos['Cantidad'] / total_boletines_vivos) * 100).round(1)
             conteo_tiempos['Etiqueta'] = conteo_tiempos.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']}%)", axis=1)
             
-            fig_sla = px.bar(conteo_tiempos, x
+            fig_sla = px.bar(
+                conteo_tiempos, 
+                x='Cantidad', 
+                y='Estatus de Entrega', 
+                text='Etiqueta',
+                orientation='h', 
+                color='Estatus de Entrega',
+                color_discrete_map={
+                    "🚀 Entregado a Tiempo": "#2ca02c",
+                    "⚠️ Entregado Atrasado": "#d62728",
+                    "⏳ Pendiente de Carga": "#ff7f0e",
+                    "✅ Entregado (Formato Variable)": "#1f77b4"
+                }
+            )
+            fig_sla.update_traces(textposition='outside')
+            fig_sla.update_layout(xaxis_title="Boletines", yaxis_title=None, showlegend=False, height=310, margin=dict(t=10, b=10, l=10, r=10))
+            st.plotly_chart(fig_sla, use_container_width=True)
+        else:
+            st.info("Sin datos para graficar con el filtro actual.")
+
+    # --- COLUMNA DERECHA: TABLA DE DETALLE RESUMEN (60%) ---
+    with col_tabla:
+        st.write("### 🗂️ Resumen Ejecutivo de Cumplimiento")
+        
+        if col_grupo in df_filtrado.columns and col_cliente in df_filtrado.columns:
+            # Creación limpia de la estructura base
+            estructura_columnas = {
+                'GRUPO': df_filtrado[col_grupo].fillna("---"),
+                'CLIENTE / INSTITUCIÓN': df_filtrado[col_cliente].fillna("---"),
+                'F. ENTREGA': df_filtrado[col_entrega].fillna("---"),
+                'F. ODOO': df_filtrado[col_odoo].fillna("---")
+            }
+            
+            # Condición para mostrar la columna de observaciones únicamente en "Entregado Atrasado"
+            mostrar_obs = (filtro_estatus == "⚠️ Entregado Atrasado") and (col_observacion is not None) and (col_observacion in df_filtrado.columns)
+            
+            if mostrar_obs:
+                estructura_columnas['OBSERVACIÓN RETRASO'] = df_filtrado[col_observacion].fillna("Sin observación")
+                
+            estructura_columnas['ESTATUS'] = df_filtrado['Estatus de Entrega']
+            
+            df_tabla_final = pd.DataFrame(estructura_columnas)
+            df_tabla_final = df_tabla_final.sort_values(by=['GRUPO', 'CLIENTE / INSTITUCIÓN']).reset_index(drop=True)
+            
+            # Construcción segura de la fila totalizadora
+            total_items = len(df_tabla_final)
+            datos_fila_total = {
+                'GRUPO': "🟦 TOTAL GENERAL 🟦",
+                'CLIENTE / INSTITUCIÓN': f"📊 {total_items} Casos Filtrados",
+                'F. ENTREGA': "═══════════",
+                'F. ODOO': "═══════════"
+            }
+            
+            if mostrar_obs:
+                datos_fila_total['OBSERVACIÓN RETRASO'] = "══════════════════════"
+                
+            datos_fila_total['ESTATUS'] = "📈 Resumen de Selección"
+            
+            fila_acumulada = pd.DataFrame([datos_fila_total])
+            df_desplegar = pd.concat([df_tabla_final, fila_acumulada], ignore_index=True)
+            
+            st.dataframe(df_desplegar, use_container_width=True, hide_index=True)
+        else:
+            st.warning("No se encontraron las columnas necesarias en el archivo origen.")
+else:
+    st.warning(f"La pestaña '{mes_seleccionado}' está vacía o no existe.")
