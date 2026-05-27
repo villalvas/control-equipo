@@ -147,9 +147,9 @@ if df_raw is not None and not df_raw.empty:
     st.markdown("---")
 
     # =========================================================================
-    # DISEÑO PARALELO CORREGIDO Y SEGURO: GRÁFICO (40%) | TABLA DE RESUMEN (60%)
+    # DISEÑO OPTIMIZADO: GRÁFICO PEQUEÑO (30%) | TABLA AMPLIA CON FECHAS (70%)
     # =========================================================================
-    col_grafico, col_tabla = st.columns([4, 6])
+    col_grafico, col_tabla = st.columns([3, 7])  # Proporción balanceada para dar espacio horizontal
 
     # --- COLUMNA IZQUIERDA: GRÁFICO DE SLA COMPACTO ---
     with col_grafico:
@@ -171,40 +171,47 @@ if df_raw is not None and not df_raw.empty:
                                  "✅ Entregado (Formato Variable)": "#1f77b4"
                              })
             fig_sla.update_traces(textposition='outside')
-            fig_sla.update_layout(xaxis_title="Boletines", yaxis_title=None, showlegend=False, height=320, margin=dict(t=10, b=10, l=10, r=10))
+            fig_sla.update_layout(xaxis_title="Boletines", yaxis_title=None, showlegend=False, height=300, margin=dict(t=10, b=10, l=10, r=10))
             st.plotly_chart(fig_sla, use_container_width=True)
         else:
-            st.info("Sin datos para graficar con los filtros actuales.")
+            st.info("Sin datos para graficar.")
 
-    # --- COLUMNA DERECHA: TABLA RESUMEN CON FILA DE TOTALES INTEGRADA ---
+    # --- COLUMNA DERECHA: TABLA RESUMEN CON DETALLE DE FECHAS ---
     with col_tabla:
         st.write("### 🗂️ Resumen Ejecutivo de Cumplimiento")
         
         if col_grupo in df_filtrado.columns and col_cliente in df_filtrado.columns:
-            # 1. Generar la matriz cruzada de conteos limpios
+            # Rellenar valores nulos de fechas para una visualización limpia
+            df_display = df_filtrado.copy()
+            df_display[col_entrega] = df_display[col_entrega].fillna("---")
+            df_display[col_odoo] = df_display[col_odoo].fillna("---")
+            
+            # 1. Cruzar datos incluyendo las nuevas columnas de fecha en el índice
             pivot_raw = pd.crosstab(
-                index=[df_filtrado[col_grupo], df_filtrado[col_cliente]],
-                columns=df_filtrado['Estatus de Entrega']
+                index=[df_display[col_grupo], df_display[col_cliente], df_display[col_entrega], df_display[col_odoo]],
+                columns=df_display['Estatus de Entrega']
             ).reset_index()
             
-            # Identificar los estados dinámicos presentes
-            columnas_estados = [c for c in pivot_raw.columns if c not in [col_grupo, col_cliente]]
+            # Renombrar columnas para consistencia visual en el tablero
+            pivot_raw.rename(columns={col_entrega: 'F. ENTREGA', col_odoo: 'F. ODOO'}, inplace=True)
             
-            # Calcular total horizontal por cliente
+            columnas_estados = [c for c in pivot_raw.columns if c not in [col_grupo, col_cliente, 'F. ENTREGA', 'F. ODOO']]
+            
+            # Calcular total horizontal
             pivot_raw['Total General'] = pivot_raw[columnas_estados].sum(axis=1)
             
-            # 2. Calcular los totales verticales usando una lista de diccionarios segura
-            totales_verticales = {col_grupo: "TOTAL GENERAL", col_cliente: ""}
-            sumatoria_total = pivot_raw['Total General'].sum()
+            # 2. Construir la fila de TOTAL GENERAL para el fondo de la tabla
+            fila_total = {col_grupo: "TOTAL GENERAL", col_cliente: "", 'F. ENTREGA': "", 'F. ODOO': ""}
+            gran_total_casos = pivot_raw['Total General'].sum()
             
             for estado in columnas_estados:
-                totales_verticales[estado] = pivot_raw[estado].sum()
-            totales_verticales['Total General'] = sumatoria_total
+                fila_total[estado] = pivot_raw[estado].sum()
+            fila_total['Total General'] = gran_total_casos
             
-            # Añadir fila final al DataFrame
-            pivot_df = pd.concat([pivot_raw, pd.DataFrame([totales_verticales])], ignore_index=True)
+            # Unir los datos con la fila final
+            pivot_df = pd.concat([pivot_raw, pd.DataFrame([fila_total])], ignore_index=True)
             
-            # 3. Formatear las celdas a texto "Cantidad (Porcentaje%)"
+            # 3. Formatear dinámicamente cada conteo interno como 'Cantidad (Porcentaje%)'
             for estado in columnas_estados:
                 def aplicar_porcentaje(fila):
                     base = fila['Total General']
@@ -215,13 +222,13 @@ if df_raw is not None and not df_raw.empty:
                     return "0 (0.0%)"
                 pivot_df[estado] = pivot_df.apply(aplicar_porcentaje, axis=1)
             
-            # Formatear la columna de totales generales finales
+            # Formatear la columna de totales finales
             pivot_df['Total General'] = pivot_df['Total General'].apply(lambda x: f"{int(x)} (100%)")
             
-            # Desplegar la tabla corregida en Streamlit
+            # Desplegar tabla estructurada
             st.dataframe(pivot_df, use_container_width=True, hide_index=True)
         else:
-            st.warning("Faltan las columnas de Grupo o Cliente en la pestaña seleccionada.")
+            st.warning("No se encontraron los campos necesarios en la fuente de datos.")
 
 else:
-    st.warning(f"La pestaña '{mes_seleccionado}' está vacía o aún no ha sido creada en Google Drive.")
+    st.warning(f"La pestaña '{mes_seleccionado}' está vacía o aún no ha sido creada.")
