@@ -5,7 +5,7 @@ import pandas as pd
 st.set_page_config(page_title="Control de Boletines", layout="wide", initial_sidebar_state="expanded")
 
 st.title("📊 Control de Boletines")
-st.subheader("Monitoreo estratégico, KPIs y gestión operativa (Enero - Diciembre)")
+st.subheader("Monitoreo estratégico, KPIs y control de tiempos de entrega (Enero - Diciembre)")
 st.markdown("---")
 
 # =========================================================================
@@ -52,7 +52,8 @@ if df_raw is not None and not df_raw.empty:
     col_comercial = buscar_columna(['comercial', 'region', 'vendedor', 'zona'], df_raw) or df_raw.columns[0]
     col_cliente = buscar_columna(['cliente', 'institucion', 'empresa', 'cuenta'], df_raw) or df_raw.columns[0]
     
-    # Buscamos específicamente tu columna de Odoo
+    # Mapeo de las dos columnas de fechas críticas
+    col_entrega = buscar_columna(['fecha de entrega de boletin', 'entrega de boletin', 'fecha entrega'], df_raw)
     col_odoo = buscar_columna(['odoo', 'fecha de carga odoo', 'carga odoo'], df_raw)
 
     # Filtro Secundario por Comercial
@@ -66,32 +67,63 @@ if df_raw is not None and not df_raw.empty:
         df_filtrado = df_filtrado[df_filtrado[col_comercial] == filtro_comercial]
 
     # ---------------------------------------------------------------------
-    # TARJETAS DE INDICADORES (KPIs) - BASADO EN ODOO
+    # LÓGICA DE AUDITORÍA DE TIEMPOS (PROCESAMIENTO DE FECHAS)
+    # ---------------------------------------------------------------------
+    if col_entrega and col_odoo and col_entrega in df_filtrado.columns and col_odoo in df_filtrado.columns:
+        
+        # Convertimos temporalmente las columnas a formato Fecha de forma segura
+        # dayfirst=True ayuda si tus fechas en Excel están como DD/MM/AAAA
+        f_entrega_parsed = pd.to_datetime(df_filtrado[col_entrega], errors='coerce', dayfirst=True)
+        f_odoo_parsed = pd.to_datetime(df_filtrado[col_odoo], errors='coerce', dayfirst=True)
+        
+        # Función interna para clasificar cada fila en tiempo real
+        def clasificar_tiempo(fila, idx):
+            val_odoo = fila[col_odoo]
+            # Si Odoo está vacío o es solo espacios, está Pendiente
+            if pd.isna(val_odoo) or str(val_odoo).strip() == "":
+                return "⏳ Pendiente de Carga"
+            
+            # Si hay fecha en Odoo, verificamos si hubo retraso
+            date_entrega = f_entrega_parsed.loc[idx]
+            date_odoo = f_odoo_parsed.loc[idx]
+            
+            # Si alguna fecha no se pudo procesar bien, lo consideramos entregado por defecto
+            if pd.isna(date_entrega) or pd.isna(date_odoo):
+                return "✅ Entregado (Revisar Formato Fecha)"
+            
+            # Comparación: si la carga de Odoo es estrictamente después de la fecha límite
+            if date_odoo > date_entrega:
+                return "⚠️ Entregado Atrasado"
+            else:
+                return "🚀 Entregado a Tiempo"
+
+        # Aplicamos la clasificación creando una nueva columna analítica para el Dashboard
+        df_filtrado['Evaluación de Entrega'] = [clasificar_tiempo(row, idx) for idx, row in df_filtrado.iterrows()]
+    else:
+        st.warning("⚠️ Mapeo incompleto. Asegúrate de tener las columnas 'fecha de entrega de boletin' y 'fecha de carga odoo'.")
+        df_filtrado['Evaluación de Entrega'] = "No evaluado"
+
+    # ---------------------------------------------------------------------
+    # TARJETAS DE INDICADORES (KPIs) ACTUALIZADAS
     # ---------------------------------------------------------------------
     total_boletines = len(df_filtrado)
-    
-    if col_odoo and col_odoo in df_filtrado.columns:
-        # Un caso está terminado si la celda de Odoo NO está vacía (notna) y no contiene solo espacios en blanco
-        terminados = len(df_filtrado[df_filtrado[col_odoo].notna() & (df_filtrado[col_odoo].astype(str).str.strip() != "")])
-    else:
-        st.warning("⚠️ No se encontró una columna que contenga la palabra 'odoo'. Usando conteo por defecto.")
-        terminados = 0
-        
-    pendientes = total_boletines - terminados
+    a_tiempo = len(df_filtrado[df_filtrado['Evaluación de Entrega'] == "🚀 Entregado a Tiempo"])
+    atrasados = len(df_filtrado[df_filtrado['Evaluación de Entrega'] == "⚠️ Entregado Atrasado"])
+    pendientes = len(df_filtrado[df_filtrado['Evaluación de Entrega'] == "⏳ Pendientes de Carga"])
 
     c1, c2, c3 = st.columns(3)
     with c1:
         st.metric(label=f"📋 Total Casos ({mes_seleccionado})", value=f"{total_boletines} Cuentas")
     with c2:
-        avance_pct = int((terminados / total_boletines) * 100) if total_boletines > 0 else 0
-        st.metric(label="✅ Cargados en Odoo (Finalizados)", value=f"{terminados} Boletines", delta=f"{avance_pct}% de Eficiencia")
+        eficiencia_pct = int((a_tiempo / total_boletines) * 100) if total_boletines > 0 else 0
+        st.metric(label="🚀 Eficiencia (A Tiempo)", value=f"{a_tiempo} Boletines", delta=f"{eficiencia_pct}% Puntualidad")
     with c3:
-        st.metric(label="⏳ Pendientes de Carga", value=f"{pendientes} Cuentas", delta="Requiere Atención", delta_color="inverse")
+        st.metric(label="⏳ Casos Pendientes / Atrasados", value=f"{pendientes} Activos", delta=f"{atrasados} con Retraso", delta_color="inverse")
 
     st.markdown("---")
 
     # ---------------------------------------------------------------------
-    # BLOQUE GRÁFICO
+    # BLOQUE GRÁFICO DE TIEMPOS
     # ---------------------------------------------------------------------
     col_izq, col_der = st.columns([1, 1])
 
@@ -101,16 +133,12 @@ if df_raw is not None and not df_raw.empty:
         if not conteo_comerciales.empty:
             st.bar_chart(conteo_comerciales)
         else:
-            st.info("Sin datos suficientes en este mes para generar gráficos.")
+            st.info("Sin datos suficientes.")
 
     with col_der:
-        st.write("### 📊 Estatus de Carga en Odoo")
-        if col_odoo and col_odoo in df_filtrado.columns:
-            status_odoo = df_filtrado[col_odoo].notna() & (df_filtrado[col_odoo].astype(str).str.strip() != "")
-            df_status = status_odoo.map({True: "Cargado en Odoo", False: "Pendiente"}).value_counts().to_frame().rename(columns={"index": "Estado", "count": "Cantidad"})
-            st.dataframe(df_status, use_container_width=True)
-        else:
-            st.info("Columna 'fecha de carga odoo' no disponible para resumen.")
+        st.write("### 📊 Auditoría de SLA (Tiempos de Respuesta)")
+        conteo_tiempos = df_filtrado['Evaluación de Entrega'].value_counts().to_frame().rename(columns={'Evaluación de Entrega': "Cantidad"})
+        st.dataframe(conteo_tiempos, use_container_width=True)
 
     st.markdown("---")
 
