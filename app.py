@@ -72,44 +72,49 @@ if df_raw is not None and not df_raw.empty:
     if col_entrega and col_odoo and col_entrega in df_filtrado.columns and col_odoo in df_filtrado.columns:
         
         # Convertimos temporalmente las columnas a formato Fecha de forma segura
-        # dayfirst=True ayuda si tus fechas en Excel están como DD/MM/AAAA
         f_entrega_parsed = pd.to_datetime(df_filtrado[col_entrega], errors='coerce', dayfirst=True)
         f_odoo_parsed = pd.to_datetime(df_filtrado[col_odoo], errors='coerce', dayfirst=True)
         
         # Función interna para clasificar cada fila en tiempo real
         def clasificar_tiempo(fila, idx):
             val_odoo = fila[col_odoo]
-            # Si Odoo está vacío o es solo espacios, está Pendiente
             if pd.isna(val_odoo) or str(val_odoo).strip() == "":
-                return "⏳ Pendiente de Carga"
+                return "Pendiente de Carga"
             
-            # Si hay fecha en Odoo, verificamos si hubo retraso
             date_entrega = f_entrega_parsed.loc[idx]
             date_odoo = f_odoo_parsed.loc[idx]
             
-            # Si alguna fecha no se pudo procesar bien, lo consideramos entregado por defecto
             if pd.isna(date_entrega) or pd.isna(date_odoo):
-                return "✅ Entregado (Revisar Formato Fecha)"
+                return "Entregado (Formato Variable)"
             
-            # Comparación: si la carga de Odoo es estrictamente después de la fecha límite
             if date_odoo > date_entrega:
-                return "⚠️ Entregado Atrasado"
+                return "Entregado Atrasado"
             else:
-                return "🚀 Entregado a Tiempo"
+                return "Entregado a Tiempo"
 
-        # Aplicamos la clasificación creando una nueva columna analítica para el Dashboard
-        df_filtrado['Evaluación de Entrega'] = [clasificar_tiempo(row, idx) for idx, row in df_filtrado.iterrows()]
+        # Aplicamos la clasificación limpia sin emojis internos para cálculo seguro
+        df_filtrado['Evaluación de Entrega Raw'] = [clasificar_tiempo(row, idx) for idx, row in df_filtrado.iterrows()]
+        
+        # Versión visual con emojis para las tablas del reporte gráfico
+        mapeo_emojis = {
+            "Pendiente de Carga": "⏳ Pendiente de Carga",
+            "Entregado Atrasado": "⚠️ Entregado Atrasado",
+            "Entregado a Tiempo": "🚀 Entregado a Tiempo",
+            "Entregado (Formato Variable)": "✅ Entregado (Formato Variable)"
+        }
+        df_filtrado['Evaluación de Entrega'] = df_filtrado['Evaluación de Entrega Raw'].map(mapeo_emojis)
     else:
         st.warning("⚠️ Mapeo incompleto. Asegúrate de tener las columnas 'fecha de entrega de boletin' y 'fecha de carga odoo'.")
-        df_filtrado['Evaluación de Entrega'] = "No evaluado"
+        df_filtrado['Evaluación de Entrega Raw'] = "Pendiente de Carga"
+        df_filtrado['Evaluación de Entrega'] = "⏳ Pendiente de Carga"
 
     # ---------------------------------------------------------------------
-    # TARJETAS DE INDICADORES (KPIs) ACTUALIZADAS
+    # TARJETAS DE INDICADORES (KPIs) AJUSTADAS
     # ---------------------------------------------------------------------
     total_boletines = len(df_filtrado)
-    a_tiempo = len(df_filtrado[df_filtrado['Evaluación de Entrega'] == "🚀 Entregado a Tiempo"])
-    atrasados = len(df_filtrado[df_filtrado['Evaluación de Entrega'] == "⚠️ Entregado Atrasado"])
-    pendientes = len(df_filtrado[df_filtrado['Evaluación de Entrega'] == "⏳ Pendientes de Carga"])
+    a_tiempo = len(df_filtrado[df_filtrado['Evaluación de Entrega Raw'] == "Entregado a Tiempo"])
+    atrasados = len(df_filtrado[df_filtrado['Evaluación de Entrega Raw'] == "Entregado Atrasado"])
+    pendientes = len(df_filtrado[df_filtrado['Evaluación de Entrega Raw'] == "Pendiente de Carga"])
 
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -118,7 +123,7 @@ if df_raw is not None and not df_raw.empty:
         eficiencia_pct = int((a_tiempo / total_boletines) * 100) if total_boletines > 0 else 0
         st.metric(label="🚀 Eficiencia (A Tiempo)", value=f"{a_tiempo} Boletines", delta=f"{eficiencia_pct}% Puntualidad")
     with c3:
-        st.metric(label="⏳ Casos Pendientes / Atrasados", value=f"{pendientes} Activos", delta=f"{atrasados} con Retraso", delta_color="inverse")
+        st.metric(label="⏳ Pendientes de Carga", value=f"{pendientes} Activos", delta=f"{atrasados} con Retraso", delta_color="inverse")
 
     st.markdown("---")
 
@@ -144,7 +149,7 @@ if df_raw is not None and not df_raw.empty:
 
     # Tabla general detallada
     st.write(f"### 🔍 Matriz General del Equipo Operativo ({mes_seleccionado})")
-    st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
+    st.dataframe(df_filtrado.drop(columns=['Evaluación de Entrega Raw'], errors='ignore'), use_container_width=True, hide_index=True)
 
 else:
     st.warning(f"La pestaña '{mes_seleccionado}' está vacía o aún no ha sido creada en Google Drive. Cuando agregues los datos en tu Excel, el tablero aparecerá automáticamente aquí.")
