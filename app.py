@@ -147,10 +147,81 @@ if df_raw is not None and not df_raw.empty:
     st.markdown("---")
 
     # =========================================================================
-    # NUEVO DISEÑO PARALELO: GRÁFICO (IZQUIERDA) | TABLA DE RESUMEN (DERECHA)
+    # DISEÑO PARALELO CORREGIDO Y SEGURO: GRÁFICO (40%) | TABLA DE RESUMEN (60%)
     # =========================================================================
-    col_grafico, col_tabla = st.columns([4, 6])  # Distribución 40% - 60%
+    col_grafico, col_tabla = st.columns([4, 6])
 
     # --- COLUMNA IZQUIERDA: GRÁFICO DE SLA COMPACTO ---
     with col_grafico:
         st.write("### 📊 Auditoría de SLA")
+        
+        conteo_tiempos = df_filtrado['Estatus de Entrega'].value_counts().reset_index()
+        conteo_tiempos.columns = ['Estatus de Entrega', 'Cantidad']
+        
+        if not conteo_tiempos.empty:
+            conteo_tiempos['Porcentaje'] = ((conteo_tiempos['Cantidad'] / total_boletines_vivos) * 100).round(1)
+            conteo_tiempos['Etiqueta'] = conteo_tiempos.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']}%)", axis=1)
+            
+            fig_sla = px.bar(conteo_tiempos, x='Cantidad', y='Estatus de Entrega', text='Etiqueta',
+                             orientation='h', color='Estatus de Entrega',
+                             color_discrete_map={
+                                 "🚀 Entregado a Tiempo": "#2ca02c",
+                                 "⚠️ Entregado Atrasado": "#d62728",
+                                 "⏳ Pendiente de Carga": "#ff7f0e",
+                                 "✅ Entregado (Formato Variable)": "#1f77b4"
+                             })
+            fig_sla.update_traces(textposition='outside')
+            fig_sla.update_layout(xaxis_title="Boletines", yaxis_title=None, showlegend=False, height=320, margin=dict(t=10, b=10, l=10, r=10))
+            st.plotly_chart(fig_sla, use_container_width=True)
+        else:
+            st.info("Sin datos para graficar con los filtros actuales.")
+
+    # --- COLUMNA DERECHA: TABLA RESUMEN CON FILA DE TOTALES INTEGRADA ---
+    with col_tabla:
+        st.write("### 🗂️ Resumen Ejecutivo de Cumplimiento")
+        
+        if col_grupo in df_filtrado.columns and col_cliente in df_filtrado.columns:
+            # 1. Generar la matriz cruzada de conteos limpios
+            pivot_raw = pd.crosstab(
+                index=[df_filtrado[col_grupo], df_filtrado[col_cliente]],
+                columns=df_filtrado['Estatus de Entrega']
+            ).reset_index()
+            
+            # Identificar los estados dinámicos presentes
+            columnas_estados = [c for c in pivot_raw.columns if c not in [col_grupo, col_cliente]]
+            
+            # Calcular total horizontal por cliente
+            pivot_raw['Total General'] = pivot_raw[columnas_estados].sum(axis=1)
+            
+            # 2. Calcular los totales verticales usando una lista de diccionarios segura
+            totales_verticales = {col_grupo: "TOTAL GENERAL", col_cliente: ""}
+            sumatoria_total = pivot_raw['Total General'].sum()
+            
+            for estado in columnas_estados:
+                totales_verticales[estado] = pivot_raw[estado].sum()
+            totales_verticales['Total General'] = sumatoria_total
+            
+            # Añadir fila final al DataFrame
+            pivot_df = pd.concat([pivot_raw, pd.DataFrame([totales_verticales])], ignore_index=True)
+            
+            # 3. Formatear las celdas a texto "Cantidad (Porcentaje%)"
+            for estado in columnas_estados:
+                def aplicar_porcentaje(fila):
+                    base = fila['Total General']
+                    valor = fila[estado]
+                    if base > 0:
+                        pct = (valor / base) * 100
+                        return f"{int(valor)} ({pct:.1f}%)"
+                    return "0 (0.0%)"
+                pivot_df[estado] = pivot_df.apply(aplicar_porcentaje, axis=1)
+            
+            # Formatear la columna de totales generales finales
+            pivot_df['Total General'] = pivot_df['Total General'].apply(lambda x: f"{int(x)} (100%)")
+            
+            # Desplegar la tabla corregida en Streamlit
+            st.dataframe(pivot_df, use_container_width=True, hide_index=True)
+        else:
+            st.warning("Faltan las columnas de Grupo o Cliente en la pestaña seleccionada.")
+
+else:
+    st.warning(f"La pestaña '{mes_seleccionado}' está vacía o aún no ha sido creada en Google Drive.")
