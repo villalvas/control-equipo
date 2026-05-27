@@ -147,11 +147,11 @@ if df_raw is not None and not df_raw.empty:
     st.markdown("---")
 
     # =========================================================================
-    # DISEÑO OPTIMIZADO: GRÁFICO PEQUEÑO (30%) | TABLA AMPLIA CON FECHAS (70%)
+    # DISEÑO COMPACTO: GRÁFICO (40%) | TABLA DE RESUMEN EJECUTIVO (60%)
     # =========================================================================
-    col_grafico, col_tabla = st.columns([3, 7])  # Proporción balanceada para dar espacio horizontal
+    col_grafico, col_tabla = st.columns([4, 6])  # Volvemos a la proporción original solicitada
 
-    # --- COLUMNA IZQUIERDA: GRÁFICO DE SLA COMPACTO ---
+    # --- COLUMNA IZQUIERDA: GRÁFICO DE SLA AL 40% ---
     with col_grafico:
         st.write("### 📊 Auditoría de SLA")
         
@@ -171,17 +171,16 @@ if df_raw is not None and not df_raw.empty:
                                  "✅ Entregado (Formato Variable)": "#1f77b4"
                              })
             fig_sla.update_traces(textposition='outside')
-            fig_sla.update_layout(xaxis_title="Boletines", yaxis_title=None, showlegend=False, height=300, margin=dict(t=10, b=10, l=10, r=10))
+            fig_sla.update_layout(xaxis_title="Boletines", yaxis_title=None, showlegend=False, height=310, margin=dict(t=10, b=10, l=10, r=10))
             st.plotly_chart(fig_sla, use_container_width=True)
         else:
             st.info("Sin datos para graficar.")
 
-    # --- COLUMNA DERECHA: TABLA RESUMEN CON DETALLE DE FECHAS ---
+    # --- COLUMNA DERECHA: TABLA RESUMEN CON FILA DE TOTALES EN OTRO COLOR ---
     with col_tabla:
         st.write("### 🗂️ Resumen Ejecutivo de Cumplimiento")
         
         if col_grupo in df_filtrado.columns and col_cliente in df_filtrado.columns:
-            # Rellenar valores nulos de fechas para una visualización limpia
             df_display = df_filtrado.copy()
             df_display[col_entrega] = df_display[col_entrega].fillna("---")
             df_display[col_odoo] = df_display[col_odoo].fillna("---")
@@ -192,15 +191,13 @@ if df_raw is not None and not df_raw.empty:
                 columns=df_display['Estatus de Entrega']
             ).reset_index()
             
-            # Renombrar columnas para consistencia visual en el tablero
             pivot_raw.rename(columns={col_entrega: 'F. ENTREGA', col_odoo: 'F. ODOO'}, inplace=True)
-            
             columnas_estados = [c for c in pivot_raw.columns if c not in [col_grupo, col_cliente, 'F. ENTREGA', 'F. ODOO']]
             
             # Calcular total horizontal
             pivot_raw['Total General'] = pivot_raw[columnas_estados].sum(axis=1)
             
-            # 2. Construir la fila de TOTAL GENERAL para el fondo de la tabla
+            # 2. Construir la fila de TOTAL GENERAL
             fila_total = {col_grupo: "TOTAL GENERAL", col_cliente: "", 'F. ENTREGA': "", 'F. ODOO': ""}
             gran_total_casos = pivot_raw['Total General'].sum()
             
@@ -208,10 +205,9 @@ if df_raw is not None and not df_raw.empty:
                 fila_total[estado] = pivot_raw[estado].sum()
             fila_total['Total General'] = gran_total_casos
             
-            # Unir los datos con la fila final
             pivot_df = pd.concat([pivot_raw, pd.DataFrame([fila_total])], ignore_index=True)
             
-            # 3. Formatear dinámicamente cada conteo interno como 'Cantidad (Porcentaje%)'
+            # 3. Formatear las celdas internas como 'Cantidad (Porcentaje%)'
             for estado in columnas_estados:
                 def aplicar_porcentaje(fila):
                     base = fila['Total General']
@@ -222,13 +218,10 @@ if df_raw is not None and not df_raw.empty:
                     return "0 (0.0%)"
                 pivot_df[estado] = pivot_df.apply(aplicar_porcentaje, axis=1)
             
-            # Formatear la columna de totales finales
             pivot_df['Total General'] = pivot_df['Total General'].apply(lambda x: f"{int(x)} (100%)")
             
-            # Desplegar tabla estructurada
-            st.dataframe(pivot_df, use_container_width=True, hide_index=True)
-        else:
-            st.warning("No se encontraron los campos necesarios en la fuente de datos.")
-
-else:
-    st.warning(f"La pestaña '{mes_seleccionado}' está vacía o aún no ha sido creada.")
+            # 4. FUNCIÓN DE ESTILO: Pintar el fondo de la fila de TOTAL GENERAL para diferenciarla
+            def resaltar_fila_totales(row):
+                # Si es la fila de totales, le aplicamos un fondo gris/azulado ejecutivo soft
+                if row[col_grupo] == "TOTAL GENERAL":
+                    return
