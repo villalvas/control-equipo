@@ -55,6 +55,9 @@ if df_raw is not None and not df_raw.empty:
     col_odoo = buscar_columna(['odoo', 'fecha de carga odoo', 'carga odoo'], df_raw)
     col_grupo = buscar_columna(['grupoarea', 'grupo area', 'grupo', 'area'], df_raw) or df_raw.columns[0]
     col_recurrencia = buscar_columna(['recurrencia de boletin', 'recurrencia', 'periodo'], df_raw) or df_raw.columns[0]
+    
+    # Identificar la nueva columna de observaciones por retraso de forma flexible
+    col_observacion = buscar_columna(['observacion retraso', 'observaciones retraso', 'observacion'], df_raw)
 
     # ---------------------------------------------------------------------
     # LÓGICA DE AUDITORÍA DE TIEMPOS (PROCESAMIENTO DE FECHAS)
@@ -162,54 +165,4 @@ if df_raw is not None and not df_raw.empty:
             conteo_tiempos['Porcentaje'] = ((conteo_tiempos['Cantidad'] / total_boletines_vivos) * 100).round(1)
             conteo_tiempos['Etiqueta'] = conteo_tiempos.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']}%)", axis=1)
             
-            fig_sla = px.bar(conteo_tiempos, x='Cantidad', y='Estatus de Entrega', text='Etiqueta',
-                             orientation='h', color='Estatus de Entrega',
-                             color_discrete_map={
-                                 "🚀 Entregado a Tiempo": "#2ca02c",
-                                 "⚠️ Entregado Atrasado": "#d62728",
-                                 "⏳ Pendiente de Carga": "#ff7f0e",
-                                 "✅ Entregado (Formato Variable)": "#1f77b4"
-                             })
-            fig_sla.update_traces(textposition='outside')
-            fig_sla.update_layout(xaxis_title="Boletines", yaxis_title=None, showlegend=False, height=310, margin=dict(t=10, b=10, l=10, r=10))
-            st.plotly_chart(fig_sla, use_container_width=True)
-        else:
-            st.info("Sin datos para graficar con el filtro actual.")
-
-    # --- COLUMNA DERECHA: TABLA DE DETALLE SEGURO ---
-    with col_tabla:
-        st.write("### 🗂️ Resumen Ejecutivo de Cumplimiento")
-        
-        if col_grupo in df_filtrado.columns and col_cliente in df_filtrado.columns:
-            # 1. Preparación de columnas limpias para evitar errores de tipo de dato
-            df_tabla_final = pd.DataFrame({
-                'GRUPO': df_filtrado[col_grupo].fillna("---"),
-                'CLIENTE / INSTITUCIÓN': df_filtrado[col_cliente].fillna("---"),
-                'F. ENTREGA': df_filtrado[col_entrega].fillna("---"),
-                'F. ODOO': df_filtrado[col_odoo].fillna("---"),
-                'ESTATUS': df_filtrado['Estatus de Entrega']
-            })
-            
-            # 2. Ordenar datos por Grupo y Cliente para mantener consistencia
-            df_tabla_final = df_tabla_final.sort_values(by=['GRUPO', 'CLIENTE / INSTITUCIÓN']).reset_index(drop=True)
-            
-            # 3. Calcular la fila de acumulados de manera independiente y segura
-            total_items = len(df_tabla_final)
-            fila_acumulada = pd.DataFrame([{
-                'GRUPO': "🟦 TOTAL GENERAL 🟦",
-                'CLIENTE / INSTITUCIÓN': f"📊 {total_items} Casos Filtrados",
-                'F. ENTREGA': "═══════════",
-                'F. ODOO': "═══════════",
-                'ESTATUS': "📈 Resumen de Selección"
-            }])
-            
-            # Unir los registros de clientes con la fila de totales finales
-            df_desplegar = pd.concat([df_tabla_final, fila_acumulada], ignore_index=True)
-            
-            # Desplegar la tabla nativa (Garantiza 0 bloqueos y lectura perfecta)
-            st.dataframe(df_desplegar, use_container_width=True, hide_index=True)
-        else:
-            st.warning("No se encontraron los campos obligatorios en el archivo origen.")
-
-else:
-    st.warning(f"La pestaña '{mes_seleccionado}' está vacía o aún no ha sido creada.")
+            fig_sla = px.bar(conteo_tiempos, x
