@@ -196,9 +196,8 @@ if df_raw is not None and not df_raw.empty:
                 'F. ODOO': df_filtrado[col_odoo].fillna("---")
             }
             
-            # REGLA ACTUALIZADA: MÁX. DÍAS se muestra SIEMPRE si la columna existe en el Drive
+            # Mostrar MÁX. DÍAS siempre si la columna existe en el Drive
             mostrar_dias = (col_dias_max is not None) and (col_dias_max in df_filtrado.columns)
-            
             # Observación se mantiene exclusiva de los casos con atraso real
             mostrar_obs = (filtro_estatus == "⚠️ Entregado Atrasado") and (col_observacion is not None) and (col_observacion in df_filtrado.columns)
             
@@ -210,7 +209,14 @@ if df_raw is not None and not df_raw.empty:
             estructura_columnas['ESTATUS'] = df_filtrado['Estatus de Entrega']
             
             df_tabla_final = pd.DataFrame(estructura_columnas)
-            df_tabla_final = df_tabla_final.sort_values(by=['GRUPO', 'CLIENTE / INSTITUCIÓN']).reset_index(drop=True)
+            
+            # 🔄 AJUSTE CORE: Parsear la fecha de entrega temporalmente para ordenar cronológicamente de más antiguo a más reciente
+            fechas_ordenamiento = pd.to_datetime(df_tabla_final['F. ENTREGA'], errors='coerce', dayfirst=True)
+            df_tabla_final['_orden_fecha'] = fechas_ordenamiento
+            
+            # Ordenar por fecha cronológica y limpiar columna auxiliar
+            df_tabla_final = df_tabla_final.sort_values(by='_orden_fecha', na_position='last').reset_index(drop=True)
+            df_tabla_final = df_tabla_final.drop(columns=['_orden_fecha'])
             
             # Construcción segura de la fila totalizadora
             total_items = len(df_tabla_final)
@@ -224,6 +230,7 @@ if df_raw is not None and not df_raw.empty:
             if mostrar_dias:
                 datos_fila_total['MÁX. DÍAS'] = "═══════"
             if mostrar_obs:
+                datos_fila_total['MA X. DÍAS'] = "═══════" if mostrar_dias else None # Previene descuadres de diccionario
                 datos_fila_total['OBSERVACIÓN RETRASO'] = "══════════════════════"
                 
             datos_fila_total['ESTATUS'] = "📈 Resumen de Selección"
