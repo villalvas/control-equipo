@@ -56,7 +56,7 @@ if df_raw is not None and not df_raw.empty:
     col_recurrencia = buscar_columna(['recurrencia de boletin', 'recurrencia', 'periodo'], df_raw) or df_raw.columns[0]
     col_observacion = buscar_columna(['observacion retraso', 'observaciones retraso', 'observacion'], df_raw)
     
-    # Mapeo corregido y ultra flexible para admitir "maximas", "maximos", "max", etc.
+    # Mapeo flexible para "dias maximas del mes para entrega de boletin"
     col_dias_max = buscar_columna(['dias maximas', 'dias maximos', 'dias maxima', 'dias maximo', 'maximas', 'maximos'], df_raw)
 
     # ---------------------------------------------------------------------
@@ -188,7 +188,7 @@ if df_raw is not None and not df_raw.empty:
         st.write("### 🗂️ Resumen Ejecutivo de Cumplimiento")
         
         if col_grupo in df_filtrado.columns and col_cliente in df_filtrado.columns:
-            # Creación de la estructura base de columnas permanentes
+            # Estructura permanente base
             estructura_columnas = {
                 'GRUPO': df_filtrado[col_grupo].fillna("---"),
                 'CLIENTE / INSTITUCIÓN': df_filtrado[col_cliente].fillna("---"),
@@ -196,18 +196,15 @@ if df_raw is not None and not df_raw.empty:
                 'F. ODOO': df_filtrado[col_odoo].fillna("---")
             }
             
-            # Condición para mostrar la auditoría extendida en "Entregado Atrasado"
-            mostrar_auditoria_atraso = (filtro_estatus == "⚠️ Entregado Atrasado")
+            # NUEVA LÓGICA DE CONDICIONALES SEPARADAS:
+            mostrar_dias = (filtro_estatus == "⏳ Pendiente de Carga") and (col_dias_max is not None) and (col_dias_max in df_filtrado.columns)
+            mostrar_obs = (filtro_estatus == "⚠️ Entregado Atrasado") and (col_observacion is not None) and (col_observacion in df_filtrado.columns)
             
-            if mostrar_auditoria_atraso:
-                # Si encuentra la columna de días máximos en tu Drive, la añade dinámicamente
-                if col_dias_max is not None and col_dias_max in df_filtrado.columns:
-                    estructura_columnas['MÁX. DÍAS'] = df_filtrado[col_dias_max].fillna("---")
-                # Si encuentra la columna de observaciones en tu Drive, la añade dinámicamente
-                if col_observacion is not None and col_observacion in df_filtrado.columns:
-                    estructura_columnas['OBSERVACIÓN RETRASO'] = df_filtrado[col_observacion].fillna("Sin observación")
+            if mostrar_dias:
+                estructura_columnas['MÁX. DÍAS'] = df_filtrado[col_dias_max].fillna("---")
+            elif mostrar_obs:
+                estructura_columnas['OBSERVACIÓN RETRASO'] = df_filtrado[col_observacion].fillna("Sin observación")
                 
-            # El estatus siempre va al final
             estructura_columnas['ESTATUS'] = df_filtrado['Estatus de Entrega']
             
             df_tabla_final = pd.DataFrame(estructura_columnas)
@@ -222,11 +219,10 @@ if df_raw is not None and not df_raw.empty:
                 'F. ODOO': "═══════════"
             }
             
-            if mostrar_auditoria_atraso:
-                if col_dias_max is not None and col_dias_max in df_filtrado.columns:
-                    datos_fila_total['MÁX. DÍAS'] = "═══════"
-                if col_observacion is not None and col_observacion in df_filtrado.columns:
-                    datos_fila_total['OBSERVACIÓN RETRASO'] = "══════════════════════"
+            if mostrar_dias:
+                datos_fila_total['MÁX. DÍAS'] = "═══════"
+            elif mostrar_obs:
+                datos_fila_total['OBSERVACIÓN RETRASO'] = "══════════════════════"
                 
             datos_fila_total['ESTATUS'] = "📈 Resumen de Selección"
             
