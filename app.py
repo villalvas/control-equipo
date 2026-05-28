@@ -56,8 +56,8 @@ if df_raw is not None and not df_raw.empty:
     col_recurrencia = buscar_columna(['recurrencia de boletin', 'recurrencia', 'periodo'], df_raw) or df_raw.columns[0]
     col_observacion = buscar_columna(['observacion retraso', 'observaciones retraso', 'observacion'], df_raw)
     
-    # Mapeo de la nueva columna de días máximos
-    col_dias_max = buscar_columna(['dias maximas del mes para entrega de boletin', 'dias maximos', 'dias maxima'], df_raw)
+    # Mapeo corregido y ultra flexible para admitir "maximas", "maximos", "max", etc.
+    col_dias_max = buscar_columna(['dias maximas', 'dias maximos', 'dias maxima', 'dias maximo', 'maximas', 'maximos'], df_raw)
 
     # ---------------------------------------------------------------------
     # LÓGICA DE AUDITORÍA DE TIEMPOS
@@ -188,7 +188,7 @@ if df_raw is not None and not df_raw.empty:
         st.write("### 🗂️ Resumen Ejecutivo de Cumplimiento")
         
         if col_grupo in df_filtrado.columns and col_cliente in df_filtrado.columns:
-            # Creación limpia de la estructura base
+            # Creación de la estructura base de columnas permanentes
             estructura_columnas = {
                 'GRUPO': df_filtrado[col_grupo].fillna("---"),
                 'CLIENTE / INSTITUCIÓN': df_filtrado[col_cliente].fillna("---"),
@@ -196,15 +196,18 @@ if df_raw is not None and not df_raw.empty:
                 'F. ODOO': df_filtrado[col_odoo].fillna("---")
             }
             
-            # Condición para mostrar auditoría extendida en "Entregado Atrasado"
+            # Condición para mostrar la auditoría extendida en "Entregado Atrasado"
             mostrar_auditoria_atraso = (filtro_estatus == "⚠️ Entregado Atrasado")
             
             if mostrar_auditoria_atraso:
+                # Si encuentra la columna de días máximos en tu Drive, la añade dinámicamente
                 if col_dias_max is not None and col_dias_max in df_filtrado.columns:
                     estructura_columnas['MÁX. DÍAS'] = df_filtrado[col_dias_max].fillna("---")
+                # Si encuentra la columna de observaciones en tu Drive, la añade dinámicamente
                 if col_observacion is not None and col_observacion in df_filtrado.columns:
                     estructura_columnas['OBSERVACIÓN RETRASO'] = df_filtrado[col_observacion].fillna("Sin observación")
                 
+            # El estatus siempre va al final
             estructura_columnas['ESTATUS'] = df_filtrado['Estatus de Entrega']
             
             df_tabla_final = pd.DataFrame(estructura_columnas)
