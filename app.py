@@ -11,17 +11,17 @@ st.markdown("---")
 # =========================================================================
 # CONEXIÓN EN VIVO A GOOGLE DRIVE
 # =========================================================================
-# ⚠️ CAMBIA EL LINK DE ABAJO CON TU ENLACE REAL DEL BOTÓN AZUL "COMPARTIR":
+# ⚠️ RECUERDA CAMBIAR EL LINK DE ABAJO CON TU ENLACE REAL DE DRIVE:
 URL_DRIVE = "https://docs.google.com/spreadsheets/d/1aGFtjIeJQ0ZyNCoTvJzfHtM3gQ6JdWKgiVHP5i-Pjj8/edit?usp=sharing"
 
 def cargar_datos_pestana(url, nombre_pestana):
     try:
         csv_url = url.replace('/edit?usp=sharing', f'/gviz/tq?tqx=out:csv&sheet={nombre_pestana}').replace('/edit', f'/gviz/tq?tqx=out:csv&sheet={nombre_pestana}')
         df = pd.read_csv(csv_url)
-        df.columns = df.columns.str.strip()  # Limpia espacios en los encabezados
+        df.columns = df.columns.str.strip()  # Limpia espacios en blanco en los encabezados
         return df
     except Exception as e:
-        st.error(f"Error al cargar la pestaña '{nombre_pestana}'. Asegúrate de que el nombre esté escrito exactamente igual.")
+        st.error(f"Error al cargar la pestaña '{nombre_pestana}'. Verifica que el nombre en Drive sea exacto.")
         return None
 
 # ---------------------------------------------------------------------
@@ -40,7 +40,7 @@ df_raw = cargar_datos_pestana(URL_DRIVE, mes_seleccionado)
 
 if df_raw is not None and not df_raw.empty:
     
-    # Asistente inteligente para mapear columnas principales
+    # Asistente inteligente para mapear columnas dinámicas de la hoja
     def buscar_columna(opciones, df):
         for opcion in opciones:
             for col in df.columns:
@@ -56,11 +56,11 @@ if df_raw is not None and not df_raw.empty:
     col_recurrencia = buscar_columna(['recurrencia de boletin', 'recurrencia', 'periodo'], df_raw) or df_raw.columns[0]
     col_observacion = buscar_columna(['observacion retraso', 'observaciones retraso', 'observacion'], df_raw)
     
-    # Mapeo ultra flexible para encontrar los días máximos
+    # Mapeo flexible para la columna de límites de entrega
     col_dias_max = buscar_columna(['dias maximas', 'dias maximos', 'dias maxima', 'dias maximo', 'maximas', 'maximos'], df_raw)
 
     # ---------------------------------------------------------------------
-    # LÓGICA DE AUDITORÍA DE TIEMPOS
+    # LÓGICA DE AUDITORÍA DE TIEMPOS (SLA)
     # ---------------------------------------------------------------------
     if col_entrega and col_odoo and col_entrega in df_raw.columns and col_odoo in df_raw.columns:
         f_entrega_parsed = pd.to_datetime(df_raw[col_entrega], errors='coerce', dayfirst=True)
@@ -188,7 +188,7 @@ if df_raw is not None and not df_raw.empty:
         st.write("### 🗂️ Resumen Ejecutivo de Cumplimiento")
         
         if col_grupo in df_filtrado.columns and col_cliente in df_filtrado.columns:
-            # Estructura permanente base
+            # Estructura de datos fija
             estructura_columnas = {
                 'GRUPO': df_filtrado[col_grupo].fillna("---"),
                 'CLIENTE / INSTITUCIÓN': df_filtrado[col_cliente].fillna("---"),
@@ -196,9 +196,8 @@ if df_raw is not None and not df_raw.empty:
                 'F. ODOO': df_filtrado[col_odoo].fillna("---")
             }
             
-            # NUEVA LÓGICA CORE: Mostrar MÁX. DÍAS en los 3 estados requeridos por Stalin
-            estados_permitidos_dias = ["⏳ Pendiente de Carga", "⚠️ Entregado Atrasado", "🚀 Entregado a Tiempo"]
-            mostrar_dias = (filtro_estatus in estados_permitidos_dias) and (col_dias_max is not None) and (col_dias_max in df_filtrado.columns)
+            # REGLA ACTUALIZADA: MÁX. DÍAS se muestra SIEMPRE si la columna existe en el Drive
+            mostrar_dias = (col_dias_max is not None) and (col_dias_max in df_filtrado.columns)
             
             # Observación se mantiene exclusiva de los casos con atraso real
             mostrar_obs = (filtro_estatus == "⚠️ Entregado Atrasado") and (col_observacion is not None) and (col_observacion in df_filtrado.columns)
