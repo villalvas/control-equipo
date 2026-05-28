@@ -127,3 +127,113 @@ if df_raw is not None and not df_raw.empty:
         df_filtrado = df_filtrado[df_filtrado['Estatus de Entrega'] == filtro_estatus]
     if filtro_comercial != "TODOS":
         df_filtrado = df_filtrado[df_filtrado[col_comercial] == filtro_comercial]
+
+    # ---------------------------------------------------------------------
+    # TARJETAS DE INDICADORES (KPIs)
+    # ---------------------------------------------------------------------
+    a_tiempo = len(df_base_universo[df_base_universo['Evaluación de Entrega Raw'] == "Entregado a Tiempo"])
+    atrasados = len(df_base_universo[df_base_universo['Evaluación de Entrega Raw'] == "Entregado Atrasado"])
+    pendientes = len(df_base_universo[df_base_universo['Evaluación de Entrega Raw'] == "Pendiente de Carga"])
+
+    efectividad_pct = int((a_tiempo / total_boletines_vivos) * 100) if total_boletines_vivos > 0 else 0
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.metric(label="Total Casos del Mes", value=f"{total_boletines_vivos} Cuentas")
+    with c2:
+        st.metric(label="Efectividad de Gestión", value=f"{efectividad_pct}% A Tiempo", delta=f"{a_tiempo} de {total_boletines_vivos} Boletines")
+    with c3:
+        st.metric(label="Pendientes de Carga", value=f"{pendientes} Pendientes", delta=f"{atrasados} con Retraso", delta_color="inverse")
+
+    st.markdown("---")
+
+    # =========================================================================
+    # MAQUETACIÓN: GRÁFICO (40%) | TABLA DETALLADA (60%)
+    # =========================================================================
+    col_grafico, col_tabla = st.columns([4, 6])
+
+    # --- COLUMNA IZQUIERDA: GRÁFICO DE SLA (40%) ---
+    with col_grafico:
+        st.write("### 📊 Auditoría de SLA")
+        
+        conteo_tiempos = df_filtrado['Estatus de Entrega'].value_counts().reset_index()
+        conteo_tiempos.columns = ['Estatus de Entrega', 'Cantidad']
+        
+        if not conteo_tiempos.empty:
+            conteo_tiempos['Porcentaje'] = ((conteo_tiempos['Cantidad'] / total_boletines_vivos) * 100).round(1)
+            conteo_tiempos['Etiqueta'] = conteo_tiempos.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']}%)", axis=1)
+            
+            fig_sla = px.bar(
+                conteo_tiempos, 
+                x='Cantidad', 
+                y='Estatus de Entrega', 
+                text='Etiqueta',
+                orientation='h', 
+                color='Estatus de Entrega',
+                color_discrete_map={
+                    "🚀 Entregado a Tiempo": "#2ca02c",
+                    "⚠️ Entregado Atrasado": "#d62728",
+                    "⏳ Pendiente de Carga": "#ff7f0e",
+                    "✅ Entregado (Formato Variable)": "#1f77b4"
+                }
+            )
+            fig_sla.update_traces(textposition='outside')
+            fig_sla.update_layout(xaxis_title="Boletines", yaxis_title=None, showlegend=False, height=310, margin=dict(t=10, b=10, l=10, r=10))
+            st.plotly_chart(fig_sla, use_container_width=True)
+        else:
+            st.info("Sin datos para graficar con el filtro actual.")
+
+    # --- COLUMNA DERECHA: TABLA DE DETALLE RESUMEN (60%) ---
+    with col_tabla:
+        st.write("### 🗂️ Resumen Ejecutivo de Cumplimiento")
+        
+        if col_grupo in df_filtrado.columns and col_cliente in df_filtrado.columns:
+            # Estructura permanente base
+            estructura_columnas = {
+                'GRUPO': df_filtrado[col_grupo].fillna("---"),
+                'CLIENTE / INSTITUCIÓN': df_filtrado[col_cliente].fillna("---"),
+                'F. ENTREGA': df_filtrado[col_entrega].fillna("---"),
+                'F. ODOO': df_filtrado[col_odoo].fillna("---")
+            }
+            
+            # NUEVA LÓGICA CORE: Mostrar MÁX. DÍAS en los 3 estados requeridos por Stalin
+            estados_permitidos_dias = ["⏳ Pendiente de Carga", "⚠️ Entregado Atrasado", "🚀 Entregado a Tiempo"]
+            mostrar_dias = (filtro_estatus in estados_permitidos_dias) and (col_dias_max is not None) and (col_dias_max in df_filtrado.columns)
+            
+            # Observación se mantiene exclusiva de los casos con atraso real
+            mostrar_obs = (filtro_estatus == "⚠️ Entregado Atrasado") and (col_observacion is not None) and (col_observacion in df_filtrado.columns)
+            
+            if mostrar_dias:
+                estructura_columnas['MÁX. DÍAS'] = df_filtrado[col_dias_max].fillna("---")
+            if mostrar_obs:
+                estructura_columnas['OBSERVACIÓN RETRASO'] = df_filtrado[col_observacion].fillna("Sin observación")
+                
+            estructura_columnas['ESTATUS'] = df_filtrado['Estatus de Entrega']
+            
+            df_tabla_final = pd.DataFrame(estructura_columnas)
+            df_tabla_final = df_tabla_final.sort_values(by=['GRUPO', 'CLIENTE / INSTITUCIÓN']).reset_index(drop=True)
+            
+            # Construcción segura de la fila totalizadora
+            total_items = len(df_tabla_final)
+            datos_fila_total = {
+                'GRUPO': "🟦 TOTAL GENERAL 🟦",
+                'CLIENTE / INSTITUCIÓN': f"📊 {total_items} Casos Filtrados",
+                'F. ENTREGA': "═══════════",
+                'F. ODOO': "═══════════"
+            }
+            
+            if mostrar_dias:
+                datos_fila_total['MÁX. DÍAS'] = "═══════"
+            if mostrar_obs:
+                datos_fila_total['OBSERVACIÓN RETRASO'] = "══════════════════════"
+                
+            datos_fila_total['ESTATUS'] = "📈 Resumen de Selección"
+            
+            fila_acumulada = pd.DataFrame([datos_fila_total])
+            df_desplegar = pd.concat([df_tabla_final, fila_acumulada], ignore_index=True)
+            
+            st.dataframe(df_desplegar, use_container_width=True, hide_index=True)
+        else:
+            st.warning("No se encontraron las columnas necesarias en el archivo origen.")
+else:
+    st.warning(f"La pestaña '{mes_seleccionado}' está vacía o no existe.")
