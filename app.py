@@ -21,22 +21,27 @@ if st.session_state.modulo_activo != "🏠 Inicio":
 # =========================================================================
 # 📂 ENLACES VERIFICADOS DE GOOGLE DRIVE 
 # =========================================================================
+# Enlace exclusivo del archivo "Control de Boletines"
 URL_BOLETINES = "https://docs.google.com/spreadsheets/d/1aGFtjIeJQ0ZyNCoTvJzfHtM3gQ6JdwKgiVHP5i-Pjj8/edit?usp=sharing"
 
-# Enlace de tu archivo renombrado "Control de Quejas"
+# Enlace exclusivo del archivo "Control de Quejas"
 URL_QUEJAS = "https://docs.google.com/spreadsheets/d/1goYcBbknAXGLN50b4lx8TEVxaZJeAOJrPj3qTr02gFE/edit?usp=sharing"
 
-# Función universal optimizada para conexiones remotas a Google Sheets
+# Función de extracción avanzada: Extrae el ID del documento de forma inmune a fallos
 def cargar_datos_pestana(url, nombre_pestana):
     try:
+        # Extrae el ID alfanumérico entre /d/ y /edit
         match = re.search(r"/d/([a-zA-Z0-9-_]+)", url)
         if match:
             doc_id = match.group(1)
+            # Codifica los espacios en blanco de la pestaña para la URL externa (%20)
             pestana_limpia = str(nombre_pestana).strip().replace(" ", "%20")
             csv_url = f"https://docs.google.com/spreadsheets/d/{doc_id}/gviz/tq?tqx=out:csv&sheet={pestana_limpia}"
             
             df = pd.read_csv(csv_url)
+            # Limpia espacios ocultos en los nombres de las columnas
             df.columns = df.columns.str.strip()
+            # Elimina filas que estén completamente vacías
             df = df.dropna(how='all')
             return df
         return None
@@ -67,7 +72,7 @@ if st.session_state.modulo_activo == "🏠 Inicio":
             st.rerun()
 
 # =========================================================================
-# 📊 MÓDULO 1: CONTROL DE BOLETINES (INMUNE Y SEPARADO)
+# 📊 MÓDULO 1: CONTROL DE BOLETINES (CORREGIDO Y CONFIGURADO CON SU URL)
 # =========================================================================
 elif st.session_state.modulo_activo == "📊 Control de Boletines":
     st.title("📊 Control de Boletines")
@@ -75,8 +80,9 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
     
     st.sidebar.header("📅 Calendario Operativo")
     meses_anuales = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"] 
-    mes_seleccionado = st.sidebar.selectbox("Selecciona el Mes a consultar:", meses_anuales, index=4)
+    mes_seleccionado = st.sidebar.selectbox("Selecciona el Mes a consultar:", meses_anuales, index=4) # Por defecto Mayo (index 4)
     
+    # Llama a la función usando la URL específica de Boletines
     df_raw = cargar_datos_pestana(URL_BOLETINES, mes_seleccionado)
     
     if df_raw is not None and not df_raw.empty:
@@ -182,10 +188,10 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
                 fila_acumulada = pd.DataFrame([{'GRUPO': "🟦 TOTAL GENERAL 🟦", 'CLIENTE / INSTITUCIÓN': f"📊 {len(df_tabla_final)} Casos Filtrados", 'F. ENTREGA': "═══════════", 'F. ODOO': "═══════════", 'ESTATUS': "📈 Resumen"}])
                 st.dataframe(pd.concat([df_tabla_final, fila_acumulada], ignore_index=True), use_container_width=True, hide_index=True)
     else:
-        st.error("Error al sincronizar con el archivo de Boletines. Verifica que la pestaña de este mes exista en el archivo de Google Drive.")
+        st.error(f"Error crítico de sincronización: No se pudo conectar al archivo 'Control de Boletines' o la pestaña '{mes_seleccionado}' está vacía. Verifica que el archivo en Drive tenga los accesos públicos para cualquier persona con el enlace.")
 
 # =========================================================================
-# ⚠️ MÓDULO 2: GESTIÓN INTEGRAL DE QUEJAS (TOLERANTE A CAMBIOS DE NOMBRE)
+# ⚠️ MÓDULO 2: GESTIÓN INTEGRAL DE QUEJAS (BUSCA FORMATOS '2025' O 'BBDD 2025')
 # =========================================================================
 elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
     st.title("⚠️ Gestión Integral de Quejas Nacionales")
@@ -194,7 +200,7 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
     st.sidebar.header("📅 Historial Operativo")
     anio_seleccionado = st.sidebar.selectbox("Selecciona el Año de Auditoría:", ["2025", "2026"], index=0)
     
-    # Intenta leer primero el nombre corto de la pestaña, y si falla busca con el prefijo BBDD
+    # Intenta buscar primero el año simple ('2025') y como respaldo el formato antiguo ('BBDD 2025')
     df_quejas = cargar_datos_pestana(URL_QUEJAS, anio_seleccionado)
     if df_quejas is None or df_quejas.empty:
         df_quejas = cargar_datos_pestana(URL_QUEJAS, f"BBDD {anio_seleccionado}")
@@ -216,7 +222,7 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
                 lista_provincias = ["TODAS"] + list(df_quejas[col_provincia].dropna().unique())
                 provincia_sel = st.sidebar.selectbox("Selecciona la Región/Provincia:", lista_provincias)
             
-            st.success(f"¡Sincronización Exitosa! Conectado correctamente al archivo '{anio_seleccionado}' en Drive.")
+            st.success(f"¡Sincronización Exitosa! Conectado correctamente al archivo 'Control de Quejas' en Drive.")
             st.write("##### Vista previa del Consolidado General de Quejas:")
             st.dataframe(df_quejas.head(15), use_container_width=True)
             
