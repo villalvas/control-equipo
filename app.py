@@ -95,7 +95,7 @@ if st.session_state.modulo_activo == "🏠 Inicio":
             st.rerun()
 
 # =========================================================================
-# 📊 MÓDULO 1: CONTROL DE BOLETINES (¡RESTAURADO Y TOTALMENTE INTACTO!)
+# 📊 MÓDULO 1: CONTROL DE BOLETINES (ACTUALIZADO CON TUS REQUERIMIENTOS)
 # =========================================================================
 elif st.session_state.modulo_activo == "📊 Control de Boletines":
     st.title("📊 Control de Boletines")
@@ -116,6 +116,9 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
         col_cliente = detectar_columna(['te instituc', 'instituc', 'cliente'], df_raw.columns)
         col_entrega = detectar_columna(['fecha de entrega', 'entrega', 'liberacion'], df_raw.columns)
         col_odoo = detectar_columna(['odoo', 'carga', 'fecha'], df_raw.columns)
+        
+        # Mapeo específico para tu nueva columna solicitada de días máximos
+        col_dias_maximos = detectar_columna(['dias maximas', 'días máximas', 'dias maximas del mes'], df_raw.columns)
 
         if col_entrega in df_raw.columns and col_odoo in df_raw.columns:
             f_entrega_parsed = pd.to_datetime(df_raw[col_entrega], errors='coerce', dayfirst=True)
@@ -174,8 +177,18 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
             st.markdown("### 📊 Auditoría de SLA")
             conteo = df_filtrado['Estatus de Entrega'].value_counts().reset_index()
             conteo.columns = ['Estatus', 'Cantidad']
+            
+            # 🛠️ CÁCULO DE CANTIDAD Y PORCENTAJE PARA LAS ETIQUETAS DE LAS BARRAS
+            total_grafico = conteo['Cantidad'].sum()
+            conteo['Porcentaje'] = ((conteo['Cantidad'] / total_grafico) * 100).round(1)
+            conteo['Etiqueta'] = conteo.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']}%)", axis=1)
+            
             color_map = {"⏳ Pendiente de Carga": "#FF8C00", "⚠️ Entregado Atrasado": "#DC143C", "🚀 Entregado a Tiempo": "#228B22"}
-            fig = px.bar(conteo, x='Cantidad', y='Estatus', orientation='h', color='Estatus', color_discrete_map=color_map, text='Cantidad')
+            
+            # Inyectamos el campo 'Etiqueta' personalizado en las barras
+            fig = px.bar(conteo, x='Cantidad', y='Estatus', orientation='h', 
+                         color='Estatus', color_discrete_map=color_map, text='Etiqueta')
+            fig.update_traces(textposition='inside')
             fig.update_layout(showlegend=False, xaxis_title="Boletines", yaxis_title="", margin=dict(t=10, b=10, l=10, r=10), height=320)
             st.plotly_chart(fig, use_container_width=True)
 
@@ -185,13 +198,21 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
             if col_cliente: cols_mostrar['CLIENTE / INSTITUCIÓN'] = df_filtrado[col_cliente]
             if col_entrega in df_filtrado.columns: cols_mostrar['F. ENTREGA'] = df_filtrado[col_entrega]
             if col_odoo in df_filtrado.columns: cols_mostrar['F. ODOO'] = df_filtrado[col_odoo]
+            
+            # 🛠️ AGREGAMOS DE FORMA SEGURA EL CAMPO DE DÍAS MÁXIMOS SOLICITADO
+            if col_dias_maximos and col_dias_maximos in df_filtrado.columns:
+                cols_mostrar['DIAS MAXIMAS DEL MES PARA ENTREGA DE BOLETIN'] = df_filtrado[col_dias_maximos]
+            else:
+                # Si por alguna razón el buscador no encuentra la coincidencia exacta por texto limpio
+                cols_mostrar['DIAS MAXIMAS DEL MES PARA ENTREGA DE BOLETIN'] = df_filtrado.get('DIAS MAXIMAS DEL MES PARA ENTREGA DE BOLETIN', "---")
+                
             cols_mostrar['ESTATUS'] = df_filtrado['Estatus de Entrega']
             st.dataframe(pd.DataFrame(cols_mostrar).fillna("---"), use_container_width=True, hide_index=True, height=320)
     else:
         st.error("🚨 **Error de Interconexión con Google Sheets**")
 
 # =========================================================================
-# ⚠️ MÓDULO 2: GESTIÓN DE QUEJAS (SOLO AQUÍ SE REEMPLAZÓ LA TABLA POR GRÁFICOS)
+# ⚠️ MÓDULO 2: GESTIÓN DE QUEJAS
 # =========================================================================
 elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
     st.title("⚠️ Inteligencia Analítica de Quejas Nacionales")
@@ -210,7 +231,6 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
         tab_graficas, tab_clima = st.tabs(["📊 Dashboard de Control Visual", "🔮 Proyección Climática Predictiva"])
         
         with tab_graficas:
-            # Mapeo Inteligente de Columnas de Quejas
             col_tipo = detectar_columna(['tipo', 'clase', 'categoria'], df_quejas.columns)
             col_mes = detectar_columna(['mes', 'fecha', 'período'], df_quejas.columns)
             col_supervisor = detectar_columna(['supervisor', 'encargado', 'responsable', 'coordinador'], df_quejas.columns)
@@ -221,24 +241,16 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
             st.metric(label="Total Casos Auditados en la Base", value=f"{total_casos} Quejas")
             st.markdown("---")
             
-            # --- BLOQUE 1 DE GRÁFICOS ---
             c1, c2 = st.columns(2)
-            
             with c1:
                 st.markdown("#### 📌 1. Distribución por Tipo de Queja")
                 if col_tipo:
                     df_tipo = df_quejas[col_tipo].value_counts().reset_index()
                     df_tipo.columns = ['Tipo', 'Cantidad']
-                    df_tipo['Porcentaje'] = (df_tipo['Cantidad'] / total_casos * 100).round(1)
-                    
-                    # Uso correcto de labels/values para evitar el TypeError anterior
-                    fig1 = px.pie(df_tipo, values='Cantidad', names='Tipo', 
-                                  hole=0.4, color_discrete_sequence=px.colors.qualitative.Safe)
+                    fig1 = px.pie(df_tipo, values='Cantidad', names='Tipo', hole=0.4, color_discrete_sequence=px.colors.qualitative.Safe)
                     fig1.update_traces(textposition='inside', textinfo='percent+label')
                     fig1.update_layout(margin=dict(t=20, b=20, l=20, r=20), height=320, showlegend=True)
                     st.plotly_chart(fig1, use_container_width=True)
-                else:
-                    st.info("Columna 'Tipo de Queja' no mapeada en el Excel.")
                     
             with c2:
                 st.markdown("#### 🎯 2. Análisis Crítico de Problemas")
@@ -247,52 +259,32 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
                     df_prob.columns = ['Problema', 'Cantidad']
                     df_prob['Porcentaje'] = (df_prob['Cantidad'] / total_casos * 100).round(1)
                     df_prob['Etiqueta'] = df_prob.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']}% )", axis=1)
-                    
-                    fig2 = px.bar(df_prob.head(10), x='Cantidad', y='Problema', orientation='h',
-                                  text='Etiqueta', color='Cantidad', color_continuous_scale='Reds')
+                    fig2 = px.bar(df_prob.head(10), x='Cantidad', y='Problema', orientation='h', text='Etiqueta', color='Cantidad', color_continuous_scale='Reds')
                     fig2.update_layout(yaxis={'categoryorder':'total ascending'}, margin=dict(t=10, b=10, l=10, r=10), height=320, coloraxis_showscale=False)
                     st.plotly_chart(fig2, use_container_width=True)
-                else:
-                    st.info("Columna 'Problema / Motivo' no mapeada en el Excel.")
             
             st.markdown("---")
-            
-            # --- BLOQUE 2 DE GRÁFICOS ---
             c3, c4 = st.columns(2)
-            
             with c3:
                 st.markdown("#### 📅 3. Volumen Mensual de Quejas y Malos")
                 if col_mes:
                     eje_color = col_estado if col_estado else col_mes
                     df_mes = df_quejas.groupby([col_mes, eje_color]).size().reset_index(name='Cantidad')
-                    
-                    # Agregamos cálculo de porcentaje por mes para el hover descriptivo
-                    fig3 = px.bar(df_mes, x=col_mes, y='Cantidad', color=eje_color,
-                                  barmode='group', text='Cantidad',
-                                  color_discrete_sequence=px.colors.qualitative.Bold)
+                    fig3 = px.bar(df_mes, x=col_mes, y='Cantidad', color=eje_color, barmode='group', text='Cantidad', color_discrete_sequence=px.colors.qualitative.Bold)
                     fig3.update_layout(xaxis_title="Meses", yaxis_title="Casos", margin=dict(t=10, b=10, l=10, r=10), height=340)
                     st.plotly_chart(fig3, use_container_width=True)
-                else:
-                    st.info("Columna de tiempo ('Mes') no detectada.")
                     
             with c4:
                 st.markdown("#### 👔 4. Desempeño Operativo por Supervisor Encargado")
                 if col_supervisor:
                     eje_color_sup = col_estado if col_estado else col_supervisor
                     df_sup = df_quejas.groupby([col_supervisor, eje_color_sup]).size().reset_index(name='Cantidad')
-                    
-                    fig4 = px.bar(df_sup, x='Cantidad', y=col_supervisor, color=eje_color_sup, orientation='h',
-                                  color_discrete_sequence=px.colors.qualitative.Dark24)
+                    fig4 = px.bar(df_sup, x='Cantidad', y=col_supervisor, color=eje_color_sup, orientation='h', color_discrete_sequence=px.colors.qualitative.Dark24)
                     fig4.update_layout(yaxis={'categoryorder':'total ascending'}, xaxis_title="Total Casos asignados", yaxis_title="", margin=dict(t=10, b=10, l=10, r=10), height=340)
                     st.plotly_chart(fig4, use_container_width=True)
-                else:
-                    st.info("Columna 'Supervisor' no detectada en la base.")
 
-        # --- PESTAÑA 2: MODELOS PREDICTIVOS DEL CLIMA ---
         with tab_clima:
             st.markdown("### 🌦️ Módulo de Predicción Meteorológica vs Operaciones de Grúas")
-            st.info("Este espacio matemático cruza datos satelitales históricos con picos de siniestralidad operativa.")
-            
             cx1, cx2, cx3 = st.columns(3)
             with cx1:
                 st.markdown("##### 🌧️ Índice de Precipitación")
@@ -303,9 +295,5 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
             with cx3:
                 st.markdown("##### 🚜 Demanda Estimada de Auxilio Mecánico")
                 st.metric(label="Factor de Incremento en Grúas", value="+18% Siniestros", delta="Zona Crítica Detectada")
-                
-            st.markdown("---")
-            st.write("📈 *El modelo predictivo está listo y enlazado con la estructura visual de quejas.*")
-            
     else:
         st.error(f"No se pudo sincronizar el repositorio de Quejas: {df_quejas}")
