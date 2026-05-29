@@ -19,19 +19,18 @@ if st.session_state.modulo_activo != "🏠 Inicio":
         st.rerun()
 
 # =========================================================================
-# 📂 ENLACES REALES DE GOOGLE DRIVE CONFIGURADOS
+# 📂 ENLACES VERIFICADOS DE GOOGLE DRIVE 
 # =========================================================================
-URL_BOLETINES = "https://docs.google.com/spreadsheets/d/1aGFtJiEjQ0ZyNCoTvJzFhtM3gQ6JdwKgiVHP5i-Pjj8/edit?usp=sharing"
+# URL corregida con el ID exacto enviado y validado
+URL_BOLETINES = "https://docs.google.com/spreadsheets/d/1aGFtjIeJQ0ZyNCoTvJzfHtM3gQ6JdWKgiVHP5i-Pjj8/edit?usp=sharing"
 URL_QUEJAS = "https://docs.google.com/spreadsheets/d/1goYcBbknAXGLN50b4lx8TEVxaZJeAOJrPj3qTr02gFE/edit?usp=sharing"
 
-# Función blindada de extracción y conexión a Google Drive (Evita errores de reemplazo de texto)
+# Función blindada de extracción y conexión a Google Drive
 def cargar_datos_pestana(url, nombre_pestana):
     try:
-        # Extrae el ID único del documento usando expresiones regulares de forma segura
         match = re.search(r"/d/([a-zA-Z0-9-_]+)", url)
         if match:
             doc_id = match.group(1)
-            # Reconstruye la URL de exportación limpia y directa utilizando el API de visualización de Google
             csv_url = f"https://docs.google.com/spreadsheets/d/{doc_id}/gviz/tq?tqx=out:csv&sheet={nombre_pestana}"
             df = pd.read_csv(csv_url)
             df.columns = df.columns.str.strip()
@@ -42,7 +41,7 @@ def cargar_datos_pestana(url, nombre_pestana):
         return None
 
 # =========================================================================
-# 🏠 PANTALLA PRINCIPAL: FRONT DE BIENVENIDA (SOLO 2 MÓDULOS CONSOLIDADOS)
+# 🏠 PANTALLA PRINCIPAL: FRONT DE BIENVENIDA (2 MÓDULOS CONSOLIDADOS)
 # =========================================================================
 if st.session_state.modulo_activo == "🏠 Inicio":
     st.title("🚀 Sistema Integrado de Control Operativo y BI")
@@ -175,7 +174,7 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
                 fila_acumulada = pd.DataFrame([{'GRUPO': "🟦 TOTAL GENERAL 🟦", 'CLIENTE / INSTITUCIÓN': f"📊 {len(df_tabla_final)} Casos Filtrados", 'F. ENTREGA': "═══════════", 'F. ODOO': "═══════════", 'ESTATUS': "📈 Resumen"}])
                 st.dataframe(pd.concat([df_tabla_final, fila_acumulada], ignore_index=True), use_container_width=True, hide_index=True)
     else:
-        st.error("Error crítico de sincronización: No se pudo conectar con el repositorio de datos de Google Drive. Verifica que el archivo no haya cambiado sus permisos de compartición (Cualquiera con el enlace puede leer).")
+        st.error("Error de sincronización: Asegúrate de que la pestaña seleccionada en el menú izquierdo de la App se llame EXACTAMENTE igual que en tu archivo de Drive (ej. 'Mayo').")
 
 # =========================================================================
 # ⚠️ MÓDULO 2: GESTIÓN INTEGRAL DE QUEJAS (MAPA + CLIMA UNIFICADOS)
@@ -187,7 +186,7 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
     df_quejas = cargar_datos_pestana(URL_QUEJAS, "BBDD 2025")
     
     if df_quejas is not None and not df_quejas.empty:
-        # Pestañas de control interno (Reorganizado: Proyección ahora vive aquí dentro)
+        # Pestañas de control interno
         tab_mapa, tab_clima = st.tabs(["🗺️ Mapa de Calor y Alertas Territoriales", "🔮 Proyección Climática Predictiva"])
         
         with tab_mapa:
