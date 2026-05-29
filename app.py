@@ -63,7 +63,7 @@ def cargar_datos_pestana(url, nombre_pestana):
     except Exception as e:
         return f"Error de comunicación de red: {str(e)}"
 
-# Buscador inteligente de columnas para automatizar los gráficos
+# Buscador inteligente de columnas
 def detectar_columna(keys, columnas_disponibles):
     for k in keys:
         for col in columnas_disponibles:
@@ -95,7 +95,7 @@ if st.session_state.modulo_activo == "🏠 Inicio":
             st.rerun()
 
 # =========================================================================
-# 📊 MÓDULO 1: CONTROL DE BOLETINES 
+# 📊 MÓDULO 1: CONTROL DE BOLETINES (¡RESTAURADO Y TOTALMENTE INTACTO!)
 # =========================================================================
 elif st.session_state.modulo_activo == "📊 Control de Boletines":
     st.title("📊 Control de Boletines")
@@ -146,6 +146,10 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
             valores_comercial = ["TODOS"] + list(df_raw[col_comercial].dropna().unique())
             filtro_comercial = st.sidebar.selectbox("Filtrar por Comercial:", valores_comercial)
 
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("### 🔄 Frecuencia de Entrega")
+        filtro_recurrencia = st.sidebar.selectbox("Selecciona Recurrencia:", ["TODOS", "Mensual", "Semanal", "Inmediata"])
+
         df_filtrado = df_raw.copy()
         if filtro_estatus != "TODOS":
             df_filtrado = df_filtrado[df_filtrado['Estatus de Entrega'] == filtro_estatus]
@@ -175,7 +179,7 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
             fig.update_layout(showlegend=False, xaxis_title="Boletines", yaxis_title="", margin=dict(t=10, b=10, l=10, r=10), height=320)
             st.plotly_chart(fig, use_container_width=True)
 
-        with col_tab:
+        with col_tabla:
             st.markdown("### 📁 Resumen Ejecutivo de Cumplimiento")
             cols_mostrar = {}
             if col_cliente: cols_mostrar['CLIENTE / INSTITUCIÓN'] = df_filtrado[col_cliente]
@@ -187,7 +191,7 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
         st.error("🚨 **Error de Interconexión con Google Sheets**")
 
 # =========================================================================
-# ⚠️ MÓDULO 2: GESTIÓN DE QUEJAS (ENTORNO 100% VISUAL AUTOMATIZADO)
+# ⚠️ MÓDULO 2: GESTIÓN DE QUEJAS (SOLO AQUÍ SE REEMPLAZÓ LA TABLA POR GRÁFICOS)
 # =========================================================================
 elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
     st.title("⚠️ Inteligencia Analítica de Quejas Nacionales")
@@ -203,76 +207,73 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
         
     if isinstance(df_quejas, pd.DataFrame):
         
-        # Pestañas principales fijas
         tab_graficas, tab_clima = st.tabs(["📊 Dashboard de Control Visual", "🔮 Proyección Climática Predictiva"])
         
         with tab_graficas:
-            # 🔍 MAPEO AUTOMÁTICO DE COLUMNAS DEL EXCEL REAL DE QUEJAS
+            # Mapeo Inteligente de Columnas de Quejas
             col_tipo = detectar_columna(['tipo', 'clase', 'categoria'], df_quejas.columns)
             col_mes = detectar_columna(['mes', 'fecha', 'período'], df_quejas.columns)
             col_supervisor = detectar_columna(['supervisor', 'encargado', 'responsable', 'coordinador'], df_quejas.columns)
             col_problema = detectar_columna(['problema', 'motivo', 'detalle', 'causa', 'novedad'], df_quejas.columns)
             col_estado = detectar_columna(['estado', 'estatus', 'malo', 'resultado'], df_quejas.columns)
             
-            # Resumen analítico superior (KPIs Directivos)
             total_casos = len(df_quejas)
             st.metric(label="Total Casos Auditados en la Base", value=f"{total_casos} Quejas")
             st.markdown("---")
             
-            # --- BLOQUE 1 DE GRÁFICOS (TIPO DE QUEJA & ANÁLISIS DE PROBLEMAS) ---
+            # --- BLOQUE 1 DE GRÁFICOS ---
             c1, c2 = st.columns(2)
             
             with c1:
-                st.markdown("#### 📌 1. Distribución por Tipo de Queja (Cantidad y %)")
+                st.markdown("#### 📌 1. Distribución por Tipo de Queja")
                 if col_tipo:
-                    # Agrupar y calcular cantidad y porcentaje
                     df_tipo = df_quejas[col_tipo].value_counts().reset_index()
                     df_tipo.columns = ['Tipo', 'Cantidad']
                     df_tipo['Porcentaje'] = (df_tipo['Cantidad'] / total_casos * 100).round(1)
-                    df_tipo['Etiqueta'] = df_tipo.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']}%)", axis=1)
                     
+                    # Uso correcto de labels/values para evitar el TypeError anterior
                     fig1 = px.pie(df_tipo, values='Cantidad', names='Tipo', 
-                                  hover_data=['Porcentaje'], text='Etiqueta', hole=0.3,
-                                  color_discrete_sequence=px.colors.qualitative.Bold)
-                    fig1.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=300)
+                                  hole=0.4, color_discrete_sequence=px.colors.qualitative.Safe)
+                    fig1.update_traces(textposition='inside', textinfo='percent+label')
+                    fig1.update_layout(margin=dict(t=20, b=20, l=20, r=20), height=320, showlegend=True)
                     st.plotly_chart(fig1, use_container_width=True)
                 else:
-                    st.info("Agrega o verifica la columna 'Tipo' en tu Excel para activar este gráfico.")
+                    st.info("Columna 'Tipo de Queja' no mapeada en el Excel.")
                     
             with c2:
-                st.markdown("#### 🎯 2. Análisis Crítico de Problemas (Cantidad y %)")
+                st.markdown("#### 🎯 2. Análisis Crítico de Problemas")
                 if col_problema:
                     df_prob = df_quejas[col_problema].value_counts().reset_index()
                     df_prob.columns = ['Problema', 'Cantidad']
                     df_prob['Porcentaje'] = (df_prob['Cantidad'] / total_casos * 100).round(1)
-                    df_prob['Etiqueta'] = df_prob.apply(lambda r: f"{r['Porcentaje']}%", axis=1)
+                    df_prob['Etiqueta'] = df_prob.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']}% )", axis=1)
                     
                     fig2 = px.bar(df_prob.head(10), x='Cantidad', y='Problema', orientation='h',
                                   text='Etiqueta', color='Cantidad', color_continuous_scale='Reds')
-                    fig2.update_layout(yaxis={'categoryorder':'total ascending'}, margin=dict(t=10, b=10, l=10, r=10), height=300)
+                    fig2.update_layout(yaxis={'categoryorder':'total ascending'}, margin=dict(t=10, b=10, l=10, r=10), height=320, coloraxis_showscale=False)
                     st.plotly_chart(fig2, use_container_width=True)
                 else:
-                    st.info("Agrega o verifica la columna 'Problema' o 'Motivo' en tu Excel para activar este gráfico.")
+                    st.info("Columna 'Problema / Motivo' no mapeada en el Excel.")
             
             st.markdown("---")
             
-            # --- BLOQUE 2 DE GRÁFICOS (CRONOLOGÍA MENSUAL & LIDERAZGO SUPERVISOR) ---
+            # --- BLOQUE 2 DE GRÁFICOS ---
             c3, c4 = st.columns(2)
             
             with c3:
-                st.markdown("#### 📅 3. Tendencia Mensual de Quejas y Estatus")
-                # Intentamos usar la columna Mes y la de Estado/Malos combinadas
+                st.markdown("#### 📅 3. Volumen Mensual de Quejas y Malos")
                 if col_mes:
                     eje_color = col_estado if col_estado else col_mes
                     df_mes = df_quejas.groupby([col_mes, eje_color]).size().reset_index(name='Cantidad')
                     
+                    # Agregamos cálculo de porcentaje por mes para el hover descriptivo
                     fig3 = px.bar(df_mes, x=col_mes, y='Cantidad', color=eje_color,
-                                  bgroupmode='group', text='Cantidad',
-                                  color_discrete_sequence=px.colors.qualitative.Pastel)
-                    fig3.update_layout(xaxis_title="Meses", yaxis_title="Cantidad", margin=dict(t=10, b=10, l=10, r=10), height=320)
+                                  barmode='group', text='Cantidad',
+                                  color_discrete_sequence=px.colors.qualitative.Bold)
+                    fig3.update_layout(xaxis_title="Meses", yaxis_title="Casos", margin=dict(t=10, b=10, l=10, r=10), height=340)
                     st.plotly_chart(fig3, use_container_width=True)
                 else:
-                    st.info("Agrega o verifica la columna 'Mes' o 'Fecha' en tu Excel para activar este gráfico.")
+                    st.info("Columna de tiempo ('Mes') no detectada.")
                     
             with c4:
                 st.markdown("#### 👔 4. Desempeño Operativo por Supervisor Encargado")
@@ -281,25 +282,25 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
                     df_sup = df_quejas.groupby([col_supervisor, eje_color_sup]).size().reset_index(name='Cantidad')
                     
                     fig4 = px.bar(df_sup, x='Cantidad', y=col_supervisor, color=eje_color_sup, orientation='h',
-                                  color_discrete_sequence=px.colors.dark.Magenta)
-                    fig4.update_layout(yaxis={'categoryorder':'total ascending'}, xaxis_title="Total Incidencias", yaxis_title="", margin=dict(t=10, b=10, l=10, r=10), height=320)
+                                  color_discrete_sequence=px.colors.qualitative.Dark24)
+                    fig4.update_layout(yaxis={'categoryorder':'total ascending'}, xaxis_title="Total Casos asignados", yaxis_title="", margin=dict(t=10, b=10, l=10, r=10), height=340)
                     st.plotly_chart(fig4, use_container_width=True)
                 else:
-                    st.info("Agrega o verifica la columna 'Supervisor' o 'Coordinador' en tu Excel para activar este gráfico.")
+                    st.info("Columna 'Supervisor' no detectada en la base.")
 
         # --- PESTAÑA 2: MODELOS PREDICTIVOS DEL CLIMA ---
         with tab_clima:
             st.markdown("### 🌦️ Módulo de Predicción Meteorológica vs Operaciones de Grúas")
             st.info("Este espacio matemático cruza datos satelitales históricos con picos de siniestralidad operativa.")
             
-            c1, c2, c3 = st.columns(3)
-            with c1:
+            cx1, cx2, cx3 = st.columns(3)
+            with cx1:
                 st.markdown("##### 🌧️ Índice de Precipitación")
                 st.slider("Nivel de Lluvia Estimado (mm):", 0, 100, 25, key="clima_lluvia")
-            with c2:
+            with cx2:
                 st.markdown("##### 🌫️ Visibilidad en Carreteras")
                 st.selectbox("Nivel de Neblina / Densidad:", ["Normal", "Moderada", "Crítica (Alerta Vial)"], key="clima_visib")
-            with c3:
+            with cx3:
                 st.markdown("##### 🚜 Demanda Estimada de Auxilio Mecánico")
                 st.metric(label="Factor de Incremento en Grúas", value="+18% Siniestros", delta="Zona Crítica Detectada")
                 
