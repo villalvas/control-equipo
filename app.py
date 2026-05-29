@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# Configuración estética del Dashboard estilo Ejecutivo
+# Configuración estética del Dashboard estilo Ejecutivo Premium
 st.set_page_config(page_title="Centro de Mando - Serviasistencia", layout="wide", initial_sidebar_state="expanded")
 
 # =========================================================================
@@ -17,13 +17,12 @@ if st.session_state.modulo_activo != "🏠 Inicio":
         st.rerun()
 
 # =========================================================================
-# 📂 ENLACES VERIFICADOS DE GOOGLE DRIVE (CORREGIDOS)
+# 📂 ENLACES VERIFICADOS DE GOOGLE DRIVE (SINCRONIZADOS)
 # =========================================================================
-# Enlace corregido con la 'W' mayúscula exacta que me proporcionaste
 URL_BOLETINES = "https://docs.google.com/spreadsheets/d/1aGFtjIeJQ0ZyNCoTvJzfHtM3gQ6JdWKgiVHP5i-Pjj8/edit?usp=sharing"
 URL_QUEJAS = "https://docs.google.com/spreadsheets/d/1goYcBbknAXGLN50b4lx8TEVxaZJeAOJrPj3qTr02gFE/edit?usp=sharing"
 
-# FUNCIÓN DE EXTRACCIÓN: Descarga el libro completo usando formato XLSX e identifica la pestaña en memoria
+# FUNCIÓN DE EXTRACCIÓN: Lee XLSX nativo usando openpyxl con tolerancia a espacios en pestañas
 def cargar_datos_pestana(url, nombre_pestana):
     try:
         if "/d/" in url:
@@ -31,13 +30,9 @@ def cargar_datos_pestana(url, nombre_pestana):
         else:
             return "URL de Google Sheets inválida."
             
-        # Generamos el enlace de exportación directa en formato Excel estructurado
         export_url = f"https://docs.google.com/spreadsheets/d/{doc_id}/export?format=xlsx"
-        
-        # Forzamos la lectura usando el motor de Excel openpyxl, idóneo para Streamlit Cloud
         excel_file = pd.ExcelFile(export_url, engine='openpyxl')
         
-        # Buscamos coincidencias flexibles para evitar fallos por espacios accidentales
         pestanas_disponibles = excel_file.sheet_names
         pestana_real = None
         
@@ -46,18 +41,22 @@ def cargar_datos_pestana(url, nombre_pestana):
                 pestana_real = p
                 break
                 
-        # Si por alguna razón la pestaña del mes no coincide, toma la primera disponible para evitar romper la app
         if not pestana_real:
-            st.sidebar.warning(f"⚠️ Pestaña '{nombre_pestana}' no hallada. Intentando cargar: {pestanas_disponibles[0]}")
+            # Búsqueda flexible por si la pestaña tiene prefijos como "BBDD "
+            for p in pestanas_disponibles:
+                if nombre_pestana.strip().lower() in p.strip().lower():
+                    pestana_real = p
+                    break
+            
+        if not pestana_real:
             pestana_real = pestanas_disponibles[0]
             
-        # Extraemos los datos de la pestaña procesada
         df = excel_file.parse(sheet_name=pestana_real)
         
         if df.empty:
             return "El archivo conectó correctamente pero la pestaña seleccionada no tiene datos."
             
-        # Limpieza estética de cabeceras de columnas
+        # Limpieza estricta de nombres de columnas
         df.columns = [str(c).strip() for c in df.columns]
         df = df.loc[:, ~df.columns.str.contains('^Unnamed:')]
         df = df.dropna(how='all')
@@ -90,21 +89,22 @@ if st.session_state.modulo_activo == "🏠 Inicio":
             st.rerun()
 
     with col3:
-        st.markdown("### 🔮 Proyección Climatica")
+        st.markdown("### 🔮 Proyección Climática")
         st.error("Modelo analítico predictivo que cruza alertas de satélites meteorológicos con demanda de grúas.")
         if st.button("Ingresar a Predicciones", key="btn_predicciones", use_container_width=True):
             st.success("Módulo predictivo en fase de inicialización de datos de satélite.")
 
 # =========================================================================
-# 📊 MÓDULO 1: CONTROL DE BOLETINES
+# 📊 MÓDULO 1: CONTROL DE BOLETINES (DISEÑO REESTABLECIDO)
 # =========================================================================
 elif st.session_state.modulo_activo == "📊 Control de Boletines":
     st.title("📊 Control de Boletines")
     st.markdown("---")
     
-    st.sidebar.header("📅 Calendario Operativo")
+    # Restablecemos los selectores limpios en la barra lateral
+    st.sidebar.markdown("### 📅 Calendario Operativo")
     meses_anuales = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"] 
-    mes_seleccionado = st.sidebar.selectbox("Selecciona el Mes a consultar:", meses_anuales, index=4) # Por defecto Mayo
+    mes_seleccionado = st.sidebar.selectbox("Selecciona el Mes a consultar:", meses_anuales, index=4) # Mayo por defecto
     
     with st.spinner("Descargando matriz y sincronizando datos desde Google Drive..."):
         resultado = cargar_datos_pestana(URL_BOLETINES, mes_seleccionado)
@@ -112,7 +112,7 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
     if isinstance(resultado, pd.DataFrame):
         df_raw = resultado
         
-        # Mapeo flexible e inteligente de nombres de columnas de tu Excel
+        # Mapeo inteligente y flexible de columnas
         def detectar_columna(keys, columnas_disponibles):
             for k in keys:
                 for col in columnas_disponibles:
@@ -126,7 +126,7 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
         col_entrega = detectar_columna(['fecha de entrega', 'entrega', 'liberacion'], df_raw.columns)
         col_odoo = detectar_columna(['odoo', 'carga', 'fecha'], df_raw.columns)
 
-        # Lógica Automatizada de Semáforo / Estatus SLA
+        # Lógica de cálculo automatizado de Semáforos / SLAs
         if col_entrega in df_raw.columns and col_odoo in df_raw.columns:
             f_entrega_parsed = pd.to_datetime(df_raw[col_entrega], errors='coerce', dayfirst=True)
             f_odoo_parsed = pd.to_datetime(df_raw[col_odoo], errors='coerce', dayfirst=True)
@@ -138,65 +138,108 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
                 d_entrega = f_entrega_parsed.loc[idx]
                 d_odoo = f_odoo_parsed.loc[idx]
                 if pd.isna(d_entrega) or pd.isna(d_odoo):
-                    return "✅ Entregado"
+                    return "🚀 Entregado a Tiempo"
                 return "⚠️ Entregado Atrasado" if d_odoo > d_entrega else "🚀 Entregado a Tiempo"
                 
             df_raw['Estatus de Entrega'] = [calcular_sla(row, idx) for idx, row in df_raw.iterrows()]
         else:
-            df_raw['Estatus de Entrega'] = "⏳ Datos en Proceso"
+            df_raw['Estatus de Entrega'] = "⏳ Pendiente de Carga"
 
-        # Filtros interactivos en la barra lateral
+        # --- SECCIONES DE FILTROS ESTILIZADOS EN SIDEBAR ---
         st.sidebar.markdown("---")
-        filtro_estatus = st.sidebar.selectbox("Filtrar por Estatus SLA:", ["TODOS"] + list(df_raw['Estatus de Entrega'].unique()))
+        st.sidebar.markdown("### 🔍 Filtrar Clientes por Estado")
+        filtro_estatus = st.sidebar.selectbox("Selecciona un Estatus:", ["TODOS"] + list(df_raw['Estatus de Entrega'].unique()))
         
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("### 🎯 Filtros de Equipo")
         filtro_comercial = "TODOS"
         if col_comercial and col_comercial in df_raw.columns:
             valores_comercial = ["TODOS"] + list(df_raw[col_comercial].dropna().unique())
-            filtro_comercial = st.sidebar.selectbox("Filtrar por Área Comercial:", valores_comercial)
+            filtro_comercial = st.sidebar.selectbox("Filtrar por Comercial:", valores_comercial)
 
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("### 🔄 Frecuencia de Entrega")
+        filtro_recurrencia = st.sidebar.selectbox("Selecciona Recurrencia:", ["TODOS", "Mensual", "Semanal", "Inmediata"])
+
+        # Aplicación de filtros al dataframe activo
         df_filtrado = df_raw.copy()
         if filtro_estatus != "TODOS":
             df_filtrado = df_filtrado[df_filtrado['Estatus de Entrega'] == filtro_estatus]
         if col_comercial and filtro_comercial != "TODOS":
             df_filtrado = df_filtrado[df_filtrado[col_comercial] == filtro_comercial]
+        if filtro_recurrencia != "TODOS" and 'RECURRENCIA DE BOLETIN' in df_filtrado.columns:
+            df_filtrado = df_filtrado[df_filtrado['RECURRENCIA DE BOLETIN'].str.contains(filtro_recurrencia, case=False, na=False)]
 
-        # KPIs Ejecutivos
-        total_casos = len(df_raw)
-        casos_filtrados = len(df_filtrado)
+        # --- TARJETAS KPI DE DISEÑO EJECUTIVO ---
+        total_casos_mes = len(df_filtrado)
+        a_tiempo = len(df_filtrado[df_filtrado['Estatus de Entrega'] == "🚀 Entregado a Tiempo"])
+        pendientes = len(df_filtrado[df_filtrado['Estatus de Entrega'] == "⏳ Pendiente de Carga"])
+        atrasados = len(df_filtrado[df_filtrado['Estatus de Entrega'] == "⚠️ Entregado Atrasado"])
         
-        c1, c2, c3 = st.columns(3)
-        with c1: st.metric(label="Total Casos Registrados", value=f"{total_casos} Filas")
-        with c2: st.metric(label="Casos Filtrados", value=f"{casos_filtrados} Filas")
-        with c3: st.metric(label="Estado de Conexión", value="🟢 Sincronizado")
+        porcentaje_efectividad = int((a_tiempo / total_casos_mes) * 100) if total_casos_mes > 0 else 0
+
+        kpi1, kpi2, kpi3 = st.columns(3)
+        with kpi1:
+            st.metric(label="Total Casos del Mes", value=f"{total_casos_mes} Cuentas")
+        with kpi2:
+            st.metric(label="Efectividad de Gestión", value=f"{porcentaje_efectividad}% A Tiempo", delta=f"{a_tiempo} de {total_casos_mes} Boletines")
+        with kpi3:
+            st.metric(label="Pendientes de Carga", value=f"{pendientes} Pendientes", delta=f"{atrasados} con Retraso", delta_color="inverse")
 
         st.markdown("---")
         
-        # Gráficas y Tablas Dinámicas
-        col_graf, col_tab = st.columns([4, 6])
+        # --- DISTRIBUCIÓN EN DOS COLUMNAS (GRÁFICO + TABLA RESUMEN) ---
+        col_grafica, col_tabla = st.columns([4, 6])
         
-        with col_graf:
-            st.write("### 📊 Cumplimiento de SLAs")
+        with col_grafica:
+            st.markdown("### 📊 Auditoría de SLA")
             conteo = df_filtrado['Estatus de Entrega'].value_counts().reset_index()
             conteo.columns = ['Estatus', 'Cantidad']
-            fig = px.pie(conteo, values='Cantidad', names='Estatus', hole=0.4,
-                         color_discrete_sequence=px.colors.qualitative.Safe)
-            fig.update_layout(margin=dict(t=20, b=20, l=10, r=10), height=300)
+            
+            # Mapeo estricto de colores institucionales (Naranja, Rojo, Verde) para coincidir con el diseño original
+            color_map = {
+                "⏳ Pendiente de Carga": "#FF8C00",   # Naranja
+                "⚠️ Entregado Atrasado": "#DC143C",  # Rojo/Carmesí
+                "🚀 Entregado a Tiempo": "#228B22"   # Verde Bosque
+            }
+            
+            fig = px.bar(
+                conteo, 
+                x='Cantidad', 
+                y='Estatus', 
+                orientation='h',
+                color='Estatus',
+                color_discrete_map=color_map,
+                text='Cantidad'
+            )
+            fig.update_layout(
+                showlegend=False, 
+                xaxis_title="Boletines", 
+                yaxis_title="", 
+                margin=dict(t=10, b=10, l=10, r=10),
+                height=320
+            )
             st.plotly_chart(fig, use_container_width=True)
 
-        with col_tab:
-            st.write("### 🗂️ Vista General de Datos")
-            cols_mostrar = {}
-            if col_grupo: cols_mostrar['Grupo'] = df_filtrado[col_grupo]
-            if col_comercial: cols_mostrar['Área Comercial'] = df_filtrado[col_comercial]
-            if col_cliente: cols_mostrar['Cliente'] = df_filtrado[col_cliente]
-            if col_entrega in df_filtrado.columns: cols_mostrar['F. Entrega'] = df_filtrado[col_entrega]
-            if col_odoo in df_filtrado.columns: cols_mostrar['F. Carga Odoo'] = df_filtrado[col_odoo]
-            cols_mostrar['Resultado SLA'] = df_filtrado['Estatus de Entrega']
+        with col_tabla:
+            st.markdown("### 📁 Resumen Ejecutivo de Cumplimiento")
             
-            st.dataframe(pd.DataFrame(cols_mostrar).fillna("---"), use_container_width=True, hide_index=True)
+            cols_mostrar = {}
+            if col_cliente: cols_mostrar['CLIENTE / INSTITUCIÓN'] = df_filtrado[col_cliente]
+            if col_entrega in df_filtrado.columns: cols_mostrar['F. ENTREGA'] = df_filtrado[col_entrega]
+            if col_odoo in df_filtrado.columns: cols_mostrar['F. ODOO'] = df_filtrado[col_odoo]
+            
+            # Columna de días máximos calculada u obtenida de forma segura
+            if 'DIAS MAXIMAS DEL MES PARA ENTREGA DE BOLETIN' in df_filtrado.columns:
+                cols_mostrar['MÁX. DÍAS'] = df_filtrado['DIAS MAXIMAS DEL MES PARA ENTREGA DE BOLETIN']
+            
+            cols_mostrar['ESTATUS'] = df_filtrado['Estatus de Entrega']
+            
+            df_tabla_final = pd.DataFrame(cols_mostrar).fillna("---")
+            st.dataframe(df_tabla_final, use_container_width=True, hide_index=True, height=320)
 
     else:
-        st.error("🚨 **Error Crítico de Interconexión**")
+        st.error("🚨 **Error de Interconexión con Google Sheets**")
         st.info(f"**Detalle enviado por el sistema:** {resultado}")
 
 # =========================================================================
@@ -215,7 +258,7 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
         
     if isinstance(df_quejas, pd.DataFrame):
         st.success(f"🟢 Conexión exitosa al repositorio de Quejas ({anio_seleccionado}).")
-        st.write("### Muestra de la base operativa de reclamos:")
-        st.dataframe(df_quejas.head(20), use_container_width=True)
+        st.write("### Base operativa de reclamos actualizada en tiempo real:")
+        st.dataframe(df_quejas, use_container_width=True)
     else:
         st.error(f"No se pudo sincronizar la pestaña de quejas: {df_quejas}")
