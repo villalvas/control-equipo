@@ -216,7 +216,7 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
         st.error("🚨 **Error de Interconexión con Google Sheets**")
 
 # =========================================================================
-# ⚠️ MÓDULO 2: GESTIÓN DE QUEJAS OPERATIVAS (FILTRO DE MES Y TÍTULOS LIMPIOS)
+# ⚠️ MÓDULO 2: GESTIÓN DE QUEJAS OPERATIVAS (TOP 10 IMPLEMENTADO)
 # =========================================================================
 elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
     st.title("⚠️ Panel Inteligente de Control de Quejas Operativas")
@@ -225,7 +225,6 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
     st.sidebar.header("📅 Historial Operativo")
     anio_seleccionado = st.sidebar.selectbox("Selecciona el Año de Análisis:", ["2025", "2026"], index=0)
     
-    # NUEVO: Filtro por Mes en el lado izquierdo para el módulo de Quejas
     meses_lista = ["TODOS", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     filtro_q_mes = st.sidebar.selectbox("Filtrar Quejas por Mes:", meses_lista, index=0)
     
@@ -235,14 +234,12 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
             df_quejas = cargar_datos_pestana(URL_QUEJAS, f"BBDD {anio_seleccionado}")
         
     if isinstance(df_quejas, pd.DataFrame):
-        # Mapeo y detección flexible de tus columnas reales solicitadas
         col_tipo_queja = detectar_columna(['tipo de queja', 'tipo_queja', 'queja'], df_quejas.columns)
         col_problema = detectar_columna(['problema', 'motivo', 'causa', 'novedad'], df_quejas.columns)
         col_cuenta = detectar_columna(['cuenta', 'cliente', 'institucion', 'empresa'], df_quejas.columns)
         col_servicio = detectar_columna(['servicio', 'producto', 'asistencia', 'cobertura'], df_quejas.columns)
         col_mes_quejas = detectar_columna(['mes', 'fecha', 'período', 'periodo'], df_quejas.columns)
 
-        # Barra lateral con filtros adicionales cruzados en vivo
         st.sidebar.markdown("---")
         st.sidebar.markdown("### 🎛️ Filtros Avanzados")
         
@@ -256,7 +253,6 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
             valores_c = ["TODOS"] + list(df_quejas[col_cuenta].dropna().unique())
             filtro_q_cuenta = st.sidebar.selectbox("Filtrar por Cuenta Corporativa:", valores_c)
 
-        # Aplicación estricta de filtros sobre la data real (Mes + Tipo + Cuenta)
         df_q_filtrado = df_quejas.copy()
         
         if col_mes_quejas and filtro_q_mes != "TODOS":
@@ -266,7 +262,6 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
         if filtro_q_cuenta != "TODOS":
             df_q_filtrado = df_q_filtrado[df_q_filtrado[col_cuenta] == filtro_q_cuenta]
 
-        # Indicadores macro del estado actual de quejas
         total_quejas_reg = len(df_q_filtrado)
         tipos_unicos = df_q_filtrado[col_tipo_queja].nunique() if col_tipo_queja else 0
         problemas_unicos = df_q_filtrado[col_problema].nunique() if col_problema else 0
@@ -280,7 +275,6 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
 
         st.markdown("---")
         
-        # 📊 FILA 1 DE GRÁFICAS: TIPO DE QUEJA Y PROBLEMAS CRÍTICOS (TÍTULOS LIMPIOS)
         g_col1, g_col2 = st.columns(2)
         
         with g_col1:
@@ -316,7 +310,6 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
 
         st.markdown("---")
         
-        # 📊 FILA 2 DE GRÁFICAS: CUENTAS Y SERVICIOS AFECTADOS (TÍTULOS LIMPIOS)
         g_col3, g_col4 = st.columns(2)
         
         with g_col3:
@@ -335,9 +328,10 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
                 st.info("La columna de Cuenta no está mapeada en esta pestaña.")
 
         with g_col4:
-            st.markdown("#### 🛠️ 4. Análisis de Quejas por Tipo de Servicio")
+            # CORREGIDO: Ahora muestra estrictamente el Top 10 de tipos de servicios
+            st.markdown("#### 🛠️ 4. Top 10 Servicios con Mayor Nivel de Quejas")
             if col_servicio and col_servicio in df_q_filtrado.columns:
-                df_g4 = df_q_filtrado[col_servicio].value_counts().reset_index()
+                df_g4 = df_q_filtrado[col_servicio].value_counts().reset_index().head(10)
                 df_g4.columns = ['Servicio', 'Cantidad']
                 df_g4['Porcentaje'] = ((df_g4['Cantidad'] / total_quejas_reg) * 100).round(1) if total_quejas_reg > 0 else 0
                 df_g4['Etiqueta'] = df_g4.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']}%)", axis=1)
@@ -350,7 +344,6 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
             else:
                 st.info("La columna de Servicio no está mapeada en esta pestaña.")
                 
-        # Tabla detallada en la sección inferior de la auditoría para verificar filas reales
         st.markdown("---")
         st.markdown("### 📋 Bitácora General de Control de Incidencias Filtradas")
         cols_quejas_mostrar = {}
