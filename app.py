@@ -24,7 +24,7 @@ if st.session_state.modulo_activo != "🏠 Inicio":
 URL_BOLETINES = "https://docs.google.com/spreadsheets/d/1aGFtjIeJQ0ZyNCoTvJzfHtM3gQ6JdwKgiVHP5i-Pjj8/edit?usp=sharing"
 URL_QUEJAS = "https://docs.google.com/spreadsheets/d/1goYcBbknAXGLN50b4lx8TEVxaZJeAOJrPj3qTr02gFE/edit?usp=sharing"
 
-# Función blindada de extracción y conexión a Google Drive
+# Función corregida y blindada para soportar múltiples estructuras de pestañas
 def cargar_datos_pestana(url, nombre_pestana):
     try:
         match = re.search(r"/d/([a-zA-Z0-9-_]+)", url)
@@ -62,7 +62,7 @@ if st.session_state.modulo_activo == "🏠 Inicio":
             st.rerun()
 
 # =========================================================================
-# 📊 MÓDULO 1: CONTROL DE BOLETINES (OPERANDO CORRECTAMENTE)
+# 📊 MÓDULO 1: CONTROL DE BOLETINES (REESTRUCTURADO Y SEGURO)
 # =========================================================================
 elif st.session_state.modulo_activo == "📊 Control de Boletines":
     st.title("📊 Control de Boletines")
@@ -111,19 +111,26 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
 
         st.sidebar.markdown("---")
         filtro_estatus = st.sidebar.selectbox("Selecciona un Estatus:", ["TODOS", "🚀 Entregado a Tiempo", "⚠️ Entregado Atrasado", "⏳ Pendiente de Carga"])
-        filtro_comercial = st.sidebar.selectbox("Filtrar por Comercial:", ["TODOS"] + list(df_raw[col_comercial].dropna().unique()))
+        
+        filtro_comercial = "TODOS"
+        if col_comercial in df_raw.columns:
+            filtro_comercial = st.sidebar.selectbox("Filtrar por Comercial:", ["TODOS"] + list(df_raw[col_comercial].dropna().unique()))
         
         recurrencias_disponibles = ["TODOS"]
-        if col_recurrencia in df_raw.columns: recurrencias_disponibles += list(df_raw[col_recurrencia].dropna().unique())
+        if col_recurrencia in df_raw.columns: 
+            recurrencias_disponibles += list(df_raw[col_recurrencia].dropna().unique())
         filtro_recurrencia = st.sidebar.selectbox("Selecciona Recurrencia:", recurrencias_disponibles)
 
         df_base_universo = df_raw.copy()
-        if filtro_recurrencia != "TODOS": df_base_universo = df_base_universo[df_base_universo[col_recurrencia] == filtro_recurrencia]
+        if col_recurrencia in df_base_universo.columns and filtro_recurrencia != "TODOS": 
+            df_base_universo = df_base_universo[df_base_universo[col_recurrencia] == filtro_recurrencia]
         total_boletines_vivos = len(df_base_universo)
 
         df_filtrado = df_base_universo.copy()
-        if filtro_estatus != "TODOS": df_filtrado = df_filtrado[df_filtrado['Estatus de Entrega'] == filtro_estatus]
-        if filtro_comercial != "TODOS": df_filtrado = df_filtrado[df_filtrado[col_comercial] == filtro_comercial]
+        if filtro_estatus != "TODOS": 
+            df_filtrado = df_filtrado[df_filtrado['Estatus de Entrega'] == filtro_estatus]
+        if col_comercial in df_filtrado.columns and filtro_comercial != "TODOS": 
+            df_filtrado = df_filtrado[df_filtrado[col_comercial] == filtro_comercial]
 
         a_tiempo = len(df_base_universo[df_base_universo['Evaluación de Entrega Raw'] == "Entregado a Tiempo"])
         atrasados = len(df_base_universo[df_base_universo['Evaluación de Entrega Raw'] == "Entregado Atrasado"])
@@ -140,15 +147,16 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
 
         with col_grafico:
             st.write("### 📊 Auditoría de SLA")
-            conteo_tiempos = df_filtrado['Estatus de Entrega'].value_counts().reset_index()
-            conteo_tiempos.columns = ['Estatus de Entrega', 'Cantidad']
-            if not conteo_tiempos.empty:
-                conteo_tiempos['Porcentaje'] = ((conteo_tiempos['Cantidad'] / total_boletines_vivos) * 100).round(1)
-                conteo_tiempos['Etiqueta'] = conteo_tiempos.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']}%)", axis=1)
-                fig_sla = px.bar(conteo_tiempos, x='Cantidad', y='Estatus de Entrega', text='Etiqueta', orientation='h', color='Estatus de Entrega', color_discrete_map={"🚀 Entregado a Tiempo": "#2ca02c", "⚠️ Entregado Atrasado": "#d62728", "⏳ Pendiente de Carga": "#ff7f0e", "✅ Entregado (Formato Variable)": "#1f77b4"})
-                fig_sla.update_traces(textposition='outside')
-                fig_sla.update_layout(xaxis_title="Boletines", yaxis_title=None, showlegend=False, height=310, margin=dict(t=10, b=10, l=10, r=10))
-                st.plotly_chart(fig_sla, use_container_width=True)
+            if 'Estatus de Entrega' in df_filtrado.columns:
+                conteo_tiempos = df_filtrado['Estatus de Entrega'].value_counts().reset_index()
+                conteo_tiempos.columns = ['Estatus de Entrega', 'Cantidad']
+                if not conteo_tiempos.empty:
+                    conteo_tiempos['Porcentaje'] = ((conteo_tiempos['Cantidad'] / total_boletines_vivos) * 100).round(1)
+                    conteo_tiempos['Etiqueta'] = conteo_tiempos.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']}%)", axis=1)
+                    fig_sla = px.bar(conteo_tiempos, x='Cantidad', y='Estatus de Entrega', text='Etiqueta', orientation='h', color='Estatus de Entrega', color_discrete_map={"🚀 Entregado a Tiempo": "#2ca02c", "⚠️ Entregado Atrasado": "#d62728", "⏳ Pendiente de Carga": "#ff7f0e", "✅ Entregado (Formato Variable)": "#1f77b4"})
+                    fig_sla.update_traces(textposition='outside')
+                    fig_sla.update_layout(xaxis_title="Boletines", yaxis_title=None, showlegend=False, height=310, margin=dict(t=10, b=10, l=10, r=10))
+                    st.plotly_chart(fig_sla, use_container_width=True)
 
         with col_tabla:
             st.write("### 🗂️ Resumen Ejecutivo de Cumplimiento")
@@ -162,26 +170,25 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
                 estructura_columnas['ESTATUS'] = df_filtrado['Estatus de Entrega']
                 
                 df_tabla_final = pd.DataFrame(estructura_columnas)
-                df_tabla_final['_orden_fecha'] = pd.to_datetime(df_tabla_final['F. ENTREGA'], errors='coerce', dayfirst=True)
-                df_tabla_final = df_tabla_final.sort_values(by='_orden_fecha', na_position='last').reset_index(drop=True).drop(columns=['_orden_fecha'])
+                if 'F. ENTREGA' in df_tabla_final.columns:
+                    df_tabla_final['_orden_fecha'] = pd.to_datetime(df_tabla_final['F. ENTREGA'], errors='coerce', dayfirst=True)
+                    df_tabla_final = df_tabla_final.sort_values(by='_orden_fecha', na_position='last').reset_index(drop=True).drop(columns=['_orden_fecha'])
                 
                 fila_acumulada = pd.DataFrame([{'GRUPO': "🟦 TOTAL GENERAL 🟦", 'CLIENTE / INSTITUCIÓN': f"📊 {len(df_tabla_final)} Casos Filtrados", 'F. ENTREGA': "═══════════", 'F. ODOO': "═══════════", 'ESTATUS': "📈 Resumen"}])
                 st.dataframe(pd.concat([df_tabla_final, fila_acumulada], ignore_index=True), use_container_width=True, hide_index=True)
     else:
-        st.error("Error de sincronización en Boletines.")
+        st.error("Error al cargar la pestaña seleccionada. Verifica accesos y nombres en Drive.")
 
 # =========================================================================
-# ⚠️ MÓDULO 2: GESTIÓN INTEGRAL DE QUEJAS (CON NUEVOS NOMBRES DE PESTAÑA)
+# ⚠️ MÓDULO 2: GESTIÓN INTEGRAL DE QUEJAS (SEGURO Y SIN INTERFERENCIAS)
 # =========================================================================
 elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
     st.title("⚠️ Gestión Integral de Quejas Nacionales")
     st.markdown("---")
     
-    # Selector de Año en la Barra Lateral basado en la simplificación
     st.sidebar.header("📅 Historial Operativo")
     anio_seleccionado = st.sidebar.selectbox("Selecciona el Año de Auditoría:", ["2025", "2026"], index=0)
     
-    # Descarga la pestaña del año seleccionado
     df_quejas = cargar_datos_pestana(URL_QUEJAS, anio_seleccionado)
     
     if df_quejas is not None and not df_quejas.empty:
@@ -210,4 +217,4 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
             st.sidebar.header("🌦️ Variables Meteorológicas")
             st.info("Este submódulo procesará las variables climáticas satelitales en vivo para anticipar picos operativos en grúas.")
     else:
-        st.error(f"No se pudo encontrar la pestaña '{anio_seleccionado}' en el archivo de Quejas. Verifica que esté escrita exactamente con ese número en tu archivo de Google Drive.")
+        st.error(f"No se pudo encontrar la pestaña '{anio_seleccionado}' en el archivo de Quejas. Verifica que esté guardada con ese nombre exacto.")
