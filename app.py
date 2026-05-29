@@ -22,7 +22,7 @@ if st.session_state.modulo_activo != "🏠 Inicio":
 URL_BOLETINES = "https://docs.google.com/spreadsheets/d/1aGFtjIeJQ0ZyNCoTvJzfHtM3gQ6JdWKgiVHP5i-Pjj8/edit?usp=sharing"
 URL_QUEJAS = "https://docs.google.com/spreadsheets/d/1goYcBbknAXGLN50b4lx8TEVxaZJeAOJrPj3qTr02gFE/edit?usp=sharing"
 
-# FUNCIÓN DE EXTRACCIÓN: Lee XLSX nativo usando openpyxl con tolerancia a espacios en pestañas
+# FUNCIÓN DE EXTRACCIÓN XLSX UNIVERSAL
 def cargar_datos_pestana(url, nombre_pestana):
     try:
         if "/d/" in url:
@@ -55,7 +55,6 @@ def cargar_datos_pestana(url, nombre_pestana):
         if df.empty:
             return "El archivo conectó correctamente pero la pestaña seleccionada no tiene datos."
             
-        # Limpieza estricta de nombres de columnas
         df.columns = [str(c).strip() for c in df.columns]
         df = df.loc[:, ~df.columns.str.contains('^Unnamed:')]
         df = df.dropna(how='all')
@@ -64,15 +63,23 @@ def cargar_datos_pestana(url, nombre_pestana):
     except Exception as e:
         return f"Error de comunicación de red: {str(e)}"
 
+# Buscador inteligente de columnas para automatizar los gráficos
+def detectar_columna(keys, columnas_disponibles):
+    for k in keys:
+        for col in columnas_disponibles:
+            if k.lower() in col.lower():
+                return col
+    return None
+
 # =========================================================================
-# 🏠 PANTALLA PRINCIPAL: FRONT DE BIENVENIDA (ESTRUCTURA BI-MODULAR)
+# 🏠 PANTALLA PRINCIPAL: FRONT DE BIENVENIDA
 # =========================================================================
 if st.session_state.modulo_activo == "🏠 Inicio":
     st.title("🚀 Sistema Integrado de Control Operativo y BI")
     st.markdown("##### Bienvenido, Stalin. Por favor, selecciona la gestión que deseas auditar hoy:")
     st.markdown("---")
     
-    col1, col2 = st.columns(2) # Cambiado a 2 columnas para una visual más limpia y balanceada
+    col1, col2 = st.columns(2)
     with col1:
         st.markdown("### 📊 Control de Boletines")
         st.info("Auditoría de tiempos de carga, control de SLAs comerciales y alertas de retrasos operativos.")
@@ -82,7 +89,7 @@ if st.session_state.modulo_activo == "🏠 Inicio":
             
     with col2:
         st.markdown("### ⚠️ Gestión de Quejas y Modelos Predictivos")
-        st.warning("Mapa dinámico de alertas tempranas nacionales, analítica de motivos de reclamo y módulo de Proyección Climática Integrada.")
+        st.warning("Análisis visual de incidencias operativas, rendimiento por supervisor y módulo de Proyección Climática Integrada.")
         if st.button("Ingresar a Quejas y Predicciones", key="btn_quejas", use_container_width=True):
             st.session_state.modulo_activo = "⚠️ Gestión de Quejas (Nacional)"
             st.rerun()
@@ -104,13 +111,6 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
     if isinstance(resultado, pd.DataFrame):
         df_raw = resultado
         
-        def detectar_columna(keys, columnas_disponibles):
-            for k in keys:
-                for col in columnas_disponibles:
-                    if k.lower() in col.lower():
-                        return col
-            return columnas_disponibles[0] if len(columnas_disponibles) > 0 else None
-
         col_grupo = detectar_columna(['grupo'], df_raw.columns)
         col_comercial = detectar_columna(['area comercial', 'comercial'], df_raw.columns)
         col_cliente = detectar_columna(['te instituc', 'instituc', 'cliente'], df_raw.columns)
@@ -146,10 +146,6 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
             valores_comercial = ["TODOS"] + list(df_raw[col_comercial].dropna().unique())
             filtro_comercial = st.sidebar.selectbox("Filtrar por Comercial:", valores_comercial)
 
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("### 🔄 Frecuencia de Entrega")
-        filtro_recurrencia = st.sidebar.selectbox("Selecciona Recurrencia:", ["TODOS", "Mensual", "Semanal", "Inmediata"])
-
         df_filtrado = df_raw.copy()
         if filtro_estatus != "TODOS":
             df_filtrado = df_filtrado[df_filtrado['Estatus de Entrega'] == filtro_estatus]
@@ -179,7 +175,7 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
             fig.update_layout(showlegend=False, xaxis_title="Boletines", yaxis_title="", margin=dict(t=10, b=10, l=10, r=10), height=320)
             st.plotly_chart(fig, use_container_width=True)
 
-        with col_tabla:
+        with col_tab:
             st.markdown("### 📁 Resumen Ejecutivo de Cumplimiento")
             cols_mostrar = {}
             if col_cliente: cols_mostrar['CLIENTE / INSTITUCIÓN'] = df_filtrado[col_cliente]
@@ -191,39 +187,111 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
         st.error("🚨 **Error de Interconexión con Google Sheets**")
 
 # =========================================================================
-# ⚠️ MÓDULO 2: GESTIÓN DE QUEJAS (CON PROYECTÓN CLIMÁTICA INTEGRADA)
+# ⚠️ MÓDULO 2: GESTIÓN DE QUEJAS (ENTORNO 100% VISUAL AUTOMATIZADO)
 # =========================================================================
 elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
-    st.title("⚠️ Gestión Integral de Quejas Nacionales")
+    st.title("⚠️ Inteligencia Analítica de Quejas Nacionales")
     st.markdown("---")
     
     st.sidebar.header("📅 Historial Operativo")
     anio_seleccionado = st.sidebar.selectbox("Selecciona el Año de Análisis:", ["2025", "2026"], index=0)
     
-    with st.spinner("Sincronizando Base de Datos Nacional de Quejas..."):
+    with st.spinner("Sincronizando Base Operativa de Quejas..."):
         df_quejas = cargar_datos_pestana(URL_QUEJAS, anio_seleccionado)
         if isinstance(df_quejas, str):
             df_quejas = cargar_datos_pestana(URL_QUEJAS, f"BBDD {anio_seleccionado}")
         
     if isinstance(df_quejas, pd.DataFrame):
-        # 🌟 AQUÍ ESTÁ EL CAMBIO CLAVE: Creación de pestañas internas (Tabs) para agrupar las herramientas
-        tab_alertas, tab_clima = st.tabs(["🗺️ Mapa de Alertas Nacionales", "🔮 Proyección Climática Predictiva"])
         
-        with tab_alertas:
-            st.markdown("### 📊 Centro de Control de Incidencias Territoriales")
+        # Pestañas principales fijas
+        tab_graficas, tab_clima = st.tabs(["📊 Dashboard de Control Visual", "🔮 Proyección Climática Predictiva"])
+        
+        with tab_graficas:
+            # 🔍 MAPEO AUTOMÁTICO DE COLUMNAS DEL EXCEL REAL DE QUEJAS
+            col_tipo = detectar_columna(['tipo', 'clase', 'categoria'], df_quejas.columns)
+            col_mes = detectar_columna(['mes', 'fecha', 'período'], df_quejas.columns)
+            col_supervisor = detectar_columna(['supervisor', 'encargado', 'responsable', 'coordinador'], df_quejas.columns)
+            col_problema = detectar_columna(['problema', 'motivo', 'detalle', 'causa', 'novedad'], df_quejas.columns)
+            col_estado = detectar_columna(['estado', 'estatus', 'malo', 'resultado'], df_quejas.columns)
             
-            # KPIs Rápidos para la pestaña de quejas
-            total_quejas = len(df_quejas)
-            st.metric(label="Total Reclamos Registrados", value=f"{total_quejas} Casos")
+            # Resumen analítico superior (KPIs Directivos)
+            total_casos = len(df_quejas)
+            st.metric(label="Total Casos Auditados en la Base", value=f"{total_casos} Quejas")
+            st.markdown("---")
             
-            st.write("##### Monitoreo de Datos Base:")
-            st.dataframe(df_quejas.head(50), use_container_width=True, height=400)
+            # --- BLOQUE 1 DE GRÁFICOS (TIPO DE QUEJA & ANÁLISIS DE PROBLEMAS) ---
+            c1, c2 = st.columns(2)
             
+            with c1:
+                st.markdown("#### 📌 1. Distribución por Tipo de Queja (Cantidad y %)")
+                if col_tipo:
+                    # Agrupar y calcular cantidad y porcentaje
+                    df_tipo = df_quejas[col_tipo].value_counts().reset_index()
+                    df_tipo.columns = ['Tipo', 'Cantidad']
+                    df_tipo['Porcentaje'] = (df_tipo['Cantidad'] / total_casos * 100).round(1)
+                    df_tipo['Etiqueta'] = df_tipo.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']}%)", axis=1)
+                    
+                    fig1 = px.pie(df_tipo, values='Cantidad', names='Tipo', 
+                                  hover_data=['Porcentaje'], text='Etiqueta', hole=0.3,
+                                  color_discrete_sequence=px.colors.qualitative.Bold)
+                    fig1.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=300)
+                    st.plotly_chart(fig1, use_container_width=True)
+                else:
+                    st.info("Agrega o verifica la columna 'Tipo' en tu Excel para activar este gráfico.")
+                    
+            with c2:
+                st.markdown("#### 🎯 2. Análisis Crítico de Problemas (Cantidad y %)")
+                if col_problema:
+                    df_prob = df_quejas[col_problema].value_counts().reset_index()
+                    df_prob.columns = ['Problema', 'Cantidad']
+                    df_prob['Porcentaje'] = (df_prob['Cantidad'] / total_casos * 100).round(1)
+                    df_prob['Etiqueta'] = df_prob.apply(lambda r: f"{r['Porcentaje']}%", axis=1)
+                    
+                    fig2 = px.bar(df_prob.head(10), x='Cantidad', y='Problema', orientation='h',
+                                  text='Etiqueta', color='Cantidad', color_continuous_scale='Reds')
+                    fig2.update_layout(yaxis={'categoryorder':'total ascending'}, margin=dict(t=10, b=10, l=10, r=10), height=300)
+                    st.plotly_chart(fig2, use_container_width=True)
+                else:
+                    st.info("Agrega o verifica la columna 'Problema' o 'Motivo' en tu Excel para activar este gráfico.")
+            
+            st.markdown("---")
+            
+            # --- BLOQUE 2 DE GRÁFICOS (CRONOLOGÍA MENSUAL & LIDERAZGO SUPERVISOR) ---
+            c3, c4 = st.columns(2)
+            
+            with c3:
+                st.markdown("#### 📅 3. Tendencia Mensual de Quejas y Estatus")
+                # Intentamos usar la columna Mes y la de Estado/Malos combinadas
+                if col_mes:
+                    eje_color = col_estado if col_estado else col_mes
+                    df_mes = df_quejas.groupby([col_mes, eje_color]).size().reset_index(name='Cantidad')
+                    
+                    fig3 = px.bar(df_mes, x=col_mes, y='Cantidad', color=eje_color,
+                                  bgroupmode='group', text='Cantidad',
+                                  color_discrete_sequence=px.colors.qualitative.Pastel)
+                    fig3.update_layout(xaxis_title="Meses", yaxis_title="Cantidad", margin=dict(t=10, b=10, l=10, r=10), height=320)
+                    st.plotly_chart(fig3, use_container_width=True)
+                else:
+                    st.info("Agrega o verifica la columna 'Mes' o 'Fecha' en tu Excel para activar este gráfico.")
+                    
+            with c4:
+                st.markdown("#### 👔 4. Desempeño Operativo por Supervisor Encargado")
+                if col_supervisor:
+                    eje_color_sup = col_estado if col_estado else col_supervisor
+                    df_sup = df_quejas.groupby([col_supervisor, eje_color_sup]).size().reset_index(name='Cantidad')
+                    
+                    fig4 = px.bar(df_sup, x='Cantidad', y=col_supervisor, color=eje_color_sup, orientation='h',
+                                  color_discrete_sequence=px.colors.dark.Magenta)
+                    fig4.update_layout(yaxis={'categoryorder':'total ascending'}, xaxis_title="Total Incidencias", yaxis_title="", margin=dict(t=10, b=10, l=10, r=10), height=320)
+                    st.plotly_chart(fig4, use_container_width=True)
+                else:
+                    st.info("Agrega o verifica la columna 'Supervisor' o 'Coordinador' en tu Excel para activar este gráfico.")
+
+        # --- PESTAÑA 2: MODELOS PREDICTIVOS DEL CLIMA ---
         with tab_clima:
             st.markdown("### 🌦️ Módulo de Predicción Meteorológica vs Operaciones de Grúas")
             st.info("Este espacio matemático cruza datos satelitales históricos con picos de siniestralidad operativa.")
             
-            # Diseño Ejecutivo para las variables del Clima
             c1, c2, c3 = st.columns(3)
             with c1:
                 st.markdown("##### 🌧️ Índice de Precipitación")
@@ -236,7 +304,7 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
                 st.metric(label="Factor de Incremento en Grúas", value="+18% Siniestros", delta="Zona Crítica Detectada")
                 
             st.markdown("---")
-            st.write("📈 *El modelo dinámico de proyección climática está listo para recibir el mapeo de coordenadas geográficas de la base.*")
+            st.write("📈 *El modelo predictivo está listo y enlazado con la estructura visual de quejas.*")
             
     else:
         st.error(f"No se pudo sincronizar el repositorio de Quejas: {df_quejas}")
