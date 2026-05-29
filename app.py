@@ -216,7 +216,7 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
         st.error("🚨 **Error de Interconexión con Google Sheets**")
 
 # =========================================================================
-# ⚠️ MÓDULO 2: GESTIÓN DE QUEJAS OPERATIVAS (GRÁFICO DE PROVINCIAS INTEGRADO)
+# ⚠️ MÓDULO 2: GESTIÓN DE QUEJAS OPERATIVAS (FILTROS ADICIONALES INTEGRADOS)
 # =========================================================================
 elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
     st.title("⚠️ Panel Inteligente de Control de Quejas Operativas")
@@ -254,6 +254,19 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
             valores_c = ["TODOS"] + list(df_quejas[col_cuenta].dropna().unique())
             filtro_q_cuenta = st.sidebar.selectbox("Filtrar por Cuenta Corporativa:", valores_c)
 
+        # NUEVO: Filtro dinámico por Problema en el menú izquierdo
+        filtro_q_problema = "TODOS"
+        if col_problema and col_problema in df_quejas.columns:
+            valores_p = ["TODOS"] + list(df_quejas[col_problema].dropna().unique())
+            filtro_q_problema = st.sidebar.selectbox("Filtrar por Problema Específico:", valores_p)
+
+        # NUEVO: Filtro dinámico por Servicio en el menú izquierdo
+        filtro_q_servicio = "TODOS"
+        if col_servicio and col_servicio in df_quejas.columns:
+            valores_s = ["TODOS"] + list(df_quejas[col_servicio].dropna().unique())
+            filtro_q_servicio = st.sidebar.selectbox("Filtrar por Tipo de Servicio:", valores_s)
+
+        # Aplicación estricta de todos los filtros cruzados sobre la data
         df_q_filtrado = df_quejas.copy()
         
         if col_mes_quejas and filtro_q_mes != "TODOS":
@@ -262,6 +275,10 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
             df_q_filtrado = df_q_filtrado[df_q_filtrado[col_tipo_queja] == filtro_q_tipo]
         if filtro_q_cuenta != "TODOS":
             df_q_filtrado = df_q_filtrado[df_q_filtrado[col_cuenta] == filtro_q_cuenta]
+        if filtro_q_problema != "TODOS":
+            df_q_filtrado = df_q_filtrado[df_q_filtrado[col_problema] == filtro_q_problema]
+        if filtro_q_servicio != "TODOS":
+            df_q_filtrado = df_q_filtrado[df_q_filtrado[col_servicio] == filtro_q_servicio]
 
         total_quejas_reg = len(df_q_filtrado)
         tipos_unicos = df_q_filtrado[col_tipo_queja].nunique() if col_tipo_queja else 0
@@ -346,7 +363,7 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
             else:
                 st.info("La columna de Servicio no está mapeada en esta pestaña.")
                 
-        # 📊 NUEVA FILA CENTRAL COMPLETA: TOP 10 DE PROVINCIAS CON MAYOR NIVEL DE QUEJAS
+        # 📊 FILA CENTRAL COMPLETA: TOP 10 DE PROVINCIAS
         st.markdown("---")
         st.markdown("#### 🗺️ 5. Top 10 Provincias con Mayor Nivel de Quejas")
         if col_provincia and col_provincia in df_q_filtrado.columns:
