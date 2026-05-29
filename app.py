@@ -23,27 +23,40 @@ if st.session_state.modulo_activo != "🏠 Inicio":
 URL_BOLETINES = "https://docs.google.com/spreadsheets/d/1aGFtJiEjQ0ZyNCoTvJzFhtM3gQ6JdwKgiVHP5i-Pjj8/edit?usp=sharing"
 URL_QUEJAS = "https://docs.google.com/spreadsheets/d/1goYcBbknAXGLN50b4lx8TEVxaZJeAOJrPj3qTr02gFE/edit?usp=sharing"
 
-# Función genérica de conexión a pestañas de Drive
-def cargar_datos_pestana(url, nombre_pestana):
+# Función optimizada de conexión para Boletines
+def cargar_datos_boletines(url, nombre_pestana):
     try:
-        csv_url = url.replace('/edit?usp=sharing', f'/gviz/tq?tqx=out:csv&sheet={nombre_pestana}').replace('/edit', f'/gviz/tq?tqx=out:csv&sheet={nombre_pestana}')
+        # Extracción limpia del ID del documento para evitar problemas de formato de URL
+        doc_id = url.split("/d/")[1].split("/")[0]
+        csv_url = f"https://docs.google.com/spreadsheets/d/{doc_id}/gviz/tq?tqx=out:csv&sheet={nombre_pestana}"
         df = pd.read_csv(csv_url)
         df.columns = df.columns.str.strip()
         return df
     except Exception as e:
-        st.error(f"Error al cargar la pestaña '{nombre_pestana}'. Verifica accesos y nombres en Drive.")
+        return None
+
+# Función de conexión para Quejas
+def cargar_datos_quejas(url, nombre_pestana):
+    try:
+        doc_id = url.split("/d/")[1].split("/")[0]
+        csv_url = f"https://docs.google.com/spreadsheets/d/{doc_id}/gviz/tq?tqx=out:csv&sheet={nombre_pestana}"
+        df = pd.read_csv(csv_url)
+        df.columns = df.columns.str.strip()
+        return df
+    except Exception as e:
+        st.error(f"Error al cargar la pestaña '{nombre_pestana}' en el archivo de Quejas.")
         return None
 
 # =========================================================================
-# 🏠 PANTALLA PRINCIPAL: FRONT DE BIENVENIDA (HOME)
+# 🏠 PANTALLA PRINCIPAL: FRONT DE BIENVENIDA (HOME REORGANIZADO)
 # =========================================================================
 if st.session_state.modulo_activo == "🏠 Inicio":
     st.title("🚀 Sistema Integrado de Control Operativo y BI")
     st.markdown("##### Bienvenido, Stalin. Por favor, selecciona la gestión que deseas auditar hoy:")
     st.markdown("---")
     
-    # Grid de 3 columnas para las tarjetas del menú principal
-    col1, col2, col3 = st.columns(3)
+    # Grid de 2 columnas grandes para simplificar el menú ejecutivo
+    col1, col2 = st.columns(2)
     
     with col1:
         st.markdown("### 📊 Control de Boletines")
@@ -53,21 +66,14 @@ if st.session_state.modulo_activo == "🏠 Inicio":
             st.rerun()
             
     with col2:
-        st.markdown("### ⚠️ Gestión de Quejas")
-        st.warning("Mapa interactivo por provincias de alertas tempranas, motivos de reclamo y estatus de resolución.")
-        if st.button("Ingresar a Quejas (Nacional)", key="btn_quejas", use_container_width=True):
+        st.markdown("### ⚠️ Gestión Integral de Quejas")
+        st.warning("Mapa de calor dinámico nacional, alertas por provincias y módulo predictivo de saturación por clima.")
+        if st.button("Ingresar a Control de Quejas", key="btn_quejas", use_container_width=True):
             st.session_state.modulo_activo = "⚠️ Gestión de Quejas (Nacional)"
-            st.rerun()
-            
-    with col3:
-        st.markdown("### 🔮 Proyección Climática")
-        st.error("Modelo analítico predictivo que cruza alertas de satélites meteorológicos con demanda de grúas.")
-        if st.button("Ingresar a Predicciones", key="btn_clima", use_container_width=True):
-            st.session_state.modulo_activo = "🔮 Proyección Climática"
             st.rerun()
 
 # =========================================================================
-# 📊 MÓDULO 1: TU CONTROL DE BOLETINES COMPLETO Y SEGURO
+# 📊 MÓDULO 1: TU CONTROL DE BOLETINES COMPLETO Y CORREGIDO
 # =========================================================================
 elif st.session_state.modulo_activo == "📊 Control de Boletines":
     st.title("📊 Control de Boletines")
@@ -77,7 +83,7 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
     meses_anuales = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"] 
     mes_seleccionado = st.sidebar.selectbox("Selecciona el Mes a consultar:", meses_anuales, index=4)
     
-    df_raw = cargar_datos_pestana(URL_BOLETINES, mes_seleccionado)
+    df_raw = cargar_datos_boletines(URL_BOLETINES, mes_seleccionado)
     
     if df_raw is not None and not df_raw.empty:
         def buscar_columna(opciones, df):
@@ -175,34 +181,34 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
                 fila_acumulada = pd.DataFrame([{'GRUPO': "🟦 TOTAL GENERAL 🟦", 'CLIENTE / INSTITUCIÓN': f"📊 {len(df_tabla_final)} Casos Filtrados", 'F. ENTREGA': "═══════════", 'F. ODOO': "═══════════", 'ESTATUS': "📈 Resumen"}])
                 st.dataframe(pd.concat([df_tabla_final, fila_acumulada], ignore_index=True), use_container_width=True, hide_index=True)
     else:
-        st.warning(f"La pestaña del mes seleccionado no tiene datos válidos.")
+        st.warning(f"La pestaña del mes seleccionado no tiene datos válidos o no se puede conectar con Google Drive.")
 
 # =========================================================================
-# ⚠️ MÓDULO 2: PREPARACIÓN PARA LAS QUEJAS (NACIONAL)
+# ⚠️ MÓDULO 2: GESTIÓN INTEGRAL DE QUEJAS & MODELO PREDICTIVO CLIMÁTICO
 # =========================================================================
 elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
-    st.markdown("## 🗺️ Control Nacional de Quejas & Mapa de Alertas")
+    st.title("⚠️ Gestión Integral de Quejas Nacionales")
     st.markdown("---")
     
-    df_quejas = cargar_datos_pestana(URL_QUEJAS, "BBDD 2025")
+    df_quejas = cargar_datos_quejas(URL_QUEJAS, "BBDD 2025")
     
     if df_quejas is not None and not df_quejas.empty:
-        st.success(f"¡Conexión Exitosa! Se detectaron {len(df_quejas)} registros de quejas en el Consolidado QMC.")
-        st.sidebar.header("🚨 Filtros de Reclamos")
+        # Menú interno utilizando pestañas de Streamlit
+        tab_mapa, tab_clima = st.tabs(["🗺️ Mapa de Calor y Alertas Territoriales", "🔮 Modelo Predictivo Meteorológico"])
         
-        if 'Provincia' in df_quejas.columns:
-            lista_provincias = ["TODAS"] + list(df_quejas['Provincia'].dropna().unique())
-            provincia_sel = st.sidebar.selectbox("Selecciona una Provincia:", lista_provincias)
-        
-        st.info("Estructura base del Front-End guardada. El módulo de Boletines está a salvo. Avisa a tu asistente para inyectar el mapa aquí de forma inmediata.")
+        with tab_mapa:
+            st.markdown("### Mapa de Alertas Tempranas por Provincias")
+            st.sidebar.header("🚨 Filtros de Territorio")
+            
+            if 'Provincia' in df_quejas.columns:
+                lista_provincias = ["TODAS"] + list(df_quejas['Provincia'].dropna().unique())
+                provincia_sel = st.sidebar.selectbox("Selecciona una Provincia:", lista_provincias)
+            
+            st.info("Conexión con 'Consolidado QMC' establecida. Listo para incrustar el mapa interactivo en el siguiente paso.")
+            st.dataframe(df_quejas.head(10), use_container_width=True)
+            
+        with tab_clima:
+            st.markdown("### Análisis Predictivo de Demanda de Grúas vs Precipitación")
+            st.info("Este espacio procesará las variables climáticas satelitales en vivo para anticipar picos operativos en grúas.")
     else:
-        st.error("No se pudo leer la BBDD 2025 de Quejas. Revisa los accesos del archivo.")
-
-# =========================================================================
-# 🔮 MÓDULO 3: PROYECTO CLIMÁTICO PREDICTIVO
-# =========================================================================
-elif st.session_state.modulo_activo == "🔮 Proyección Climática":
-    st.markdown("## 🔮 Modelo Predictivo de Saturación de Grúas")
-    st.markdown("---")
-    st.sidebar.header("🌦️ Variables Meteorológicas")
-    st.info("Estructura guardada. Listo para vincular el historial operativo contra los satélites climáticos.")
+        st.error("No se pudo leer la BBDD 2025 de Quejas. Revisa los permisos de lectura del archivo en Drive.")
