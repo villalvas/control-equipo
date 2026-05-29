@@ -95,7 +95,7 @@ if st.session_state.modulo_activo == "🏠 Inicio":
             st.rerun()
 
 # =========================================================================
-# 📊 MÓDULO 1: CONTROL DE BOLETINES (ACTUALIZADO CON TUS REQUERIMIENTOS)
+# 📊 MÓDULO 1: CONTROL DE BOLETINES (LÓGICA MATEMÁTICA Y RECURRENCIA CORREGIDA)
 # =========================================================================
 elif st.session_state.modulo_activo == "📊 Control de Boletines":
     st.title("📊 Control de Boletines")
@@ -116,10 +116,10 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
         col_cliente = detectar_columna(['te instituc', 'instituc', 'cliente'], df_raw.columns)
         col_entrega = detectar_columna(['fecha de entrega', 'entrega', 'liberacion'], df_raw.columns)
         col_odoo = detectar_columna(['odoo', 'carga', 'fecha'], df_raw.columns)
-        
-        # Mapeo específico para tu nueva columna solicitada de días máximos
         col_dias_maximos = detectar_columna(['dias maximas', 'días máximas', 'dias maximas del mes'], df_raw.columns)
+        col_frecuencia = detectar_columna(['frecuencia', 'recurrencia', 'periodo', 'recurrencia de boletin'], df_raw.columns)
 
+        # Cálculo de Estatus base
         if col_entrega in df_raw.columns and col_odoo in df_raw.columns:
             f_entrega_parsed = pd.to_datetime(df_raw[col_entrega], errors='coerce', dayfirst=True)
             f_odoo_parsed = pd.to_datetime(df_raw[col_odoo], errors='coerce', dayfirst=True)
@@ -138,6 +138,7 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
         else:
             df_raw['Estatus de Entrega'] = "⏳ Pendiente de Carga"
 
+        # Controles laterales visuales
         st.sidebar.markdown("---")
         st.sidebar.markdown("### 🔍 Filtrar Clientes por Estado")
         filtro_estatus = st.sidebar.selectbox("Selecciona un Estatus:", ["TODOS"] + list(df_raw['Estatus de Entrega'].unique()))
@@ -153,22 +154,38 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
         st.sidebar.markdown("### 🔄 Frecuencia de Entrega")
         filtro_recurrencia = st.sidebar.selectbox("Selecciona Recurrencia:", ["TODOS", "Mensual", "Semanal", "Inmediata"])
 
+        # =========================================================================
+        # 🎯 PROCESAMIENTO DINÁMICO DE FILTROS CRUZADOS (JERÁRQUICO)
+        # =========================================================================
         df_filtrado = df_raw.copy()
+        
         if filtro_estatus != "TODOS":
             df_filtrado = df_filtrado[df_filtrado['Estatus de Entrega'] == filtro_estatus]
+            
         if col_comercial and filtro_comercial != "TODOS":
             df_filtrado = df_filtrado[df_filtrado[col_comercial] == filtro_comercial]
+            
+        if col_frecuencia and filtro_recurrencia != "TODOS":
+            df_filtrado = df_filtrado[df_filtrado[col_frecuencia].astype(str).str.lower().str.contains(filtro_recurrencia.lower(), na=False)]
 
+        # =========================================================================
+        # 🧮 NUEVO CÁLCULO DE EFECTIVIDAD SOBRE EL VOLUMEN FILTRADO Y CLASIFICADO
+        # =========================================================================
         total_casos_mes = len(df_filtrado)
         a_tiempo = len(df_filtrado[df_filtrado['Estatus de Entrega'] == "🚀 Entregado a Tiempo"])
         pendientes = len(df_filtrado[df_filtrado['Estatus de Entrega'] == "⏳ Pendiente de Carga"])
         atrasados = len(df_filtrado[df_filtrado['Estatus de Entrega'] == "⚠️ Entregado Atrasado"])
+        
         porcentaje_efectividad = int((a_tiempo / total_casos_mes) * 100) if total_casos_mes > 0 else 0
 
+        # Renderizado de Tarjetas KPI Directivas Premium
         kpi1, kpi2, kpi3 = st.columns(3)
-        with kpi1: st.metric(label="Total Casos del Mes", value=f"{total_casos_mes} Cuentas")
-        with kpi2: st.metric(label="Efectividad de Gestión", value=f"{porcentaje_efectividad}% A Tiempo", delta=f"{a_tiempo} de {total_casos_mes} Boletines")
-        with kpi3: st.metric(label="Pendientes de Carga", value=f"{pendientes} Pendientes", delta=f"{atrasados} con Retraso", delta_color="inverse")
+        with kpi1: 
+            st.metric(label="Total Casos del Segmento", value=f"{total_casos_mes} Cuentas")
+        with kpi2: 
+            st.metric(label="Efectividad de Gestión", value=f"{porcentaje_efectividad}% A Tiempo", delta=f"{a_tiempo} de {total_casos_mes} Boletines")
+        with kpi3: 
+            st.metric(label="Pendientes de Carga", value=f"{pendientes} Pendientes", delta=f"{atrasados} con Retraso", delta_color="inverse")
 
         st.markdown("---")
         col_grafica, col_tabla = st.columns([4, 6])
@@ -178,14 +195,12 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
             conteo = df_filtrado['Estatus de Entrega'].value_counts().reset_index()
             conteo.columns = ['Estatus', 'Cantidad']
             
-            # 🛠️ CÁCULO DE CANTIDAD Y PORCENTAJE PARA LAS ETIQUETAS DE LAS BARRAS
             total_grafico = conteo['Cantidad'].sum()
-            conteo['Porcentaje'] = ((conteo['Cantidad'] / total_grafico) * 100).round(1)
+            conteo['Porcentaje'] = ((conteo['Cantidad'] / total_grafico) * 100).round(1) if total_grafico > 0 else 0
             conteo['Etiqueta'] = conteo.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']}%)", axis=1)
             
             color_map = {"⏳ Pendiente de Carga": "#FF8C00", "⚠️ Entregado Atrasado": "#DC143C", "🚀 Entregado a Tiempo": "#228B22"}
             
-            # Inyectamos el campo 'Etiqueta' personalizado en las barras
             fig = px.bar(conteo, x='Cantidad', y='Estatus', orientation='h', 
                          color='Estatus', color_discrete_map=color_map, text='Etiqueta')
             fig.update_traces(textposition='inside')
@@ -199,11 +214,9 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
             if col_entrega in df_filtrado.columns: cols_mostrar['F. ENTREGA'] = df_filtrado[col_entrega]
             if col_odoo in df_filtrado.columns: cols_mostrar['F. ODOO'] = df_filtrado[col_odoo]
             
-            # 🛠️ AGREGAMOS DE FORMA SEGURA EL CAMPO DE DÍAS MÁXIMOS SOLICITADO
             if col_dias_maximos and col_dias_maximos in df_filtrado.columns:
                 cols_mostrar['DIAS MAXIMAS DEL MES PARA ENTREGA DE BOLETIN'] = df_filtrado[col_dias_maximos]
             else:
-                # Si por alguna razón el buscador no encuentra la coincidencia exacta por texto limpio
                 cols_mostrar['DIAS MAXIMAS DEL MES PARA ENTREGA DE BOLETIN'] = df_filtrado.get('DIAS MAXIMAS DEL MES PARA ENTREGA DE BOLETIN', "---")
                 
             cols_mostrar['ESTATUS'] = df_filtrado['Estatus de Entrega']
@@ -212,7 +225,7 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
         st.error("🚨 **Error de Interconexión con Google Sheets**")
 
 # =========================================================================
-# ⚠️ MÓDULO 2: GESTIÓN DE QUEJAS
+# ⚠️ MÓDULO 2: GESTIÓN DE QUEJAS 
 # =========================================================================
 elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
     st.title("⚠️ Inteligencia Analítica de Quejas Nacionales")
