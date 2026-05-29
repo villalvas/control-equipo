@@ -95,7 +95,7 @@ if st.session_state.modulo_activo == "🏠 Inicio":
             st.rerun()
 
 # =========================================================================
-# 📊 MÓDULO 1: CONTROL DE BOLETINES (LÓGICA MATEMÁTICA Y RECURRENCIA CORREGIDA)
+# 📊 MÓDULO 1: CONTROL DE BOLETINES (MATEMÁTICA DE COMPORTAMIENTO CORREGIDA)
 # =========================================================================
 elif st.session_state.modulo_activo == "📊 Control de Boletines":
     st.title("📊 Control de Boletines")
@@ -119,7 +119,7 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
         col_dias_maximos = detectar_columna(['dias maximas', 'días máximas', 'dias maximas del mes'], df_raw.columns)
         col_frecuencia = detectar_columna(['frecuencia', 'recurrencia', 'periodo', 'recurrencia de boletin'], df_raw.columns)
 
-        # Cálculo de Estatus base
+        # 🛠️ CLASIFICACIÓN INTERNA LIMPIA (Sin emojis para evitar fallos en la lógica de control)
         if col_entrega in df_raw.columns and col_odoo in df_raw.columns:
             f_entrega_parsed = pd.to_datetime(df_raw[col_entrega], errors='coerce', dayfirst=True)
             f_odoo_parsed = pd.to_datetime(df_raw[col_odoo], errors='coerce', dayfirst=True)
@@ -127,21 +127,29 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
             def calcular_sla(fila, idx):
                 val_odoo = str(fila[col_odoo]).strip()
                 if pd.isna(fila[col_odoo]) or val_odoo == "" or val_odoo.lower() == "nan":
-                    return "⏳ Pendiente de Carga"
+                    return "Pendiente de Carga"
                 d_entrega = f_entrega_parsed.loc[idx]
                 d_odoo = f_odoo_parsed.loc[idx]
                 if pd.isna(d_entrega) or pd.isna(d_odoo):
-                    return "🚀 Entregado a Tiempo"
-                return "⚠️ Entregado Atrasado" if d_odoo > d_entrega else "🚀 Entregado a Tiempo"
+                    return "Entregado a Tiempo"
+                return "Entregado Atrasado" if d_odoo > d_entrega else "Entregado a Tiempo"
                 
-            df_raw['Estatus de Entrega'] = [calcular_sla(row, idx) for idx, row in df_raw.iterrows()]
+            df_raw['Estatus Interno'] = [calcular_sla(row, idx) for idx, row in df_raw.iterrows()]
         else:
-            df_raw['Estatus de Entrega'] = "⏳ Pendiente de Carga"
+            df_raw['Estatus Interno'] = "Pendiente de Carga"
+
+        # Columna visual exclusiva para el usuario (Con Emojis)
+        mapa_emojis = {
+            "Pendiente de Carga": "⏳ Pendiente de Carga",
+            "Entregado Atrasado": "⚠️ Entregado Atrasado",
+            "Entregado a Tiempo": "🚀 Entregado a Tiempo"
+        }
+        df_raw['Estatus de Entrega'] = df_raw['Estatus Interno'].map(mapa_emojis)
 
         # Controles laterales visuales
         st.sidebar.markdown("---")
         st.sidebar.markdown("### 🔍 Filtrar Clientes por Estado")
-        filtro_estatus = st.sidebar.selectbox("Selecciona un Estatus:", ["TODOS"] + list(df_raw['Estatus de Entrega'].unique()))
+        filtro_estatus = st.sidebar.selectbox("Selecciona un Estatus:", ["TODOS", "🚀 Entregado a Tiempo", "⚠️ Entregado Atrasado", "⏳ Pendiente de Carga"])
         
         st.sidebar.markdown("---")
         st.sidebar.markdown("### 🎯 Filtros de Equipo")
@@ -155,7 +163,7 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
         filtro_recurrencia = st.sidebar.selectbox("Selecciona Recurrencia:", ["TODOS", "Mensual", "Semanal", "Inmediata"])
 
         # =========================================================================
-        # 🎯 PROCESAMIENTO DINÁMICO DE FILTROS CRUZADOS (JERÁRQUICO)
+        # 🎯 FILTRADO JERÁRQUICO CRUZADO DEL CONTEXTO
         # =========================================================================
         df_filtrado = df_raw.copy()
         
@@ -169,14 +177,19 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
             df_filtrado = df_filtrado[df_filtrado[col_frecuencia].astype(str).str.lower().str.contains(filtro_recurrencia.lower(), na=False)]
 
         # =========================================================================
-        # 🧮 NUEVO CÁLCULO DE EFECTIVIDAD SOBRE EL VOLUMEN FILTRADO Y CLASIFICADO
+        # 🧮 LOGICA MATEMÁTICA CORREGIDA (Sobre Estatus Interno Limpio)
         # =========================================================================
+        # Contamos directamente sobre la muestra filtrada por Recurrencia/Comercial
         total_casos_mes = len(df_filtrado)
-        a_tiempo = len(df_filtrado[df_filtrado['Estatus de Entrega'] == "🚀 Entregado a Tiempo"])
-        pendientes = len(df_filtrado[df_filtrado['Estatus de Entrega'] == "⏳ Pendiente de Carga"])
-        atrasados = len(df_filtrado[df_filtrado['Estatus de Entrega'] == "⚠️ Entregado Atrasado"])
+        a_tiempo = len(df_filtrado[df_filtrado['Estatus Interno'] == "Entregado a Tiempo"])
+        atrasados = len(df_filtrado[df_filtrado['Estatus Interno'] == "Entregado Atrasado"])
+        pendientes = len(df_filtrado[df_filtrado['Estatus Interno'] == "Pendiente de Carga"])
         
-        porcentaje_efectividad = int((a_tiempo / total_casos_mes) * 100) if total_casos_mes > 0 else 0
+        # Efectividad real: (A Tiempo) / (A Tiempo + Atrasados + Pendientes)
+        if total_casos_mes > 0:
+            porcentaje_efectividad = int((a_tiempo / total_casos_mes) * 100)
+        else:
+            porcentaje_efectividad = 0
 
         # Renderizado de Tarjetas KPI Directivas Premium
         kpi1, kpi2, kpi3 = st.columns(3)
