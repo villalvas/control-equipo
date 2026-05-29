@@ -88,14 +88,14 @@ if st.session_state.modulo_activo == "🏠 Inicio":
             st.rerun()
             
     with col2:
-        st.markdown("### ⚠️ Gestión de Quejas y Modelos Predictivos")
-        st.warning("Análisis visual de incidencias operativas, rendimiento por supervisor y módulo de Proyección Climática Integrada.")
-        if st.button("Ingresar a Quejas y Predicciones", key="btn_quejas", use_container_width=True):
+        st.markdown("### ⚠️ Gestión de Quejas Operativas")
+        st.warning("Análisis visual de incidencias de servicio por tipo de queja, problemas específicos, cuentas afectadas y tipos de servicios.")
+        if st.button("Ingresar a Quejas Operativas", key="btn_quejas", use_container_width=True):
             st.session_state.modulo_activo = "⚠️ Gestión de Quejas (Nacional)"
             st.rerun()
 
 # =========================================================================
-# 📊 MÓDULO 1: CONTROL DE BOLETINES (PROCESAMIENTO GLOBAL CORREGIDO)
+# 📊 MÓDULO 1: CONTROL DE BOLETINES
 # =========================================================================
 elif st.session_state.modulo_activo == "📊 Control de Boletines":
     st.title("📊 Control de Boletines")
@@ -119,7 +119,6 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
         col_dias_maximos = detectar_columna(['dias maximas', 'días máximas', 'dias maximas del mes'], df_raw.columns)
         col_frecuencia = detectar_columna(['frecuencia', 'recurrencia', 'periodo', 'recurrencia de boletin'], df_raw.columns)
 
-        # Clasificación Interna Uniforme sin caracteres especiales o emojis disruptivos
         if col_entrega in df_raw.columns and col_odoo in df_raw.columns:
             f_entrega_parsed = pd.to_datetime(df_raw[col_entrega], errors='coerce', dayfirst=True)
             f_odoo_parsed = pd.to_datetime(df_raw[col_odoo], errors='coerce', dayfirst=True)
@@ -138,7 +137,6 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
         else:
             df_raw['Estatus Interno'] = "Pendiente de Carga"
 
-        # Formateo visual estético para el usuario final
         mapa_emojis = {
             "Pendiente de Carga": "⏳ Pendiente de Carga",
             "Entregado Atrasado": "⚠️ Entregado Atrasado",
@@ -146,7 +144,6 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
         }
         df_raw['Estatus de Entrega'] = df_raw['Estatus Interno'].map(mapa_emojis)
 
-        # Controles laterales de segmentación
         st.sidebar.markdown("---")
         st.sidebar.markdown("### 🔍 Filtrar Clientes por Estado")
         filtro_estatus = st.sidebar.selectbox("Selecciona un Estatus:", ["TODOS", "🚀 Entregado a Tiempo", "⚠️ Entregado Atrasado", "⏳ Pendiente de Carga"])
@@ -162,39 +159,24 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
         st.sidebar.markdown("### 🔄 Frecuencia de Entrega")
         filtro_recurrencia = st.sidebar.selectbox("Selecciona Recurrencia:", ["TODOS", "Mensual", "Semanal", "Inmediata"])
 
-        # =========================================================================
-        # 📊 CAPA 1: FILTRADO OPERATIVO ESTRUCTURAL (Para las KPIs de Gestión General)
-        # =========================================================================
-        # Este DataFrame conserva la totalidad de los estatus para que la efectividad sea real
         df_base_calculo = df_raw.copy()
-        
         if col_comercial and filtro_comercial != "TODOS":
             df_base_calculo = df_base_calculo[df_base_calculo[col_comercial] == filtro_comercial]
-            
         if col_frecuencia and filtro_recurrencia != "TODOS":
             df_base_calculo = df_base_calculo[df_base_calculo[col_frecuencia].astype(str).str.lower().str.contains(filtro_recurrencia.lower(), na=False)]
 
-        # 🧮 CÁLCULO DIRECTO SOBRE EL TOTAL DE COMPORTAMIENTOS DEL SEGMENTO O RECURRENCIA
         total_casos_mes = len(df_base_calculo)
         a_tiempo = len(df_base_calculo[df_base_calculo['Estatus Interno'] == "Entregado a Tiempo"])
         atrasados = len(df_base_calculo[df_base_calculo['Estatus Interno'] == "Entregado Atrasado"])
         pendientes = len(df_base_calculo[df_base_calculo['Estatus Interno'] == "Pendiente de Carga"])
         
-        # Fórmula de Efectividad integrada: (A Tiempo / Total Segmentado)
         porcentaje_efectividad = int((a_tiempo / total_casos_mes) * 100) if total_casos_mes > 0 else 0
 
-        # Renderizado de Tarjetas KPI Directivas Premium (Inalterables por el aislamiento estético)
         kpi1, kpi2, kpi3 = st.columns(3)
-        with kpi1: 
-            st.metric(label="Total Casos del Segmento", value=f"{total_casos_mes} Cuentas")
-        with kpi2: 
-            st.metric(label="Efectividad de Gestión", value=f"{porcentaje_efectividad}% A Tiempo", delta=f"{a_tiempo} de {total_casos_mes} Boletines")
-        with kpi3: 
-            st.metric(label="Pendientes de Carga", value=f"{pendientes} Pendientes", delta=f"{atrasados} con Retraso", delta_color="inverse")
+        with kpi1: st.metric(label="Total Casos del Segmento", value=f"{total_casos_mes} Cuentas")
+        with kpi2: st.metric(label="Efectividad de Gestión", value=f"{porcentaje_efectividad}% A Tiempo", delta=f"{a_tiempo} de {total_casos_mes} Boletines")
+        with kpi3: st.metric(label="Pendientes de Carga", value=f"{pendientes} Pendientes", delta=f"{atrasados} con Retraso", delta_color="inverse")
 
-        # =========================================================================
-        # 👁️ CAPA 2: FILTRADO VISUAL EXCLUSIVO (Para Gráficas y Tablas de abajo)
-        # =========================================================================
         df_filtrado_visual = df_base_calculo.copy()
         if filtro_estatus != "TODOS":
             df_filtrado_visual = df_filtrado_visual[df_filtrado_visual['Estatus de Entrega'] == filtro_estatus]
@@ -206,15 +188,12 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
             st.markdown("### 📊 Auditoría de SLA")
             conteo = df_filtrado_visual['Estatus de Entrega'].value_counts().reset_index()
             conteo.columns = ['Estatus', 'Cantidad']
-            
             total_grafico = conteo['Cantidad'].sum()
             conteo['Porcentaje'] = ((conteo['Cantidad'] / total_grafico) * 100).round(1) if total_grafico > 0 else 0
             conteo['Etiqueta'] = conteo.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']}%)", axis=1)
             
             color_map = {"⏳ Pendiente de Carga": "#FF8C00", "⚠️ Entregado Atrasado": "#DC143C", "🚀 Entregado a Tiempo": "#228B22"}
-            
-            fig = px.bar(conteo, x='Cantidad', y='Estatus', orientation='h', 
-                         color='Estatus', color_discrete_map=color_map, text='Etiqueta')
+            fig = px.bar(conteo, x='Cantidad', y='Estatus', orientation='h', color='Estatus', color_discrete_map=color_map, text='Etiqueta')
             fig.update_traces(textposition='inside')
             fig.update_layout(showlegend=False, xaxis_title="Boletines", yaxis_title="", margin=dict(t=10, b=10, l=10, r=10), height=320)
             st.plotly_chart(fig, use_container_width=True)
@@ -237,88 +216,141 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
         st.error("🚨 **Error de Interconexión con Google Sheets**")
 
 # =========================================================================
-# ⚠️ MÓDULO 2: GESTIÓN DE QUEJAS 
+# ⚠️ MÓDULO 2: GESTIÓN DE QUEJAS OPERATIVAS (MÓDULO NUEVO CORREGIDO)
 # =========================================================================
 elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
-    st.title("⚠️ Inteligencia Analítica de Quejas Nacionales")
+    st.title("⚠️ Panel Inteligente de Control de Quejas Operativas")
     st.markdown("---")
     
     st.sidebar.header("📅 Historial Operativo")
     anio_seleccionado = st.sidebar.selectbox("Selecciona el Año de Análisis:", ["2025", "2026"], index=0)
     
-    with st.spinner("Sincronizando Base Operativa de Quejas..."):
+    with st.spinner("Sincronizando Base Operativa de Quejas con Google Drive..."):
         df_quejas = cargar_datos_pestana(URL_QUEJAS, anio_seleccionado)
         if isinstance(df_quejas, str):
             df_quejas = cargar_datos_pestana(URL_QUEJAS, f"BBDD {anio_seleccionado}")
         
     if isinstance(df_quejas, pd.DataFrame):
-        
-        tab_graficas, tab_clima = st.tabs(["📊 Dashboard de Control Visual", "🔮 Proyección Climática Predictiva"])
-        
-        with tab_graficas:
-            col_tipo = detectar_columna(['tipo', 'clase', 'categoria'], df_quejas.columns)
-            col_mes = detectar_columna(['mes', 'fecha', 'período'], df_quejas.columns)
-            col_supervisor = detectar_columna(['supervisor', 'encargado', 'responsable', 'coordinador'], df_quejas.columns)
-            col_problema = detectar_columna(['problema', 'motivo', 'detalle', 'causa', 'novedad'], df_quejas.columns)
-            col_estado = detectar_columna(['estado', 'estatus', 'malo', 'resultado'], df_quejas.columns)
-            
-            total_casos = len(df_quejas)
-            st.metric(label="Total Casos Auditados en la Base", value=f"{total_casos} Quejas")
-            st.markdown("---")
-            
-            c1, c2 = st.columns(2)
-            with c1:
-                st.markdown("#### 📌 1. Distribución por Tipo de Queja")
-                if col_tipo:
-                    df_tipo = df_quejas[col_tipo].value_counts().reset_index()
-                    df_tipo.columns = ['Tipo', 'Cantidad']
-                    fig1 = px.pie(df_tipo, values='Cantidad', names='Tipo', hole=0.4, color_discrete_sequence=px.colors.qualitative.Safe)
-                    fig1.update_traces(textposition='inside', textinfo='percent+label')
-                    fig1.update_layout(margin=dict(t=20, b=20, l=20, r=20), height=320, showlegend=True)
-                    st.plotly_chart(fig1, use_container_width=True)
-                    
-            with c2:
-                st.markdown("#### 🎯 2. Análisis Crítico de Problemas")
-                if col_problema:
-                    df_prob = df_quejas[col_problema].value_counts().reset_index()
-                    df_prob.columns = ['Problema', 'Cantidad']
-                    df_prob['Porcentaje'] = (df_prob['Cantidad'] / total_casos * 100).round(1)
-                    df_prob['Etiqueta'] = df_prob.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']}% )", axis=1)
-                    fig2 = px.bar(df_prob.head(10), x='Cantidad', y='Problema', orientation='h', text='Etiqueta', color='Cantidad', color_continuous_scale='Reds')
-                    fig2.update_layout(yaxis={'categoryorder':'total ascending'}, margin=dict(t=10, b=10, l=10, r=10), height=320, coloraxis_showscale=False)
-                    st.plotly_chart(fig2, use_container_width=True)
-            
-            st.markdown("---")
-            c3, c4 = st.columns(2)
-            with c3:
-                st.markdown("#### 📅 3. Volumen Mensual de Quejas y Malos")
-                if col_mes:
-                    eje_color = col_estado if col_estado else col_mes
-                    df_mes = df_quejas.groupby([col_mes, eje_color]).size().reset_index(name='Cantidad')
-                    fig3 = px.bar(df_mes, x=col_mes, y='Cantidad', color=eje_color, barmode='group', text='Cantidad', color_discrete_sequence=px.colors.qualitative.Bold)
-                    fig3.update_layout(xaxis_title="Meses", yaxis_title="Casos", margin=dict(t=10, b=10, l=10, r=10), height=340)
-                    st.plotly_chart(fig3, use_container_width=True)
-                    
-            with c4:
-                st.markdown("#### 👔 4. Desempeño Operativo por Supervisor Encargado")
-                if col_supervisor:
-                    eje_color_sup = col_estado if col_estado else col_supervisor
-                    df_sup = df_quejas.groupby([col_supervisor, eje_color_sup]).size().reset_index(name='Cantidad')
-                    fig4 = px.bar(df_sup, x='Cantidad', y=col_supervisor, color=eje_color_sup, orientation='h', color_discrete_sequence=px.colors.qualitative.Dark24)
-                    fig4.update_layout(yaxis={'categoryorder':'total ascending'}, xaxis_title="Total Casos asignados", yaxis_title="", margin=dict(t=10, b=10, l=10, r=10), height=340)
-                    st.plotly_chart(fig4, use_container_width=True)
+        # Mapeo y detección flexible e infalible de tus columnas reales solicitadas
+        col_tipo_queja = detectar_columna(['tipo de queja', 'tipo_queja', 'queja'], df_quejas.columns)
+        col_problema = detectar_columna(['problema', 'motivo', 'causa', 'novedad'], df_quejas.columns)
+        col_cuenta = detectar_columna(['cuenta', 'cliente', 'institucion', 'empresa'], df_quejas.columns)
+        col_servicio = detectar_columna(['servicio', 'producto', 'asistencia', 'cobertura'], df_quejas.columns)
 
-        with tab_clima:
-            st.markdown("### 🌦️ Módulo de Predicción Meteorológica vs Operaciones de Grúas")
-            cx1, cx2, cx3 = st.columns(3)
-            with cx1:
-                st.markdown("##### 🌧️ Índice de Precipitación")
-                st.slider("Nivel de Lluvia Estimado (mm):", 0, 100, 25, key="clima_lluvia")
-            with cx2:
-                st.markdown("##### 🌫️ Visibilidad en Carreteras")
-                st.selectbox("Nivel de Neblina / Densidad:", ["Normal", "Moderada", "Crítica (Alerta Vial)"], key="clima_visib")
-            with cx3:
-                st.markdown("##### 🚜 Demanda Estimada de Auxilio Mecánico")
-                st.metric(label="Factor de Incremento en Grúas", value="+18% Siniestros", delta="Zona Crítica Detectada")
+        # Barra lateral con filtros avanzados en vivo
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("### 🎛️ Filtros Avanzados")
+        
+        filtro_q_tipo = "TODOS"
+        if col_tipo_queja and col_tipo_queja in df_quejas.columns:
+            valores_q = ["TODOS"] + list(df_quejas[col_tipo_queja].dropna().unique())
+            filtro_q_tipo = st.sidebar.selectbox("Filtrar por Tipo de Queja:", valores_q)
+            
+        filtro_q_cuenta = "TODOS"
+        if col_cuenta and col_cuenta in df_quejas.columns:
+            valores_c = ["TODOS"] + list(df_quejas[col_cuenta].dropna().unique())
+            filtro_q_cuenta = st.sidebar.selectbox("Filtrar por Cuenta Corporativa:", valores_c)
+
+        # Aplicación estricta de filtros sobre la data real
+        df_q_filtrado = df_quejas.copy()
+        if filtro_q_tipo != "TODOS":
+            df_q_filtrado = df_q_filtrado[df_q_filtrado[col_tipo_queja] == filtro_q_tipo]
+        if filtro_q_cuenta != "TODOS":
+            df_q_filtrado = df_q_filtrado[df_q_filtrado[col_cuenta] == filtro_q_cuenta]
+
+        # Indicadores macro del estado actual de quejas
+        total_quejas_reg = len(df_q_filtrado)
+        tipos_unicos = df_q_filtrado[col_tipo_queja].nunique() if col_tipo_queja else 0
+        problemas_unicos = df_q_filtrado[col_problema].nunique() if col_problema else 0
+        servicios_unicos = df_q_filtrado[col_servicio].nunique() if col_servicio else 0
+
+        m1, m2, m3, m4 = st.columns(4)
+        with m1: st.metric(label="Total Quejas Auditadas", value=f"{total_quejas_reg} Casos")
+        with m2: st.metric(label="Tipos de Queja Identificados", value=f"{tipos_unicos} Tipos")
+        with m3: st.metric(label="Tipos de Problemas Críticos", value=f"{problemas_unicos} Frecuentes")
+        with m4: st.metric(label="Servicios Afectados", value=f"{servicios_unicos} Ramos")
+
+        st.markdown("---")
+        
+        # 📊 FILA 1 DE GRÁFICAS: TIPO DE QUEJA Y PROBLEMAS CRÍTICOS
+        g_col1, g_col2 = st.columns(2)
+        
+        with g_col1:
+            st.markdown("#### 📌 1. Distribución por Tipo de Queja (Campo I)")
+            if col_tipo_queja and col_tipo_queja in df_q_filtrado.columns:
+                df_g1 = df_q_filtrado[col_tipo_queja].value_counts().reset_index()
+                df_g1.columns = ['Tipo de Queja', 'Cantidad']
+                df_g1['Porcentaje'] = ((df_g1['Cantidad'] / total_quejas_reg) * 100).round(1) if total_quejas_reg > 0 else 0
+                df_g1['Etiqueta'] = df_g1.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']}%)", axis=1)
+                
+                fig_g1 = px.bar(df_g1, x='Cantidad', y='Tipo de Queja', orientation='h', text='Etiqueta',
+                                color='Tipo de Queja', color_discrete_sequence=px.colors.qualitative.Dark2)
+                fig_g1.update_traces(textposition='inside')
+                fig_g1.update_layout(showlegend=False, yaxis={'categoryorder':'total ascending'}, height=330, margin=dict(t=10, b=10, l=10, r=10))
+                st.plotly_chart(fig_g1, use_container_width=True)
+            else:
+                st.info("El Campo I (Tipo de queja) no está mapeado en esta pestaña.")
+
+        with g_col2:
+            st.markdown("#### 🎯 2. Top 10 Problemas Más Frecuentes (Campo J)")
+            if col_problema and col_problema in df_q_filtrado.columns:
+                df_g2 = df_q_filtrado[col_problema].value_counts().reset_index().head(10)
+                df_g2.columns = ['Problema', 'Cantidad']
+                df_g2['Porcentaje'] = ((df_g2['Cantidad'] / total_quejas_reg) * 100).round(1) if total_quejas_reg > 0 else 0
+                df_g2['Etiqueta'] = df_g2.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']}%)", axis=1)
+                
+                fig_g2 = px.bar(df_g2, x='Cantidad', y='Problema', orientation='h', text='Etiqueta',
+                                color='Cantidad', color_continuous_scale='Reds')
+                fig_g2.update_layout(coloraxis_showscale=False, yaxis={'categoryorder':'total ascending'}, height=330, margin=dict(t=10, b=10, l=10, r=10))
+                st.plotly_chart(fig_g2, use_container_width=True)
+            else:
+                st.info("El Campo J (Problema) no está mapeado en esta pestaña.")
+
+        st.markdown("---")
+        
+        # 📊 FILA 2 DE GRÁFICAS: CUENTAS Y SERVICIOS AFECTADOS
+        g_col3, g_col4 = st.columns(2)
+        
+        with g_col3:
+            st.markdown("#### 🏢 3. Top 10 Cuentas con Mayor Nivel de Incidencias (Campo P)")
+            if col_cuenta and col_cuenta in df_q_filtrado.columns:
+                df_g3 = df_q_filtrado[col_cuenta].value_counts().reset_index().head(10)
+                df_g3.columns = ['Cuenta', 'Cantidad']
+                df_g3['Porcentaje'] = ((df_g3['Cantidad'] / total_quejas_reg) * 100).round(1) if total_quejas_reg > 0 else 0
+                df_g3['Etiqueta'] = df_g3.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']}%)", axis=1)
+                
+                fig_g3 = px.bar(df_g3, x='Cantidad', y='Cuenta', orientation='h', text='Etiqueta',
+                                color='Cantidad', color_continuous_scale='Blues')
+                fig_g3.update_layout(coloraxis_showscale=False, yaxis={'categoryorder':'total ascending'}, height=330, margin=dict(t=10, b=10, l=10, r=10))
+                st.plotly_chart(fig_g3, use_container_width=True)
+            else:
+                st.info("El Campo P (Cuenta) no está mapeado en esta pestaña.")
+
+        with g_col4:
+            st.markdown("#### 🛠️ 4. Análisis de Quejas por Tipo de Servicio (Campo Q)")
+            if col_servicio and col_servicio in df_q_filtrado.columns:
+                df_g4 = df_q_filtrado[col_servicio].value_counts().reset_index()
+                df_g4.columns = ['Servicio', 'Cantidad']
+                df_g4['Porcentaje'] = ((df_g4['Cantidad'] / total_quejas_reg) * 100).round(1) if total_quejas_reg > 0 else 0
+                df_g4['Etiqueta'] = df_g4.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']}%)", axis=1)
+                
+                fig_g4 = px.bar(df_g4, x='Cantidad', y='Servicio', orientation='h', text='Etiqueta',
+                                color='Servicio', color_discrete_sequence=px.colors.qualitative.Prism)
+                fig_g4.update_traces(textposition='inside')
+                fig_g4.update_layout(showlegend=False, yaxis={'categoryorder':'total ascending'}, height=330, margin=dict(t=10, b=10, l=10, r=10))
+                st.plotly_chart(fig_g4, use_container_width=True)
+            else:
+                st.info("El Campo Q (Servicio) no está mapeado en esta pestaña.")
+                
+        # Tabla detallada en la sección inferior de la auditoría para verificar filas reales
+        st.markdown("---")
+        st.markdown("### 📋 Bitácora General de Control de Incidencias Filtradas")
+        cols_quejas_mostrar = {}
+        if col_tipo_queja: cols_quejas_mostrar['TIPO DE QUEJA'] = df_q_filtrado[col_tipo_queja]
+        if col_problema: cols_quejas_mostrar['PROBLEMA REPORTADO'] = df_q_filtrado[col_problema]
+        if col_cuenta: cols_quejas_mostrar['CUENTA CORPORATIVA'] = df_q_filtrado[col_cuenta]
+        if col_servicio: cols_quejas_mostrar['SERVICIO / COBERTURA'] = df_q_filtrado[col_servicio]
+        
+        st.dataframe(pd.DataFrame(cols_quejas_mostrar).fillna("---"), use_container_width=True, hide_index=True)
     else:
         st.error(f"No se pudo sincronizar el repositorio de Quejas: {df_quejas}")
