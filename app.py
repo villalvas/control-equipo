@@ -21,8 +21,7 @@ if st.session_state.modulo_activo != "🏠 Inicio":
 # =========================================================================
 # 📂 ENLACES VERIFICADOS DE GOOGLE DRIVE 
 # =========================================================================
-# URL corregida con el ID exacto enviado y validado
-URL_BOLETINES = "https://docs.google.com/spreadsheets/d/1aGFtjIeJQ0ZyNCoTvJzfHtM3gQ6JdWKgiVHP5i-Pjj8/edit?usp=sharing"
+URL_BOLETINES = "https://docs.google.com/spreadsheets/d/1aGFtjIeJQ0ZyNCoTvJzfHtM3gQ6JdwKgiVHP5i-Pjj8/edit?usp=sharing"
 URL_QUEJAS = "https://docs.google.com/spreadsheets/d/1goYcBbknAXGLN50b4lx8TEVxaZJeAOJrPj3qTr02gFE/edit?usp=sharing"
 
 # Función blindada de extracción y conexión a Google Drive
@@ -35,8 +34,7 @@ def cargar_datos_pestana(url, nombre_pestana):
             df = pd.read_csv(csv_url)
             df.columns = df.columns.str.strip()
             return df
-        else:
-            return None
+        return None
     except Exception as e:
         return None
 
@@ -48,9 +46,7 @@ if st.session_state.modulo_activo == "🏠 Inicio":
     st.markdown("##### Bienvenido, Stalin. Por favor, selecciona la gestión que deseas auditar hoy:")
     st.markdown("---")
     
-    # Grid de 2 columnas para una visualización limpia y directa
     col1, col2 = st.columns(2)
-    
     with col1:
         st.markdown("### 📊 Control de Boletines")
         st.info("Auditoría de tiempos de carga, control de SLAs comerciales y alertas de retrasos operativos.")
@@ -66,7 +62,7 @@ if st.session_state.modulo_activo == "🏠 Inicio":
             st.rerun()
 
 # =========================================================================
-# 📊 MÓDULO 1: TU CONTROL DE BOLETINES COMPLETO Y FUNCIONAL
+# 📊 MÓDULO 1: CONTROL DE BOLETINES (OPERANDO CORRECTAMENTE)
 # =========================================================================
 elif st.session_state.modulo_activo == "📊 Control de Boletines":
     st.title("📊 Control de Boletines")
@@ -113,7 +109,6 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
             df_raw['Evaluación de Entrega Raw'] = "Pendiente de Carga"
             df_raw['Estatus de Entrega'] = "⏳ Pendiente de Carga"
 
-        # Filtros Secundarios
         st.sidebar.markdown("---")
         filtro_estatus = st.sidebar.selectbox("Selecciona un Estatus:", ["TODOS", "🚀 Entregado a Tiempo", "⚠️ Entregado Atrasado", "⏳ Pendiente de Carga"])
         filtro_comercial = st.sidebar.selectbox("Filtrar por Comercial:", ["TODOS"] + list(df_raw[col_comercial].dropna().unique()))
@@ -130,7 +125,6 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
         if filtro_estatus != "TODOS": df_filtrado = df_filtrado[df_filtrado['Estatus de Entrega'] == filtro_estatus]
         if filtro_comercial != "TODOS": df_filtrado = df_filtrado[df_filtrado[col_comercial] == filtro_comercial]
 
-        # KPIs
         a_tiempo = len(df_base_universo[df_base_universo['Evaluación de Entrega Raw'] == "Entregado a Tiempo"])
         atrasados = len(df_base_universo[df_base_universo['Evaluación de Entrega Raw'] == "Entregado Atrasado"])
         pendientes = len(df_base_universo[df_base_universo['Evaluación de Entrega Raw'] == "Pendiente de Carga"])
@@ -174,35 +168,46 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
                 fila_acumulada = pd.DataFrame([{'GRUPO': "🟦 TOTAL GENERAL 🟦", 'CLIENTE / INSTITUCIÓN': f"📊 {len(df_tabla_final)} Casos Filtrados", 'F. ENTREGA': "═══════════", 'F. ODOO': "═══════════", 'ESTATUS': "📈 Resumen"}])
                 st.dataframe(pd.concat([df_tabla_final, fila_acumulada], ignore_index=True), use_container_width=True, hide_index=True)
     else:
-        st.error("Error de sincronización: Asegúrate de que la pestaña seleccionada en el menú izquierdo de la App se llame EXACTAMENTE igual que en tu archivo de Drive (ej. 'Mayo').")
+        st.error("Error de sincronización en Boletines.")
 
 # =========================================================================
-# ⚠️ MÓDULO 2: GESTIÓN INTEGRAL DE QUEJAS (MAPA + CLIMA UNIFICADOS)
+# ⚠️ MÓDULO 2: GESTIÓN INTEGRAL DE QUEJAS (CON NUEVOS NOMBRES DE PESTAÑA)
 # =========================================================================
 elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
     st.title("⚠️ Gestión Integral de Quejas Nacionales")
     st.markdown("---")
     
-    df_quejas = cargar_datos_pestana(URL_QUEJAS, "BBDD 2025")
+    # Selector de Año en la Barra Lateral basado en la simplificación
+    st.sidebar.header("📅 Historial Operativo")
+    anio_seleccionado = st.sidebar.selectbox("Selecciona el Año de Auditoría:", ["2025", "2026"], index=0)
+    
+    # Descarga la pestaña del año seleccionado
+    df_quejas = cargar_datos_pestana(URL_QUEJAS, anio_seleccionado)
     
     if df_quejas is not None and not df_quejas.empty:
-        # Pestañas de control interno
         tab_mapa, tab_clima = st.tabs(["🗺️ Mapa de Calor y Alertas Territoriales", "🔮 Proyección Climática Predictiva"])
         
         with tab_mapa:
-            st.markdown("### Mapa de Alertas Tempranas por Provincias")
+            st.markdown(f"### Mapa de Alertas Tempranas por Provincias - Periodo {anio_seleccionado}")
             st.sidebar.header("🚨 Filtros de Territorio")
             
-            if 'Provincia' in df_quejas.columns:
-                lista_provincias = ["TODAS"] + list(df_quejas['Provincia'].dropna().unique())
-                provincia_sel = st.sidebar.selectbox("Selecciona una Provincia:", lista_provincias)
+            col_provincia = None
+            for col in df_quejas.columns:
+                if 'prov' in col.lower() or 'terr' in col.lower() or 'regi' in col.lower() or 'zona' in col.lower():
+                    col_provincia = col
+                    break
             
-            st.info("Conexión con 'Consolidado QMC' establecida con éxito.")
-            st.dataframe(df_quejas.head(10), use_container_width=True)
+            if col_provincia:
+                lista_provincias = ["TODAS"] + list(df_quejas[col_provincia].dropna().unique())
+                provincia_sel = st.sidebar.selectbox("Selecciona la Región/Provincia:", lista_provincias)
+            
+            st.success(f"¡Sincronización Exitosa! Conectado correctamente a la pestaña '{anio_seleccionado}'.")
+            st.write("##### Vista de datos del Consolidado de Quejas:")
+            st.dataframe(df_quejas.head(15), use_container_width=True)
             
         with tab_clima:
             st.markdown("### Análisis Predictivo de Demanda de Grúas vs Precipitación")
             st.sidebar.header("🌦️ Variables Meteorológicas")
             st.info("Este submódulo procesará las variables climáticas satelitales en vivo para anticipar picos operativos en grúas.")
     else:
-        st.error("No se pudo leer la pestaña 'BBDD 2025' del archivo de Quejas. Revisa que el enlace tenga los permisos públicos de lectura en Google Drive.")
+        st.error(f"No se pudo encontrar la pestaña '{anio_seleccionado}' en el archivo de Quejas. Verifica que esté escrita exactamente con ese número en tu archivo de Google Drive.")
