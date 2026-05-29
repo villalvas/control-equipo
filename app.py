@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import urllib.parse
 
 # Configuración estética del Dashboard estilo Ejecutivo
 st.set_page_config(page_title="Centro de Mando - Serviasistencia", layout="wide", initial_sidebar_state="expanded")
@@ -20,40 +19,54 @@ if st.session_state.modulo_activo != "🏠 Inicio":
 # =========================================================================
 # 📂 ENLACES VERIFICADOS DE GOOGLE DRIVE 
 # =========================================================================
-# Tus enlaces de hojas compartidas (Asegurados en modo "Cualquier persona con el enlace puede ver")
+# Enlaces limpios extraídos de tus capturas compartidas
 URL_BOLETINES = "https://docs.google.com/spreadsheets/d/1aGFtjIeJQ0ZyNCoTvJzfHtM3gQ6JdwKgiVHP5i-Pjj8/edit?usp=sharing"
 URL_QUEJAS = "https://docs.google.com/spreadsheets/d/1goYcBbknAXGLN50b4lx8TEVxaZJeAOJrPj3qTr02gFE/edit?usp=sharing"
 
-# Función de extracción universal corregida (Evita el Error 404 de Google)
+# FUNCIÓN QUIRÚRGICA: Descarga el libro completo en memoria para evitar el error 404 de pestañas
 def cargar_datos_pestana(url, nombre_pestana):
     try:
-        # Extraemos el ID único del documento usando división de cadena estándar
+        # Extraer el ID único del documento de Google Sheets
         if "/d/" in url:
             doc_id = url.split("/d/")[1].split("/")[0]
         else:
-            return "URL de Google Sheets no válida."
+            return "URL de Google Sheets inválida."
             
-        # Codificamos el nombre de la pestaña de forma segura para URLs de internet
-        pestana_codificada = urllib.parse.quote(nombre_pestana)
+        # Método Infalible: Descarga el archivo en formato Excel binario directo de Google Drive
+        # Esto evita que Google procese el nombre de la pestaña textualmente en la URL y falle con 404
+        export_url = f"https://docs.google.com/spreadsheets/d/{doc_id}/export?format=xlsx"
         
-        # Endpoint de Google alternativo y ultra-estable para peticiones externas CSV
-        csv_url = f"https://docs.google.com/spreadsheets/d/{doc_id}/gviz/tq?tqx=out:csv&sheet={pestana_codificada}"
+        # Leemos el archivo completo usando Pandas ExcelFile
+        excel_file = pd.ExcelFile(export_url)
         
-        # Realizamos la lectura directa mediante pandas
-        df = pd.read_csv(csv_url, on_bad_lines='skip')
+        # Buscamos coincidencias de nombres ignorando espacios accidentales
+        pestanas_disponibles = excel_file.sheet_names
+        pestana_real = None
+        
+        for p in pestanas_disponibles:
+            if p.strip().lower() == nombre_pestana.strip().lower():
+                pestana_real = p
+                break
+                
+        # Si no se encuentra con el nombre exacto, toma la primera pestaña disponible como respaldo
+        if not pestana_real:
+            st.sidebar.warning(f"⚠️ Pestaña '{nombre_pestana}' no hallada. Intentando cargar: {pestanas_disponibles[0]}")
+            pestana_real = pestanas_disponibles[0]
+            
+        # Carga efectiva de la hoja seleccionada
+        df = excel_file.parse(sheet_name=pestana_real)
         
         if df.empty:
-            return "El archivo se conectó correctamente pero la pestaña no contiene registros estructurados."
+            return "El archivo se conectó pero la pestaña seleccionada no contiene registros estructurados."
             
-        # Limpieza de las cabeceras de columnas para evitar espacios en blanco invisibles
+        # Limpieza estándar de cabeceras de columnas para el correcto mapeo de BI
         df.columns = [str(c).strip() for c in df.columns]
         df = df.loc[:, ~df.columns.str.contains('^Unnamed:')]
-        
-        # Eliminamos filas que estén completamente en blanco en el Excel
         df = df.dropna(how='all')
+        
         return df
     except Exception as e:
-        return f"Error de comunicación de red: {str(e)}"
+        return f"Error crítico de comunicación de red: {str(e)}"
 
 # =========================================================================
 # 🏠 PANTALLA PRINCIPAL: FRONT DE BIENVENIDA (ESTILO ORIGINAL)
@@ -79,7 +92,7 @@ if st.session_state.modulo_activo == "🏠 Inicio":
             st.rerun()
 
     with col3:
-        st.markdown("### 🔮 Proyección Climatática")
+        st.markdown("### 🔮 Proyección Climatica")
         st.error("Modelo analítico predictivo que cruza alertas de satélites meteorológicos con demanda de grúas.")
         if st.button("Ingresar a Predicciones", key="btn_predicciones", use_container_width=True):
             st.success("Módulo predictivo en fase de inicialización de datos de satélite.")
@@ -95,13 +108,13 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
     meses_anuales = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"] 
     mes_seleccionado = st.sidebar.selectbox("Selecciona el Mes a consultar:", meses_anuales, index=4) # Por defecto Mayo
     
-    with st.spinner("Estableciendo conexión segura con Google Drive..."):
+    with st.spinner("Descargando matriz y sincronizando datos desde Google Drive..."):
         resultado = cargar_datos_pestana(URL_BOLETINES, mes_seleccionado)
     
     if isinstance(resultado, pd.DataFrame):
         df_raw = resultado
         
-        # Mapeo flexible e inteligente de nombres de columnas
+        # Mapeo flexible e inteligente de nombres de columnas de tu Excel
         def detectar_columna(keys, columnas_disponibles):
             for k in keys:
                 for col in columnas_disponibles:
@@ -134,7 +147,7 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
         else:
             df_raw['Estatus de Entrega'] = "⏳ Datos en Proceso"
 
-        # Barra lateral de filtros dinámicos
+        # Filtros interactivos en la barra lateral
         st.sidebar.markdown("---")
         filtro_estatus = st.sidebar.selectbox("Filtrar por Estatus SLA:", ["TODOS"] + list(df_raw['Estatus de Entrega'].unique()))
         
@@ -143,7 +156,6 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
             valores_comercial = ["TODOS"] + list(df_raw[col_comercial].dropna().unique())
             filtro_comercial = st.sidebar.selectbox("Filtrar por Área Comercial:", valores_comercial)
 
-        # Filtrado del DataFrame
         df_filtrado = df_raw.copy()
         if filtro_estatus != "TODOS":
             df_filtrado = df_filtrado[df_filtrado['Estatus de Entrega'] == filtro_estatus]
@@ -155,17 +167,17 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
         casos_filtrados = len(df_filtrado)
         
         c1, c2, c3 = st.columns(3)
-        with c1: st.metric(label="Total Casos en Base de Datos", value=f"{total_casos} Registros")
-        with c2: st.metric(label="Registros Bajo Filtro Actual", value=f"{casos_filtrados} Filas")
-        with c3: st.metric(label="Canal de Enlace", value="🟢 Sincronizado")
+        with c1: st.metric(label="Total Casos Registrados", value=f"{total_casos} Filas")
+        with c2: st.metric(label="Casos Filtrados", value=f"{casos_filtrados} Filas")
+        with c3: st.metric(label="Estado de Conexión", value="🟢 Sincronizado")
 
         st.markdown("---")
         
-        # Gráficas y Tablas
+        # Gráficas y Tablas Dinámicas
         col_graf, col_tab = st.columns([4, 6])
         
         with col_graf:
-            st.write("### 📊 Resumen Estadístico de Entregas")
+            st.write("### 📊 Cumplimiento de SLAs")
             conteo = df_filtrado['Estatus de Entrega'].value_counts().reset_index()
             conteo.columns = ['Estatus', 'Cantidad']
             fig = px.pie(conteo, values='Cantidad', names='Estatus', hole=0.4,
@@ -174,7 +186,7 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
             st.plotly_chart(fig, use_container_width=True)
 
         with col_tab:
-            st.write("### 🗂️ Matriz Operativa de Datos")
+            st.write("### 🗂️ Vista General de Datos")
             cols_mostrar = {}
             if col_grupo: cols_mostrar['Grupo'] = df_filtrado[col_grupo]
             if col_comercial: cols_mostrar['Área Comercial'] = df_filtrado[col_comercial]
@@ -187,11 +199,7 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
 
     else:
         st.error("🚨 **Error Crítico de Interconexión**")
-        st.info(f"**Detalle técnico:** {resultado}")
-        st.markdown("""
-        **¿Cómo resolverlo rápido?**
-        Verifica en tu Google Sheets que la pestaña seleccionada se llame exactamente igual (ej: `Mayo`, con la primera letra en mayúscula y sin espacios accidentales al principio o al final).
-        """)
+        st.info(f"**Detalle enviado por el sistema:** {resultado}")
 
 # =========================================================================
 # ⚠️ MÓDULO 2: GESTIÓN DE QUEJAS
@@ -203,7 +211,7 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
     st.sidebar.header("📅 Historial Operativo")
     anio_seleccionado = st.sidebar.selectbox("Selecciona el Año de Análisis:", ["2025", "2026"], index=0)
     
-    # Intentamos cargar la hoja por año o formato BBDD estándar
+    # Intentamos cargar usando el nuevo motor XLSX universal
     df_quejas = cargar_datos_pestana(URL_QUEJAS, anio_seleccionado)
     if isinstance(df_quejas, str):
         df_quejas = cargar_datos_pestana(URL_QUEJAS, f"BBDD {anio_seleccionado}")
@@ -211,6 +219,6 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
     if isinstance(df_quejas, pd.DataFrame):
         st.success(f"🟢 Conexión exitosa al repositorio de Quejas ({anio_seleccionado}).")
         st.write("### Muestra de la base operativa de reclamos:")
-        st.dataframe(df_quejas.head(15), use_container_width=True)
+        st.dataframe(df_quejas.head(20), use_container_width=True)
     else:
         st.error(f"No se pudo sincronizar la pestaña de quejas: {df_quejas}")
