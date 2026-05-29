@@ -17,29 +17,27 @@ if st.session_state.modulo_activo != "🏠 Inicio":
         st.rerun()
 
 # =========================================================================
-# 📂 ENLACES VERIFICADOS DE GOOGLE DRIVE 
+# 📂 ENLACES VERIFICADOS DE GOOGLE DRIVE (CORREGIDOS)
 # =========================================================================
-# Enlaces limpios extraídos de tus capturas compartidas
-URL_BOLETINES = "https://docs.google.com/spreadsheets/d/1aGFtjIeJQ0ZyNCoTvJzfHtM3gQ6JdwKgiVHP5i-Pjj8/edit?usp=sharing"
+# Enlace corregido con la 'W' mayúscula exacta que me proporcionaste
+URL_BOLETINES = "https://docs.google.com/spreadsheets/d/1aGFtjIeJQ0ZyNCoTvJzfHtM3gQ6JdWKgiVHP5i-Pjj8/edit?usp=sharing"
 URL_QUEJAS = "https://docs.google.com/spreadsheets/d/1goYcBbknAXGLN50b4lx8TEVxaZJeAOJrPj3qTr02gFE/edit?usp=sharing"
 
-# FUNCIÓN QUIRÚRGICA: Descarga el libro completo en memoria para evitar el error 404 de pestañas
+# FUNCIÓN DE EXTRACCIÓN: Descarga el libro completo usando formato XLSX e identifica la pestaña en memoria
 def cargar_datos_pestana(url, nombre_pestana):
     try:
-        # Extraer el ID único del documento de Google Sheets
         if "/d/" in url:
             doc_id = url.split("/d/")[1].split("/")[0]
         else:
             return "URL de Google Sheets inválida."
             
-        # Método Infalible: Descarga el archivo en formato Excel binario directo de Google Drive
-        # Esto evita que Google procese el nombre de la pestaña textualmente en la URL y falle con 404
+        # Generamos el enlace de exportación directa en formato Excel estructurado
         export_url = f"https://docs.google.com/spreadsheets/d/{doc_id}/export?format=xlsx"
         
-        # Leemos el archivo completo usando Pandas ExcelFile
-        excel_file = pd.ExcelFile(export_url)
+        # Forzamos la lectura usando el motor de Excel openpyxl, idóneo para Streamlit Cloud
+        excel_file = pd.ExcelFile(export_url, engine='openpyxl')
         
-        # Buscamos coincidencias de nombres ignorando espacios accidentales
+        # Buscamos coincidencias flexibles para evitar fallos por espacios accidentales
         pestanas_disponibles = excel_file.sheet_names
         pestana_real = None
         
@@ -48,28 +46,28 @@ def cargar_datos_pestana(url, nombre_pestana):
                 pestana_real = p
                 break
                 
-        # Si no se encuentra con el nombre exacto, toma la primera pestaña disponible como respaldo
+        # Si por alguna razón la pestaña del mes no coincide, toma la primera disponible para evitar romper la app
         if not pestana_real:
             st.sidebar.warning(f"⚠️ Pestaña '{nombre_pestana}' no hallada. Intentando cargar: {pestanas_disponibles[0]}")
             pestana_real = pestanas_disponibles[0]
             
-        # Carga efectiva de la hoja seleccionada
+        # Extraemos los datos de la pestaña procesada
         df = excel_file.parse(sheet_name=pestana_real)
         
         if df.empty:
-            return "El archivo se conectó pero la pestaña seleccionada no contiene registros estructurados."
+            return "El archivo conectó correctamente pero la pestaña seleccionada no tiene datos."
             
-        # Limpieza estándar de cabeceras de columnas para el correcto mapeo de BI
+        # Limpieza estética de cabeceras de columnas
         df.columns = [str(c).strip() for c in df.columns]
         df = df.loc[:, ~df.columns.str.contains('^Unnamed:')]
         df = df.dropna(how='all')
         
         return df
     except Exception as e:
-        return f"Error crítico de comunicación de red: {str(e)}"
+        return f"Error de comunicación de red: {str(e)}"
 
 # =========================================================================
-# 🏠 PANTALLA PRINCIPAL: FRONT DE BIENVENIDA (ESTILO ORIGINAL)
+# 🏠 PANTALLA PRINCIPAL: FRONT DE BIENVENIDA
 # =========================================================================
 if st.session_state.modulo_activo == "🏠 Inicio":
     st.title("🚀 Sistema Integrado de Control Operativo y BI")
@@ -162,7 +160,7 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
         if col_comercial and filtro_comercial != "TODOS":
             df_filtrado = df_filtrado[df_filtrado[col_comercial] == filtro_comercial]
 
-        # Despliegue de KPIs Ejecutivos
+        # KPIs Ejecutivos
         total_casos = len(df_raw)
         casos_filtrados = len(df_filtrado)
         
@@ -211,7 +209,6 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
     st.sidebar.header("📅 Historial Operativo")
     anio_seleccionado = st.sidebar.selectbox("Selecciona el Año de Análisis:", ["2025", "2026"], index=0)
     
-    # Intentamos cargar usando el nuevo motor XLSX universal
     df_quejas = cargar_datos_pestana(URL_QUEJAS, anio_seleccionado)
     if isinstance(df_quejas, str):
         df_quejas = cargar_datos_pestana(URL_QUEJAS, f"BBDD {anio_seleccionado}")
