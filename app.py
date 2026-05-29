@@ -216,7 +216,7 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
         st.error("🚨 **Error de Interconexión con Google Sheets**")
 
 # =========================================================================
-# ⚠️ MÓDULO 2: GESTIÓN DE QUEJAS OPERATIVAS (MÓDULO NUEVO CORREGIDO)
+# ⚠️ MÓDULO 2: GESTIÓN DE QUEJAS OPERATIVAS (FILTRO DE MES Y TÍTULOS LIMPIOS)
 # =========================================================================
 elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
     st.title("⚠️ Panel Inteligente de Control de Quejas Operativas")
@@ -225,19 +225,24 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
     st.sidebar.header("📅 Historial Operativo")
     anio_seleccionado = st.sidebar.selectbox("Selecciona el Año de Análisis:", ["2025", "2026"], index=0)
     
+    # NUEVO: Filtro por Mes en el lado izquierdo para el módulo de Quejas
+    meses_lista = ["TODOS", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+    filtro_q_mes = st.sidebar.selectbox("Filtrar Quejas por Mes:", meses_lista, index=0)
+    
     with st.spinner("Sincronizando Base Operativa de Quejas con Google Drive..."):
         df_quejas = cargar_datos_pestana(URL_QUEJAS, anio_seleccionado)
         if isinstance(df_quejas, str):
             df_quejas = cargar_datos_pestana(URL_QUEJAS, f"BBDD {anio_seleccionado}")
         
     if isinstance(df_quejas, pd.DataFrame):
-        # Mapeo y detección flexible e infalible de tus columnas reales solicitadas
+        # Mapeo y detección flexible de tus columnas reales solicitadas
         col_tipo_queja = detectar_columna(['tipo de queja', 'tipo_queja', 'queja'], df_quejas.columns)
         col_problema = detectar_columna(['problema', 'motivo', 'causa', 'novedad'], df_quejas.columns)
         col_cuenta = detectar_columna(['cuenta', 'cliente', 'institucion', 'empresa'], df_quejas.columns)
         col_servicio = detectar_columna(['servicio', 'producto', 'asistencia', 'cobertura'], df_quejas.columns)
+        col_mes_quejas = detectar_columna(['mes', 'fecha', 'período', 'periodo'], df_quejas.columns)
 
-        # Barra lateral con filtros avanzados en vivo
+        # Barra lateral con filtros adicionales cruzados en vivo
         st.sidebar.markdown("---")
         st.sidebar.markdown("### 🎛️ Filtros Avanzados")
         
@@ -251,8 +256,11 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
             valores_c = ["TODOS"] + list(df_quejas[col_cuenta].dropna().unique())
             filtro_q_cuenta = st.sidebar.selectbox("Filtrar por Cuenta Corporativa:", valores_c)
 
-        # Aplicación estricta de filtros sobre la data real
+        # Aplicación estricta de filtros sobre la data real (Mes + Tipo + Cuenta)
         df_q_filtrado = df_quejas.copy()
+        
+        if col_mes_quejas and filtro_q_mes != "TODOS":
+            df_q_filtrado = df_q_filtrado[df_q_filtrado[col_mes_quejas].astype(str).str.lower().str.contains(filtro_q_mes.lower(), na=False)]
         if filtro_q_tipo != "TODOS":
             df_q_filtrado = df_q_filtrado[df_q_filtrado[col_tipo_queja] == filtro_q_tipo]
         if filtro_q_cuenta != "TODOS":
@@ -272,11 +280,11 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
 
         st.markdown("---")
         
-        # 📊 FILA 1 DE GRÁFICAS: TIPO DE QUEJA Y PROBLEMAS CRÍTICOS
+        # 📊 FILA 1 DE GRÁFICAS: TIPO DE QUEJA Y PROBLEMAS CRÍTICOS (TÍTULOS LIMPIOS)
         g_col1, g_col2 = st.columns(2)
         
         with g_col1:
-            st.markdown("#### 📌 1. Distribución por Tipo de Queja (Campo I)")
+            st.markdown("#### 📌 1. Distribución por Tipo de Queja")
             if col_tipo_queja and col_tipo_queja in df_q_filtrado.columns:
                 df_g1 = df_q_filtrado[col_tipo_queja].value_counts().reset_index()
                 df_g1.columns = ['Tipo de Queja', 'Cantidad']
@@ -289,10 +297,10 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
                 fig_g1.update_layout(showlegend=False, yaxis={'categoryorder':'total ascending'}, height=330, margin=dict(t=10, b=10, l=10, r=10))
                 st.plotly_chart(fig_g1, use_container_width=True)
             else:
-                st.info("El Campo I (Tipo de queja) no está mapeado en esta pestaña.")
+                st.info("La columna de Tipo de queja no está mapeada en esta pestaña.")
 
         with g_col2:
-            st.markdown("#### 🎯 2. Top 10 Problemas Más Frecuentes (Campo J)")
+            st.markdown("#### 🎯 2. Top 10 Problemas Más Frecuentes")
             if col_problema and col_problema in df_q_filtrado.columns:
                 df_g2 = df_q_filtrado[col_problema].value_counts().reset_index().head(10)
                 df_g2.columns = ['Problema', 'Cantidad']
@@ -304,15 +312,15 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
                 fig_g2.update_layout(coloraxis_showscale=False, yaxis={'categoryorder':'total ascending'}, height=330, margin=dict(t=10, b=10, l=10, r=10))
                 st.plotly_chart(fig_g2, use_container_width=True)
             else:
-                st.info("El Campo J (Problema) no está mapeado en esta pestaña.")
+                st.info("La columna de Problema no está mapeada en esta pestaña.")
 
         st.markdown("---")
         
-        # 📊 FILA 2 DE GRÁFICAS: CUENTAS Y SERVICIOS AFECTADOS
+        # 📊 FILA 2 DE GRÁFICAS: CUENTAS Y SERVICIOS AFECTADOS (TÍTULOS LIMPIOS)
         g_col3, g_col4 = st.columns(2)
         
         with g_col3:
-            st.markdown("#### 🏢 3. Top 10 Cuentas con Mayor Nivel de Incidencias (Campo P)")
+            st.markdown("#### 🏢 3. Top 10 Cuentas con Mayor Nivel de Incidencias")
             if col_cuenta and col_cuenta in df_q_filtrado.columns:
                 df_g3 = df_q_filtrado[col_cuenta].value_counts().reset_index().head(10)
                 df_g3.columns = ['Cuenta', 'Cantidad']
@@ -324,10 +332,10 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
                 fig_g3.update_layout(coloraxis_showscale=False, yaxis={'categoryorder':'total ascending'}, height=330, margin=dict(t=10, b=10, l=10, r=10))
                 st.plotly_chart(fig_g3, use_container_width=True)
             else:
-                st.info("El Campo P (Cuenta) no está mapeado en esta pestaña.")
+                st.info("La columna de Cuenta no está mapeada en esta pestaña.")
 
         with g_col4:
-            st.markdown("#### 🛠️ 4. Análisis de Quejas por Tipo de Servicio (Campo Q)")
+            st.markdown("#### 🛠️ 4. Análisis de Quejas por Tipo de Servicio")
             if col_servicio and col_servicio in df_q_filtrado.columns:
                 df_g4 = df_q_filtrado[col_servicio].value_counts().reset_index()
                 df_g4.columns = ['Servicio', 'Cantidad']
@@ -340,7 +348,7 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
                 fig_g4.update_layout(showlegend=False, yaxis={'categoryorder':'total ascending'}, height=330, margin=dict(t=10, b=10, l=10, r=10))
                 st.plotly_chart(fig_g4, use_container_width=True)
             else:
-                st.info("El Campo Q (Servicio) no está mapeado en esta pestaña.")
+                st.info("La columna de Servicio no está mapeada en esta pestaña.")
                 
         # Tabla detallada en la sección inferior de la auditoría para verificar filas reales
         st.markdown("---")
@@ -350,6 +358,7 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
         if col_problema: cols_quejas_mostrar['PROBLEMA REPORTADO'] = df_q_filtrado[col_problema]
         if col_cuenta: cols_quejas_mostrar['CUENTA CORPORATIVA'] = df_q_filtrado[col_cuenta]
         if col_servicio: cols_quejas_mostrar['SERVICIO / COBERTURA'] = df_q_filtrado[col_servicio]
+        if col_mes_quejas: cols_quejas_mostrar['MES'] = df_q_filtrado[col_mes_quejas]
         
         st.dataframe(pd.DataFrame(cols_quejas_mostrar).fillna("---"), use_container_width=True, hide_index=True)
     else:
