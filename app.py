@@ -216,7 +216,7 @@ elif st.session_state.modulo_activo == "📊 Control de Boletines":
         st.error("🚨 **Error de Interconexión con Google Sheets**")
 
 # =========================================================================
-# ⚠️ MÓDULO 2: GESTIÓN DE QUEJAS OPERATIVAS (TOP 10 IMPLEMENTADO)
+# ⚠️ MÓDULO 2: GESTIÓN DE QUEJAS OPERATIVAS (GRÁFICO DE PROVINCIAS INTEGRADO)
 # =========================================================================
 elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
     st.title("⚠️ Panel Inteligente de Control de Quejas Operativas")
@@ -239,6 +239,7 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
         col_cuenta = detectar_columna(['cuenta', 'cliente', 'institucion', 'empresa'], df_quejas.columns)
         col_servicio = detectar_columna(['servicio', 'producto', 'asistencia', 'cobertura'], df_quejas.columns)
         col_mes_quejas = detectar_columna(['mes', 'fecha', 'período', 'periodo'], df_quejas.columns)
+        col_provincia = detectar_columna(['provincia', 'ciudad', 'sucursal', 'region', 'ubicacion'], df_quejas.columns)
 
         st.sidebar.markdown("---")
         st.sidebar.markdown("### 🎛️ Filtros Avanzados")
@@ -275,6 +276,7 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
 
         st.markdown("---")
         
+        # 📊 FILA 1 DE GRÁFICAS: TIPO DE QUEJA Y PROBLEMAS CRÍTICOS
         g_col1, g_col2 = st.columns(2)
         
         with g_col1:
@@ -310,6 +312,7 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
 
         st.markdown("---")
         
+        # 📊 FILA 2 DE GRÁFICAS: CUENTAS Y SERVICIOS AFECTADOS
         g_col3, g_col4 = st.columns(2)
         
         with g_col3:
@@ -328,7 +331,6 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
                 st.info("La columna de Cuenta no está mapeada en esta pestaña.")
 
         with g_col4:
-            # CORREGIDO: Ahora muestra estrictamente el Top 10 de tipos de servicios
             st.markdown("#### 🛠️ 4. Top 10 Servicios con Mayor Nivel de Quejas")
             if col_servicio and col_servicio in df_q_filtrado.columns:
                 df_g4 = df_q_filtrado[col_servicio].value_counts().reset_index().head(10)
@@ -344,15 +346,21 @@ elif st.session_state.modulo_activo == "⚠️ Gestión de Quejas (Nacional)":
             else:
                 st.info("La columna de Servicio no está mapeada en esta pestaña.")
                 
+        # 📊 NUEVA FILA CENTRAL COMPLETA: TOP 10 DE PROVINCIAS CON MAYOR NIVEL DE QUEJAS
         st.markdown("---")
-        st.markdown("### 📋 Bitácora General de Control de Incidencias Filtradas")
-        cols_quejas_mostrar = {}
-        if col_tipo_queja: cols_quejas_mostrar['TIPO DE QUEJA'] = df_q_filtrado[col_tipo_queja]
-        if col_problema: cols_quejas_mostrar['PROBLEMA REPORTADO'] = df_q_filtrado[col_problema]
-        if col_cuenta: cols_quejas_mostrar['CUENTA CORPORATIVA'] = df_q_filtrado[col_cuenta]
-        if col_servicio: cols_quejas_mostrar['SERVICIO / COBERTURA'] = df_q_filtrado[col_servicio]
-        if col_mes_quejas: cols_quejas_mostrar['MES'] = df_q_filtrado[col_mes_quejas]
-        
-        st.dataframe(pd.DataFrame(cols_quejas_mostrar).fillna("---"), use_container_width=True, hide_index=True)
+        st.markdown("#### 🗺️ 5. Top 10 Provincias con Mayor Nivel de Quejas")
+        if col_provincia and col_provincia in df_q_filtrado.columns:
+            df_g5 = df_q_filtrado[col_provincia].value_counts().reset_index().head(10)
+            df_g5.columns = ['Provincia', 'Cantidad']
+            df_g5['Porcentaje'] = ((df_g5['Cantidad'] / total_quejas_reg) * 100).round(1) if total_quejas_reg > 0 else 0
+            df_g5['Etiqueta'] = df_g5.apply(lambda r: f"{r['Cantidad']} ({r['Porcentaje']}%)", axis=1)
+            
+            fig_g5 = px.bar(df_g5, x='Cantidad', y='Provincia', orientation='h', text='Etiqueta',
+                            color='Cantidad', color_continuous_scale='Viridis')
+            fig_g5.update_layout(coloraxis_showscale=False, yaxis={'categoryorder':'total ascending'}, height=380, margin=dict(t=10, b=10, l=10, r=10))
+            st.plotly_chart(fig_g5, use_container_width=True)
+        else:
+            st.info("No se encontró una columna de ubicación geográfica ('Provincia', 'Ciudad') mapeada en esta pestaña de Drive.")
+            
     else:
         st.error(f"No se pudo sincronizar el repositorio de Quejas: {df_quejas}")
