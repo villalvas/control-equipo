@@ -34,7 +34,7 @@ def cargar_datos_drive():
     url_sheets = "https://docs.google.com/spreadsheets/d/1UWQy9XJy8UOdef1IcXWDt2Nmn7hTnsQLHby_3BhpJnc/edit?usp=sharing"
     
     conn = st.connection("gsheets", type=GSheetsConnection)
-    df = conn.read(spreadsheet=url_sheets)
+df = conn.read()
     
     # Estandarización de provincias a MAYÚSCULAS para que hagan juego perfecto con el mapa político
     if 'PROVINCIA' in df.columns:
