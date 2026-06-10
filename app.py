@@ -4,14 +4,14 @@ import pandas as pd
 import folium
 from streamlit_folium import st_folium
 
-# 1. Configuración de pantalla del monitor y ocultar herramientas nativas
+# 1. Configuración de pantalla del monitor y protección visual contra descargas
 st.set_page_config(
     layout="wide", 
     page_title="Monitor de Proyecciones - Semana Tipo",
     initial_sidebar_state="expanded"
 )
 
-# Inyección de código CSS para destruir visualmente cualquier botón de descarga en el monitor
+# Inyección de código CSS para bloquear visualmente cualquier botón de descarga en el monitor
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -22,70 +22,95 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# Encabezado oficial del proyecto
-st.title("🔮 Monitor de Proyección de Asistencias (Semana Tipo)")
-st.caption("Visualización geoanalítica basada en registros históricos")
+# ==========================================
+# 🎛️ CONTROL DE NAVEGACIÓN (BARRA LATERAL IZQUIERDA)
+# ==========================================
+if "modulo_activo" not in st.session_state:
+    st.session_state.modulo_activo = "🔮 Proyecciones"
 
-# 2. Conexión interna y segura con Google Drive leyendo los Secrets automáticamente
-@st.cache_data(ttl=300)
-def cargar_datos_drive():
-    # El sistema jala automáticamente el enlace guardado en tus Secrets de la nube
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    df = conn.read()
-    
-    # Estandarización estricta de provincias a MAYÚSCULAS
-    if 'PROVINCIA' in df.columns:
-        df['PROVINCIA'] = df['PROVINCIA'].astype(str).str.strip().str.upper()
-    return df
+st.sidebar.title("🗂️ Menú Principal")
 
-try:
-    # Procesamiento privado en el servidor (el usuario del monitor nunca ve la tabla cruda)
-    df_base = cargar_datos_drive()
+# Botones de navegación para que cambies de módulo cuando lo necesites
+if st.sidebar.button("🏠 Inicio", use_container_width=True):
+    st.session_state.modulo_activo = "🏠 Inicio"
+if st.sidebar.button("🔮 Monitor de Proyecciones", use_container_width=True):
+    st.session_state.modulo_activo = "🔮 Proyecciones"
 
-    # 3. Filtros interactivos en la barra lateral
-    st.sidebar.header("🎛️ Control de Proyecciones")
-    
-    # Filtro por Tipo de Servicio (Busca la columna SERVICIO)
-    col_servicio = 'SERVICIO' if 'SERVICIO' in df_base.columns else 'Servicio'
-    lista_servicios = ["Todos"] + list(df_base[col_servicio].dropna().unique())
-    servicio_sel = st.sidebar.selectbox("Seleccionar Servicio:", lista_servicios)
-    
-    # Filtro por Día Nombre (Busca tu columna de nombres de días)
-    col_dia = 'Día Nombre' if 'Día Nombre' in df_base.columns else 'Dia Nombre'
-    lista_dias = ["Todos"] + list(df_base[col_dia].dropna().unique())
-    dia_sel = st.sidebar.selectbox("Seleccionar Día Tipo:", lista_dias)
+st.sidebar.markdown("---")
 
-    # 4. Filtrado lógico en memoria RAM
-    df_filtrado = df_base.copy()
-    if servicio_sel != "Todos":
-        df_filtrado = df_filtrado[df_filtrado[col_servicio] == servicio_sel]
-    if dia_sel != "Todos":
-        df_filtrado = df_filtrado[df_filtrado[col_dia] == dia_sel]
+# ==========================================
+# VISTA: INICIO
+# ==========================================
+if st.session_state.modulo_activo == "🏠 Inicio":
+    st.title("🏠 Panel de Control Principal")
+    st.write("Bienvenido al sistema de control de equipo. Selecciona un módulo en la barra lateral para empezar.")
 
-    # Agrupamos los datos para contar las asistencias proyectadas por provincia
-    resumen_mapa = df_filtrado.groupby('PROVINCIA').size().reset_index(name='Proyeccion')
+# ==========================================
+# VISTA: MONITOR DE PROYECCIONES
+# ==========================================
+if st.session_state.modulo_activo == "🔮 Proyecciones":
+    st.title("🔮 Monitor de Proyección de Asistencias (Semana Tipo)")
+    st.caption("Visualización geoanalítica basada en registros históricos vinculados a Google Drive")
 
-    # 5. Renderizado del mapa de Ecuador (Polígonos coropléticos sólidos)
-    geojson_url = "https://raw.githubusercontent.com/andresabalos/Geometrias-Ecuador/master/provincias.geojson"
-    
-    # Creación del mapa centrado en el país con un estilo oscuro premium para centros de control
-    m = folium.Map(location=[-1.8312, -78.1834], zoom_start=7, tiles="CartoDB dark_matter")
-    
-    folium.Choropleth(
-        geo_data=geojson_url,
-        name="choropleth",
-        data=resumen_mapa,
-        columns=["PROVINCIA", "Proyeccion"],
-        key_on="feature.properties.DPA_DESPRO", # Cruce matemático exacto sin importar tildes
-        fill_color="YlGnBu", # Degradado estético (Amarillo -> Verde -> Azul)
-        fill_opacity=0.85,
-        line_opacity=0.2,
-        legend_name="Volumen de Asistencias Proyectadas",
-        highlight=True
-    ).add_to(m)
+    # 2. Función interna de conexión directa
+    @st.cache_data(ttl=300)
+    def cargar_datos_drive():
+        # ⚠️ COLOCA AQUÍ TU ENLACE REAL DE GOOGLE SHEETS
+        # Reemplaza esta URL de ejemplo por el enlace que copiaste de tu archivo "Consolidado historico asistencias"
+        url_sheets = "https://docs.google.com/spreadsheets/d/1UWQy9XJy8UOdef1IcXWDt2Nmn7hTnsQLHby_3BhpJnc/edit?usp=sharing"
+        
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df = conn.read(spreadsheet=url_sheets)
+        
+        # Estandarización estricta de provincias a MAYÚSCULAS
+        if 'PROVINCIA' in df.columns:
+            df['PROVINCIA'] = df['PROVINCIA'].astype(str).str.strip().str.upper()
+        return df
 
-    # Desplegar mapa interactivo a lo ancho de la pantalla
-    st_folium(m, width="100%", height=650)
+    try:
+        # Cargando la información de forma privada en el servidor
+        df_base = cargar_datos_drive()
 
-except Exception as e:
-    st.error("🔒 Conexión segura establecida. Esperando mapeo de credenciales de Google Drive en Streamlit Cloud o corrigiendo parámetros.")
+        # Filtros dinámicos en la barra lateral debajo del menú
+        st.sidebar.header("🎛️ Filtros del Mapa")
+        
+        col_servicio = 'SERVICIO' if 'SERVICIO' in df_base.columns else 'Servicio'
+        lista_servicios = ["Todos"] + list(df_base[col_servicio].dropna().unique())
+        servicio_sel = st.sidebar.selectbox("Seleccionar Servicio:", lista_servicios)
+        
+        col_dia = 'Día Nombre' if 'Día Nombre' in df_base.columns else 'Dia Nombre'
+        lista_dias = ["Todos"] + list(df_base[col_dia].dropna().unique())
+        dia_sel = st.sidebar.selectbox("Seleccionar Día Tipo:", lista_dias)
+
+        # Filtrado lógico en memoria RAM
+        df_filtrado = df_base.copy()
+        if servicio_sel != "Todos":
+            df_filtrado = df_filtrado[df_filtrado[col_servicio] == servicio_sel]
+        if dia_sel != "Todos":
+            df_filtrado = df_filtrado[df_filtrado[col_dia] == dia_sel]
+
+        # Conteo de registros por provincia para el mapa
+        resumen_mapa = df_filtrado.groupby('PROVINCIA').size().reset_index(name='Proyeccion')
+
+        # 3. Configuración y renderizado del mapa de Ecuador
+        geojson_url = "https://raw.githubusercontent.com/andresabalos/Geometrias-Ecuador/master/provincias.geojson"
+        m = folium.Map(location=[-1.8312, -78.1834], zoom_start=7, tiles="CartoDB dark_matter")
+        
+        folium.Choropleth(
+            geo_data=geojson_url,
+            name="choropleth",
+            data=resumen_mapa,
+            columns=["PROVINCIA", "Proyeccion"],
+            key_on="feature.properties.DPA_DESPRO",
+            fill_color="YlGnBu",
+            fill_opacity=0.85,
+            line_opacity=0.2,
+            legend_name="Volumen de Asistencias Proyectadas",
+            highlight=True
+        ).add_to(m)
+
+        st_folium(m, width="100%", height=650)
+
+    except Exception as e:
+        st.error(f"🔒 Error de enlace: {e}")
+        st.info("Por favor, asegúrate de reemplazar la URL de la línea 51 de app.py con el enlace correcto de tu Google Sheets.")
