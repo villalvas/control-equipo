@@ -72,12 +72,12 @@ if st.session_state.modulo_activo == "🔮 Proyecciones":
         # Filtros dinámicos en la barra lateral debajo del menú
         st.sidebar.header("🎛️ Filtros del Mapa")
         
-        # Detector automático de nombre de columna para el Servicio
+        # Detector de nombre de columna para el Servicio
         col_servicio = 'SERVICIO' if 'SERVICIO' in df_base.columns else 'Servicio'
         lista_servicios = ["Todos"] + list(df_base[col_servicio].dropna().unique())
         servicio_sel = st.sidebar.selectbox("Seleccionar Servicio:", lista_servicios)
         
-        # Detector automático de nombre de columna para el Día de la Semana
+        # Detector de nombre de columna para el Día de la Semana
         col_dia = 'Día Nombre' if 'Día Nombre' in df_base.columns else 'Dia Nombre'
         lista_dias = ["Todos"] + list(df_base[col_dia].dropna().unique())
         dia_sel = st.sidebar.selectbox("Seleccionar Día Tipo:", lista_dias)
@@ -98,9 +98,25 @@ if st.session_state.modulo_activo == "🔮 Proyecciones":
         # Inicialización del mapa centrado con estilo Oscuro Premium (estilo centro de comando)
         m = folium.Map(location=[-1.8312, -78.1834], zoom_start=7, tiles="CartoDB dark_matter")
         
+        # Definimos la clave de cruce en una variable para evitar cortes de línea
+        clave_geojson = "feature.properties.DPA_DESPRO"
+        
         folium.Choropleth(
             geo_data=geojson_url,
             name="choropleth",
             data=resumen_mapa,
             columns=["PROVINCIA", "Proyeccion"],
-            key_on="feature.properties.D
+            key_on=clave_geojson,
+            fill_color="YlGnBu",
+            fill_opacity=0.85,
+            line_opacity=0.2,
+            legend_name="Volumen de Asistencias Proyectadas",
+            highlight=True
+        ).add_to(m)
+
+        # Renderizado final del mapa a lo ancho de la pantalla del monitor
+        st_folium(m, width="100%", height=650)
+
+    except Exception as e:
+        st.error(f"❌ Error al procesar la base de datos: {e}")
+        st.info("Verifica que las columnas de tu hoja de cálculo se llamen exactamente 'PROVINCIA', 'SERVICIO' y 'Día Nombre'.")
