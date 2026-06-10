@@ -31,7 +31,7 @@ st.caption("Visualización geoanalítica basada en registros históricos")
 def cargar_datos_drive():
     # URL de conexión de tu hoja de Google Sheets
     # (En el siguiente paso cambiaremos este link por el tuyo real)
-    url_sheets = "https://docs.google.com/spreadsheets/d/1N-uQhZg9P_V2k-g_j6vMee_w_9876543210abcdef/edit#gid=0"
+    url_sheets = "https://docs.google.com/spreadsheets/d/1UWQy9XJy8UOdef1IcXWDt2Nmn7hTnsQLHby_3BhpJnc/edit?usp=sharing"
     
     conn = st.connection("gsheets", type=GSheetsConnection)
     df = conn.read(spreadsheet=url_sheets)
