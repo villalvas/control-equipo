@@ -26,17 +26,14 @@ st.markdown("""
 st.title("🔮 Monitor de Proyección de Asistencias (Semana Tipo)")
 st.caption("Visualización geoanalítica basada en registros históricos")
 
-# 2. Conexión interna y segura con Google Drive
-@st.cache_data(ttl=300) # Guarda la data por 5 minutos para rendimiento óptimo
+# 2. Conexión interna y segura con Google Drive leyendo los Secrets automáticamente
+@st.cache_data(ttl=300)
 def cargar_datos_drive():
-    # URL de conexión de tu hoja de Google Sheets
-    # (En el siguiente paso cambiaremos este link por el tuyo real)
-    url_sheets = "https://docs.google.com/spreadsheets/d/1UWQy9XJy8UOdef1IcXWDt2Nmn7hTnsQLHby_3BhpJnc/edit?usp=sharing"
-    
+    # El sistema jala automáticamente el enlace guardado en tus Secrets de la nube
     conn = st.connection("gsheets", type=GSheetsConnection)
-df = conn.read()
+    df = conn.read()
     
-    # Estandarización de provincias a MAYÚSCULAS para que hagan juego perfecto con el mapa político
+    # Estandarización estricta de provincias a MAYÚSCULAS
     if 'PROVINCIA' in df.columns:
         df['PROVINCIA'] = df['PROVINCIA'].astype(str).str.strip().str.upper()
     return df
@@ -91,4 +88,4 @@ try:
     st_folium(m, width="100%", height=650)
 
 except Exception as e:
-    st.error("🔒 Conexión segura establecida. Esperando mapeo de credenciales de Google Drive en Streamlit Cloud.")
+    st.error("🔒 Conexión segura establecida. Esperando mapeo de credenciales de Google Drive en Streamlit Cloud o corrigiendo parámetros.")
