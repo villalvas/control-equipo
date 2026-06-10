@@ -1,9 +1,8 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import folium
 from streamlit_folium import st_folium
-import requests
-import io
 
 # 1. Configuración de pantalla del monitor y protección visual
 st.set_page_config(layout="wide", page_title="Monitor de Proyecciones")
@@ -18,7 +17,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# Control del Menú Lateral
+# Control de navegación interna
 if "modulo_activo" not in st.session_state:
     st.session_state.modulo_activo = "🔮 Proyecciones"
 
@@ -32,27 +31,30 @@ st.sidebar.markdown("---")
 
 if st.session_state.modulo_activo == "🏠 Inicio":
     st.title("🏠 Panel de Control Principal")
-    st.write("Bienvenido al sistema. Selecciona un módulo en la barra lateral.")
+    st.write("Bienvenido al sistema. Selecciona un módulo en la barra lateral para empezar.")
 
 if st.session_state.modulo_activo == "🔮 Proyecciones":
     st.title("🔮 Monitor de Proyección de Asistencias (Semana Tipo)")
-    
-    @st.cache_data(ttl=60)
-    def cargar_datos_directo():
-        # Tu enlace directo de exportación CSV corregido
-        url_csv = "https://docs.google.com/spreadsheets/d/1UWQy9XJy8UOdef1IcXWDt2Nmn7hTnsQLHby_3BhpJnc/export?format=csv"
-        response = requests.get(url_csv)
-        if response.status_code == 200:
-            df = pd.read_csv(io.StringIO(response.text))
-            df.columns = df.columns.str.strip().str.upper()
-            if 'PROVINCIA' in df.columns:
-                df['PROVINCIA'] = df['PROVINCIA'].astype(str).str.strip().str.upper()
-            return df
-        else:
-            raise Exception("No se pudo conectar a Google Drive.")
+    st.caption("Visualización geoanalítica basada en registros históricos")
+
+    @st.cache_data(ttl=300)
+    def cargar_datos_drive():
+        # Tu enlace original de Google Sheets
+        url_sheets = "https://docs.google.com/spreadsheets/d/1UWQy9XJy8UOdef1IcXWDt2Nmn7hTnsQLHby_3BhpJnc/edit?usp=sharing"
+        
+        # Conexión nativa usando el JSON guardado en Secrets
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df = conn.read(spreadsheet=url_sheets)
+        return df
 
     try:
-        df_base = cargar_datos_directo()
+        df_base = cargar_datos_drive()
+        
+        # Limpieza de nombres de columnas a mayúsculas
+        df_base.columns = df_base.columns.str.strip().str.upper()
+
+        if 'PROVINCIA' in df_base.columns:
+            df_base['PROVINCIA'] = df_base['PROVINCIA'].astype(str).str.strip().str.upper()
 
         st.sidebar.header("🎛️ Filtros del Mapa")
         col_servicio = 'SERVICIO' if 'SERVICIO' in df_base.columns else df_base.columns[1]
@@ -90,4 +92,4 @@ if st.session_state.modulo_activo == "🔮 Proyecciones":
         st_folium(m, width="100%", height=650)
 
     except Exception as e:
-        st.error(f"❌ Error de procesamiento: {e}")
+        st.error(f"❌ Error de conexión: {e}")
