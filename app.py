@@ -24,7 +24,7 @@ st.markdown("""
 
 # Título Principal
 st.title("🔮 Monitor de Proyección de Asistencias (Semana Tipo)")
-st.caption("Centro de Control Geoanalítico con Enfoque Automático de Región")
+st.caption("Centro de Control Geoanalítico con Desglose Dinámico de Demanda")
 
 # Conexión optimizada por GViz
 @st.cache_data(ttl=60)
@@ -47,14 +47,17 @@ if df_raw is not None and not df_raw.empty:
 
     # Mapeo de columnas esenciales de tu Drive
     col_provincia = "PROVINCIA"
+    col_ciudad = "CIUDAD" if "CIUDAD" in df_raw.columns else ("CANTON" if "CANTON" in df_raw.columns else "CANTÓN")
     col_servicio = "SERVICIO"
     col_dia = "DIA NOMBRE"
     col_estado = "ESTADO DE ASISTENCIA"
     col_hora_agrupada = "HORA AGRUPADA"
     col_fecha = "FECHA CREACIÓN DE ASISTENCIA" if "FECHA CREACIÓN DE ASISTENCIA" in df_raw.columns else "FECHA CREACION DE ASISTENCIA"
 
-    # Estandarizamos texto de provincias
+    # Estandarizamos texto de provincias y ciudades
     df_raw[col_provincia] = df_raw[col_provincia].astype(str).str.strip().str.upper()
+    if col_ciudad in df_raw.columns:
+        df_raw[col_ciudad] = df_raw[col_ciudad].astype(str).str.strip().str.upper()
 
     # ==========================================
     # 🎛️ PANEL DE FILTROS EN LA PANTALLA PRINCIPAL
@@ -87,44 +90,51 @@ if df_raw is not None and not df_raw.empty:
     if num_fechas_reales == 0: 
         num_fechas_reales = 1
 
-    df_filtrado = df_dia_especifico.copy()
-    
+    # Copia base filtrada por variables principales (sin provincia aún para análisis global)
+    df_base_filtros = df_dia_especifico.copy()
     if servicio_sel != "Todos":
-        df_filtrado = df_filtrado[df_filtrado[col_servicio] == servicio_sel]
-        
+        df_base_filtros = df_base_filtros[df_base_filtros[col_servicio] == servicio_sel]
+    if estado_sel != "Todos" and col_estado in df_raw.columns:
+        df_base_filtros = df_base_filtros[df_base_filtros[col_estado] == estado_sel]
+
+    # DataFrame Final aplicando el filtro de Provincia
+    df_filtrado = df_base_filtros.copy()
     if provincia_sel != "Todas":
         df_filtrado = df_filtrado[df_filtrado[col_provincia] == provincia_sel]
-        
-    if estado_sel != "Todos" and col_estado in df_raw.columns:
-        df_filtrado = df_filtrado[df_filtrado[col_estado] == estado_sel]
 
     st.markdown("---")
 
     # ==========================================
-    # 📊 INDICADOR ÚNICO (SOLO PROMEDIO)
+    # 📊 INDICADOR ÚNICO (PROMEDIO)
     # ==========================================
     total_casos_historicos = len(df_filtrado)
     promedio_asistencias_dia = round(total_casos_historicos / num_fechas_reales, 1)
     
-    # Se muestra únicamente la métrica del promedio solicitado
     st.metric(label=f"📊 Casos Promedio Esperados (Día {dia_sel})", value=f"{promedio_asistencias_dia} Asistencias")
 
     # ==========================================
-    # 📋 TABLA DE RESUMEN OPERACIONAL
+    # 📋 TABLAS DINÁMICAS (PROVINCIAS VS CIUDADES)
     # ==========================================
     if total_casos_historicos > 0:
-        top_servicio = df_filtrado[col_servicio].value_counts().idxmax()
-        top_provincia = df_filtrado[col_provincia].value_counts().idxmax() if provincia_sel == "Todas" else provincia_sel
-        
-        # Estructuramos los datos quitados en un DataFrame limpio
-        df_resumen = pd.DataFrame({
-            "Métrica Operacional": ["Servicio Mayoritario", "Provincia en Foco", "Total Registros Históricos Analizados"],
-            "Detalle / Resultado": [str(top_servicio), str(top_provincia), f"{total_casos_historicos} casos"]
-        })
-        st.write("### 📋 Resumen de Variables en Foco")
-        st.dataframe(df_resumen, use_container_width=True, hide_index=True)
+        if provincia_sel == "Todas":
+            st.write("### 📋 Desglose de Demanda General por Provincias")
+            # Agrupar por provincia de mayor a menor
+            df_tabla = df_base_filtros.groupby(col_provincia).size().reset_index(name='Casos Históricos')
+            df_tabla['Promedio Diario Proyectado'] = (df_tabla['Casos Históricos'] / num_fechas_reales).round(1)
+            df_tabla = df_tabla.sort_values(by='Casos Históricos', ascending=False)
+            st.dataframe(df_tabla, use_container_width=True, hide_index=True)
+        else:
+            st.write(f"### 📋 Desglose de Demanda Interna: Ciudades de {provincia_sel}")
+            if col_ciudad in df_filtrado.columns:
+                # Agrupar por ciudad/cantón de la provincia seleccionada
+                df_tabla = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos Históricos')
+                df_tabla['Promedio Diario Proyectado'] = (df_tabla['Casos Históricos'] / num_fechas_reales).round(1)
+                df_tabla = df_tabla.sort_values(by='Casos Históricos', ascending=False)
+                st.dataframe(df_tabla, use_container_width=True, hide_index=True)
+            else:
+                st.info("No se encontró la columna de Ciudades/Cantones en la base de datos.")
     else:
-        st.info("No hay suficientes datos con los filtros seleccionados para armar la tabla de resumen.")
+        st.info("Sin registros para estructurar la tabla con los filtros actuales.")
 
     st.markdown("---")
 
@@ -141,36 +151,17 @@ if df_raw is not None and not df_raw.empty:
         resumen_provincias['Promedio'] = (resumen_provincias['Total'] / num_fechas_reales).round(1)
 
         coordenadas_provincias = {
-            'PICHINCHA': [-0.2298, -78.5249], 
-            'GUAYAS': [-2.1894, -79.8890], 
-            'AZUAY': [-2.9001, -79.0059],
-            'MANABI': [-1.0543, -80.4544], 
-            'MANABÍ': [-1.0543, -80.4544], 
-            'EL ORO': [-3.2581, -79.9553], 
-            'LOJA': [-3.9931, -79.2042], 
-            'TUNGURAHUA': [-1.2491, -78.6168], 
-            'CHIMBORAZO': [-1.6743, -78.6483], 
-            'ESMERALDAS': [0.9682, -79.6517], 
-            'LOS RIOS': [-1.4558, -79.4622], 
-            'LOS RÍOS': [-1.4558, -79.4622],
-            'SANTO DOMINGO DE LOS TSÁCHILAS': [-0.2530, -79.1754], 
-            'SANTO DOMINGO DE LOS TSACHILAS': [-0.2530, -79.1754], 
-            'SANTA ELENA': [-2.2262, -80.8584], 
-            'IMBABURA': [0.3517, -78.1223], 
-            'COTOPAXI': [-0.9352, -78.6155], 
-            'CARCHI': [0.7384, -77.7289], 
-            'SUCUMBIOS': [0.0847, -76.8828], 
-            'SUCUMBÍOS': [0.0847, -76.8828],
-            'ORELLANA': [-0.5665, -76.9872], 
-            'NAPO': [-0.9902, -77.8129], 
-            'PASTAZA': [-1.4870, -77.9954], 
-            'MORONA SANTIAGO': [-2.3087, -78.1114], 
-            'ZAMORA CHINCHIPE': [-4.0692, -78.9566],
-            'GALAPAGOS': [-0.7402, -90.3119], 
-            'GALÁPAGOS': [-0.7402, -90.3119], 
-            'BOLIVAR': [-1.5910, -79.0022], 
-            'BOLÍVAR': [-1.5910, -79.0022], 
-            'CAÑAR': [-2.5518, -78.9392]
+            'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
+            'MANABI': [-1.0543, -80.4544], 'MANABÍ': [-1.0543, -80.4544], 'EL ORO': [-3.2581, -79.9553], 
+            'LOJA': [-3.9931, -79.2042], 'TUNGURAHUA': [-1.2491, -78.6168], 'CHIMBORAZO': [-1.6743, -78.6483], 
+            'ESMERALDAS': [0.9682, -79.6517], 'LOS RIOS': [-1.4558, -79.4622], 'LOS RÍOS': [-1.4558, -79.4622],
+            'SANTO DOMINGO DE LOS TSÁCHILAS': [-0.2530, -79.1754], 'SANTO DOMINGO DE LOS TSACHILAS': [-0.2530, -79.1754], 
+            'SANTA ELENA': [-2.2262, -80.8584], 'IMBABURA': [0.3517, -78.1223], 'COTOPAXI': [-0.9352, -78.6155], 
+            'CARCHI': [0.7384, -77.7289], 'SUCUMBIOS': [0.0847, -76.8828], 'SUCUMBÍOS': [0.0847, -76.8828],
+            'ORELLANA': [-0.5665, -76.9872], 'NAPO': [-0.9902, -77.8129], 'PASTAZA': [-1.4870, -77.9954], 
+            'MORONA SANTIAGO': [-2.3087, -78.1114], 'ZAMORA CHINCHIPE': [-4.0692, -78.9566],
+            'GALAPAGOS': [-0.7402, -90.3119], 'GALÁPAGOS': [-0.7402, -90.3119], 'BOLIVAR': [-1.5910, -79.0022], 
+            'BOLÍVAR': [-1.5910, -79.0022], 'CAÑAR': [-2.5518, -78.9392]
         }
 
         lat_inicial, lon_inicial, zoom_inicial = -1.8312, -78.1834, 7
