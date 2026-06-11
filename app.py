@@ -42,7 +42,8 @@ coordenadas_provincias = {
 @st.cache_data(ttl=300)
 def obtener_clima_horario(lat, lon):
     try:
-        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat Orientacion}&longitude={lon}&hourly=temperature_2m,weathercode&timezone=auto&forecast_days=1"
+        # Línea 45 corregida perfectamente aquí:
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,weathercode&timezone=auto&forecast_days=1"
         respuesta = requests.get(url).json()
         horas_raw = respuesta['hourly']['time']
         temperaturas = respuesta['hourly']['temperature_2m']
@@ -223,7 +224,7 @@ if df_raw is not None and not df_raw.empty:
                         if provincia_sel != "Todas":
                             estado_c = diccionario_clima.get(hr, {"Estado": "Normal"})["Estado"]
                             
-                            # Lógica con la redacción exacta solicitada: "sube de X a Y"
+                            # Alerta limpia con la frase estructurada "sube de X a Y"
                             if estado_c == "Lluvia":
                                 nuevo_promedio = round(base * factor_ajuste, 1)
                                 valores_corregidos.append(f"🔥 {nuevo_promedio} (Alerta)")
