@@ -11,7 +11,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Estilos CSS corporativos limpios para quitar barras nativas sueltas
+# Estilos CSS corporativos limpios para quitar elementos distractores en pantallas de oficina
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -135,6 +135,90 @@ if df_raw is not None and not df_raw.empty:
         resumen_provincias = df_filtrado.groupby(col_provincia).size().reset_index(name='Total')
         resumen_provincias['Promedio'] = (resumen_provincias['Total'] / num_fechas_reales).round(1)
 
+        # 🛠️ DICCIONARIO CORREGIDO Y SINTAXIS BLINDADA 🛠️
         coordenadas_provincias = {
-            'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
-            'MANABI
+            'PICHINCHA': [-0.2298, -78.5249], 
+            'GUAYAS': [-2.1894, -79.8890], 
+            'AZUAY': [-2.9001, -79.0059],
+            'MANABI': [-1.0543, -80.4544], 
+            'MANABÍ': [-1.0543, -80.4544], 
+            'EL ORO': [-3.2581, -79.9553], 
+            'LOJA': [-3.9931, -79.2042], 
+            'TUNGURAHUA': [-1.2491, -78.6168], 
+            'CHIMBORAZO': [-1.6743, -78.6483], 
+            'ESMERALDAS': [0.9682, -79.6517], 
+            'LOS RIOS': [-1.4558, -79.4622], 
+            'LOS RÍOS': [-1.4558, -79.4622],
+            'SANTO DOMINGO DE LOS TSÁCHILAS': [-0.2530, -79.1754], 
+            'SANTO DOMINGO DE LOS TSACHILAS': [-0.2530, -79.1754], 
+            'SANTA ELENA': [-2.2262, -80.8584], 
+            'IMBABURA': [0.3517, -78.1223], 
+            'COTOPAXI': [-0.9352, -78.6155], 
+            'CARCHI': [0.7384, -77.7289], 
+            'SUCUMBIOS': [0.0847, -76.8828], 
+            'SUCUMBÍOS': [0.0847, -76.8828],
+            'ORELLANA': [-0.5665, -76.9872], 
+            'NAPO': [-0.9902, -77.8129], 
+            'PASTAZA': [-1.4870, -77.9954], 
+            'MORONA SANTIAGO': [-2.3087, -78.1114], 
+            'ZAMORA CHINCHIPE': [-4.0692, -78.9566],
+            'GALAPAGOS': [-0.7402, -90.3119], 
+            'GALÁPAGOS': [-0.7402, -90.3119], 
+            'BOLIVAR': [-1.5910, -79.0022], 
+            'BOLÍVAR': [-1.5910, -79.0022], 
+            'CAÑAR': [-2.5518, -78.9392]
+        }
+
+        # LÓGICA DE COORDENADAS: Si filtra provincia hace foco (zoom 9), si pone "Todas" abre el mapa completo (zoom 7)
+        lat_inicial, lon_inicial, zoom_inicial = -1.8312, -78.1834, 7
+        if provincia_sel != "Todas" and provincia_sel in coordenadas_provincias:
+            lat_inicial, lon_inicial = coordenadas_provincias[provincia_sel]
+            zoom_inicial = 9 
+
+        m = folium.Map(location=[lat_inicial, lon_inicial], zoom_start=zoom_inicial, tiles="CartoDB dark_matter")
+
+        for idx, row in resumen_provincias.iterrows():
+            prov = str(row[col_provincia]).strip()
+            prom_prov = float(row['Promedio'])
+            
+            if prov in coordenadas_provincias and prom_prov > 0:
+                radio = min(max(prom_prov * 2.5, 6), 35)
+                
+                folium.CircleMarker(
+                    location=coordenadas_provincias[prov],
+                    radius=radio,
+                    popup=f"<b>Provincia:</b> {prov}<br><b>Promedio Proyectado:</b> {prom_prov} casos",
+                    color="#00FFA6",
+                    fill=True,
+                    fill_color="#0055FF",
+                    fill_opacity=0.65,
+                    weight=2
+                ).add_to(m)
+
+        st_folium(m, width="100%", height=550, key=f"mapa_control_{provincia_sel}")
+
+    # --- LADO DERECHO: CURVA HORARIA TIPO ---
+    with col_derecha:
+        if total_casos_historicos > 0:
+            if col_hora_agrupada in df_filtrado.columns:
+                st.write(f"### ⏰ Casos Promedio Esperados por Hora ({dia_sel})")
+                df_horas = df_filtrado[col_hora_agrupada].value_counts().reset_index()
+                df_horas.columns = [col_hora_agrupada, 'Total_Historico']
+                
+                df_horas['Promedio_Casos'] = (df_horas['Total_Historico'] / num_fechas_reales).round(1)
+                df_horas = df_horas.sort_values(by=col_hora_agrupada)
+                
+                fig_horas = px.bar(
+                    df_horas, 
+                    x=col_hora_agrupada, 
+                    y='Promedio_Casos',
+                    text_auto=True,
+                    labels={'Promedio_Casos': 'Asistencias Promedio'},
+                    color_discrete_sequence=['#00FFA6']
+                )
+                fig_horas.update_layout(height=550, margin=dict(t=10, b=10, l=10, r=10), xaxis_title="Bloque Horario", yaxis_title=None)
+                st.plotly_chart(fig_horas, use_container_width=True)
+        else:
+            st.info("Sin registros suficientes para calcular la curva horaria con la combinación de filtros actual.")
+else:
+    st.warning("⚠️ Esperando conexión con el archivo de Google Drive...")
