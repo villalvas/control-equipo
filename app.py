@@ -6,7 +6,7 @@ from datetime import datetime
 # 1. Configuración de pantalla ultra ancha para el monitor de control
 st.set_page_config(
     layout="wide", 
-    page_title="Monitor de Proyecciones - Semana Tipo",
+    page_title="Monitor de Proyecciones 2026 - Semana Tipo",
     initial_sidebar_state="collapsed"
 )
 
@@ -168,7 +168,8 @@ if df_raw is not None and not df_raw.empty:
     st.markdown("---")
 
     total_casos_historicos = len(df_filtrado)
-    promedio_asistencias_dia = round(total_casos_historicos / num_fechas_reales, 1)
+    # Cambio a Entero en Métrica Principal
+    promedio_asistencias_dia = int(round(total_casos_historicos / num_fechas_reales, 0))
     st.metric(label=f"📊 Casos Promedio Esperados (Día {dia_sel})", value=f"{promedio_asistencias_dia} Asistencias")
 
     st.markdown("---")
@@ -179,9 +180,9 @@ if df_raw is not None and not df_raw.empty:
             if provincia_sel == "Todas":
                 st.write("### 📋 Demanda General por Provincias")
                 df_tabla_prov = df_base_filtros.groupby(col_provincia).size().reset_index(name='Casos Históricos')
-                df_tabla_prov['Promedio Diario Proyectado'] = (df_tabla_prov['Casos Históricos'] / num_fechas_reales).round(1)
+                # Cambio a Entero en Tabla Provincias
+                df_tabla_prov['Promedio Diario Proyectado'] = (df_tabla_prov['Casos Históricos'] / num_fechas_reales).round(0).astype(int)
                 
-                # Configuración de alineación de columnas integrada aquí
                 st.dataframe(
                     df_tabla_prov.sort_values(by='Casos Históricos', ascending=False), 
                     use_container_width=True, 
@@ -189,16 +190,16 @@ if df_raw is not None and not df_raw.empty:
                     column_config={
                         col_provincia: st.column_config.TextColumn(alignment="left"),
                         "Casos Históricos": st.column_config.NumberColumn(alignment="center"),
-                        "Promedio Diario Proyectado": st.column_config.NumberColumn(alignment="center")
+                        "Promedio Diario Proyectado": st.column_config.NumberColumn(alignment="center", format="%d")
                     }
                 )
             else:
                 st.write(f"### 📋 Demanda: Ciudades de {provincia_sel}")
                 if col_ciudad in df_filtrado.columns:
                     df_tabla_ciud = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos Históricos')
-                    df_tabla_ciud['Promedio Diario Proyectado'] = (df_tabla_ciud['Casos Históricos'] / num_fechas_reales).round(1)
+                    # Cambio a Entero en Tabla Ciudades
+                    df_tabla_ciud['Promedio Diario Proyectado'] = (df_tabla_ciud['Casos Históricos'] / num_fechas_reales).round(0).astype(int)
                     
-                    # Configuración de alineación de columnas integrada aquí
                     st.dataframe(
                         df_tabla_ciud.sort_values(by='Casos Históricos', ascending=False), 
                         use_container_width=True, 
@@ -206,7 +207,7 @@ if df_raw is not None and not df_raw.empty:
                         column_config={
                             col_ciudad: st.column_config.TextColumn(alignment="left"),
                             "Casos Históricos": st.column_config.NumberColumn(alignment="center"),
-                            "Promedio Diario Proyectado": st.column_config.NumberColumn(alignment="center")
+                            "Promedio Diario Proyectado": st.column_config.NumberColumn(alignment="center", format="%d")
                         }
                     )
         else:
@@ -218,9 +219,9 @@ if df_raw is not None and not df_raw.empty:
                 st.write("### 📋 Ranking de Servicios con Mayor Demanda")
                 df_origen_servicios = df_base_dia_estado[df_base_dia_estado[col_provincia] == provincia_sel] if provincia_sel != "Todas" else df_base_dia_estado
                 df_tabla_serv = df_origen_servicios.groupby(col_servicio).size().reset_index(name='Casos Históricos')
-                df_tabla_serv['Promedio Diario Proyectado'] = (df_tabla_serv['Casos Históricos'] / num_fechas_reales).round(1)
+                # Cambio a Entero en Tabla Servicios
+                df_tabla_serv['Promedio Diario Proyectado'] = (df_tabla_serv['Casos Históricos'] / num_fechas_reales).round(0).astype(int)
                 
-                # Configuración de alineación de columnas integrada aquí
                 st.dataframe(
                     df_tabla_serv.sort_values(by='Casos Históricos', ascending=False), 
                     use_container_width=True, 
@@ -228,14 +229,15 @@ if df_raw is not None and not df_raw.empty:
                     column_config={
                         col_servicio: st.column_config.TextColumn(alignment="left"),
                         "Casos Históricos": st.column_config.NumberColumn(alignment="center"),
-                        "Promedio Diario Proyectado": st.column_config.NumberColumn(alignment="center")
+                        "Promedio Diario Proyectado": st.column_config.NumberColumn(alignment="center", format="%d")
                     }
                 )
             else:
                 st.write("### ⏰ Casos Promedio vs. Estado del Clima Online")
                 if col_hora_agrupada in df_filtrado.columns:
                     df_tabla_horas = df_filtrado.groupby(col_hora_agrupada).size().reset_index(name='Casos Históricos')
-                    df_tabla_horas['Promedio Base'] = (df_tabla_horas['Casos Históricos'] / num_fechas_reales).round(1)
+                    # Cambio a Entero en Tabla Horaria (Base)
+                    df_tabla_horas['Promedio Base'] = (df_tabla_horas['Casos Históricos'] / num_fechas_reales).round(0).astype(int)
                     
                     df_tabla_horas[col_hora_agrupada] = pd.to_numeric(df_tabla_horas[col_hora_agrupada], errors='coerce')
                     df_tabla_horas = df_tabla_horas.dropna(subset=[col_hora_agrupada]).sort_values(by=col_hora_agrupada, ascending=True)
@@ -257,7 +259,8 @@ if df_raw is not None and not df_raw.empty:
                             estado_c = diccionario_clima.get(hr, {"Estado": "Normal"})["Estado"]
                             
                             if estado_c == "Lluvia":
-                                nuevo_promedio = round(base * factor_ajuste, 1)
+                                # Cambio a Entero en Multiplicador por Lluvia
+                                nuevo_promedio = int(round(base * factor_ajuste, 0))
                                 valores_corregidos.append(f"🔥 {nuevo_promedio} (Alerta)")
                                 if hr > hora_actual and hr <= (hora_actual + 3):
                                     alertas_activas.append(f"🚨 **Alerta de Impacto por Clima Actual [{hr}:00]:** El reporte online detecta Lluvia entrante en {provincia_sel}. Históricamente la demanda de asistencias sube de {base} a {nuevo_promedio} casos. ¡Asegurar disponibilidad de unidades!")
@@ -278,7 +281,6 @@ if df_raw is not None and not df_raw.empty:
                     
                     df_tabla_horas.rename(columns={col_hora_agrupada: "BLOQUE HORARIO"}, inplace=True)
                     
-                    # Configuración de alineación de columnas integrada aquí
                     st.dataframe(
                         df_tabla_horas[['BLOQUE HORARIO', '🌤️ Clima Online', 'Promedio Base', 'Proyección Ajustada']], 
                         use_container_width=True, 
@@ -286,7 +288,7 @@ if df_raw is not None and not df_raw.empty:
                         column_config={
                             "BLOQUE HORARIO": st.column_config.NumberColumn(alignment="center"),
                             "🌤️ Clima Online": st.column_config.TextColumn(alignment="left"),
-                            "Promedio Base": st.column_config.NumberColumn(alignment="center"),
+                            "Promedio Base": st.column_config.NumberColumn(alignment="center", format="%d"),
                             "Proyección Ajustada": st.column_config.TextColumn(alignment="center")
                         }
                     )
