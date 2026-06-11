@@ -42,7 +42,7 @@ coordenadas_provincias = {
 @st.cache_data(ttl=300)
 def obtener_clima_horario(lat, lon):
     try:
-        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,weathercode&timezone=auto&forecast_days=1"
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat Orientacion}&longitude={lon}&hourly=temperature_2m,weathercode&timezone=auto&forecast_days=1"
         respuesta = requests.get(url).json()
         horas_raw = respuesta['hourly']['time']
         temperaturas = respuesta['hourly']['temperature_2m']
@@ -223,12 +223,12 @@ if df_raw is not None and not df_raw.empty:
                         if provincia_sel != "Todas":
                             estado_c = diccionario_clima.get(hr, {"Estado": "Normal"})["Estado"]
                             
-                            # Impacto puro por Clima / Lluvia
+                            # Lógica con la redacción exacta solicitada: "sube de X a Y"
                             if estado_c == "Lluvia":
                                 nuevo_promedio = round(base * factor_ajuste, 1)
                                 valores_corregidos.append(f"🔥 {nuevo_promedio} (Alerta)")
                                 if hr > hora_actual and hr <= (hora_actual + 3):
-                                    alertas_activas.append(f"🚨 **Alerta de Impacto por Clima Actual [{hr}:00]:** El reporte online detecta Lluvia entrante en {provincia_sel}. Históricamente la demanda de asistencias sube a **{nuevo_promedio} casos**. ¡Asegurar disponibilidad de unidades!")
+                                    alertas_activas.append(f"🚨 **Alerta de Impacto por Clima Actual [{hr}:00]:** El reporte online detecta Lluvia entrante en {provincia_sel}. Históricamente la demanda de asistencias sube de {base} a {nuevo_promedio} casos. ¡Asegurar disponibilidad de unidades!")
                             else:
                                 valores_corregidos.append(f"{base} (Normal)")
                         else:
