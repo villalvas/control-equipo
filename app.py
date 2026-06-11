@@ -60,18 +60,15 @@ if df_raw is not None and not df_raw.empty:
         df_raw[col_ciudad] = df_raw[col_ciudad].astype(str).str.strip().str.upper()
 
     # ==========================================
-    # 🎚️ PANEL DE FILTROS EN LA PANTALLA PRINCIPAL
+    # 🎛️ PANEL DE FILTROS EN LA PANTALLA PRINCIPAL
     # ==========================================
     st.write("### 🎛️ Panel de Filtros de Operación")
     f1, f2, f3, f4 = st.columns(4)
     
     with f1:
-        # 🗓️ ORDENACIÓN CRONOLÓGICA DE DÍAS DE LA SEMANA
         dias_en_orden = ["LUNES", "MARTES", "MIÉRCOLES", "MIERCOLES", "JUEVES", "VIERNES", "SÁBADO", "SABADO", "DOMINGO"]
         dias_existentes = df_raw[col_dia].dropna().unique()
-        # Filtrar y ordenar según la lista maestro respetando mayúsculas/acentos
         dias_disponibles = [d for d in dias_en_orden if d in list(df_raw[col_dia].str.upper().unique())]
-        # Si hay días que no coinciden con el mapeo por alguna razón, los agregamos al final
         extras = [d for d in dias_existentes if d.upper() not in dias_en_orden]
         dias_finales = dias_disponibles + extras
         
@@ -82,8 +79,6 @@ if df_raw is not None and not df_raw.empty:
         servicio_sel = st.selectbox("🎯 Seleccionar Servicio:", lista_servicios)
 
     with f3:
-        # 📍 ORDENACIÓN DE PROVINCIAS POR VOLUMEN DE ASISTENCIAS PROMEDIO
-        # Primero calculamos de forma global el peso de cada provincia en la base de datos
         ranking_provincias = df_raw[col_provincia].value_counts().index.tolist()
         lista_provincias = ["Todas"] + ranking_provincias
         provincia_sel = st.selectbox("📍 Seleccionar Provincia:", lista_provincias)
@@ -101,14 +96,12 @@ if df_raw is not None and not df_raw.empty:
     if num_fechas_reales == 0: 
         num_fechas_reales = 1
 
-    # Copia base filtrada por variables principales (sin provincia aún para análisis global)
     df_base_filtros = df_dia_especifico.copy()
     if servicio_sel != "Todos":
         df_base_filtros = df_base_filtros[df_base_filtros[col_servicio] == servicio_sel]
     if estado_sel != "Todos" and col_estado in df_raw.columns:
         df_base_filtros = df_base_filtros[df_base_filtros[col_estado] == estado_sel]
 
-    # DataFrame Final aplicando el filtro de Provincia
     df_filtrado = df_base_filtros.copy()
     if provincia_sel != "Todas":
         df_filtrado = df_filtrado[df_filtrado[col_provincia] == provincia_sel]
@@ -124,26 +117,35 @@ if df_raw is not None and not df_raw.empty:
     st.metric(label=f"📊 Casos Promedio Esperados (Día {dia_sel})", value=f"{promedio_asistencias_dia} Asistencias")
 
     # ==========================================
-    # 📋 TABLAS DINÁMICAS (PROVINCIAS VS CIUDADES)
+    # 📋 SECCIÓN DE TABLAS EN PARALELO (50% | 50%)
     # ==========================================
-    if total_casos_historicos > 0:
-        if provincia_sel == "Todas":
-            st.write("### 📋 Desglose de Demanda General por Provincias")
-            df_tabla = df_base_filtros.groupby(col_provincia).size().reset_index(name='Casos Históricos')
-            df_tabla['Promedio Diario Proyectado'] = (df_tabla['Casos Históricos'] / num_fechas_reales).round(1)
-            df_tabla = df_tabla.sort_values(by='Casos Históricos', ascending=False)
-            st.dataframe(df_tabla, use_container_width=True, hide_index=True)
-        else:
-            st.write(f"### 📋 Desglose de Demanda Interna: Ciudades de {provincia_sel}")
-            if col_ciudad in df_filtrado.columns:
-                df_tabla = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos Históricos')
+    st.markdown("---")
+    col_tabla_izq, col_tabla_der = st.columns([5, 5])
+
+    with col_tabla_izq:
+        if total_casos_historicos > 0:
+            if provincia_sel == "Todas":
+                st.write("### 📋 Demanda General por Provincias")
+                df_tabla = df_base_filtros.groupby(col_provincia).size().reset_index(name='Casos Históricos')
                 df_tabla['Promedio Diario Proyectado'] = (df_tabla['Casos Históricos'] / num_fechas_reales).round(1)
                 df_tabla = df_tabla.sort_values(by='Casos Históricos', ascending=False)
                 st.dataframe(df_tabla, use_container_width=True, hide_index=True)
             else:
-                st.info("No se encontró la columna de Ciudades/Cantones en la base de datos.")
-    else:
-        st.info("Sin registros para estructurar la tabla con los filtros actuales.")
+                st.write(f"### 📋 Demanda: Ciudades de {provincia_sel}")
+                if col_ciudad in df_filtrado.columns:
+                    df_tabla = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos Históricos')
+                    df_tabla['Promedio Diario Proyectado'] = (df_tabla['Casos Históricos'] / num_fechas_reales).round(1)
+                    df_tabla = df_tabla.sort_values(by='Casos Históricos', ascending=False)
+                    st.dataframe(df_tabla, use_container_width=True, hide_index=True)
+                else:
+                    st.info("No se encontró la columna de Ciudades en la base de datos.")
+        else:
+            st.info("Sin registros para estructurar la tabla.")
+
+    with col_tabla_der:
+        st.write("### 📋 Próxima Tabla Adicional (Espacio Libre)")
+        # Dejamos este contenedor al 50% listo para el siguiente requerimiento que necesites agregar al lado
+        st.info("Espacio reservado al 50% para la nueva tabla de control.")
 
     st.markdown("---")
 
@@ -219,7 +221,16 @@ if df_raw is not None and not df_raw.empty:
                     labels={'Promedio_Casos': 'Asistencias Promedio'},
                     color_discrete_sequence=['#00FFA6']
                 )
-                fig_horas.update_layout(height=550, margin=dict(t=10, b=10, l=10, r=10), xaxis_title="Bloque Horario", yaxis_title=None)
+                
+                # 🚀 FORZAR PLOTLY A MOSTRAR ABSOLUTAMENTE TODAS LAS HORAS (dtick=1 y type="category")
+                fig_horas.update_xaxes(type="category", tickmode="linear")
+                
+                fig_horas.update_layout(
+                    height=550, 
+                    margin=dict(t=10, b=10, l=10, r=10), 
+                    xaxis_title="Bloque Horario", 
+                    yaxis_title=None
+                )
                 st.plotly_chart(fig_horas, use_container_width=True)
         else:
             st.info("Sin registros suficientes para calcular la curva horaria con la combinación de filtros actual.")
