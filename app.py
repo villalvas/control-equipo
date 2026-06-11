@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 from datetime import datetime
+import time
 
 # 1. Configuración de pantalla ultra ancha para el monitor de control
 st.set_page_config(
@@ -33,8 +34,15 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
+# 🔄 MECANISMO DE AUTO-REFRESCO AUTOMÁTICO (Cada 5 minutos)
+# Definimos 300 segundos. Esto recargará la app completa de forma invisible para mantener el clima al día.
+if "last_refresh" not in st.session_state:
+    st.session_state.last_refresh = time.time()
+
 st.title("🔮 Monitor de Proyección y Alerta Temprana Operativa")
-st.caption("Centro de Control Geoanalítico con Monitoreo de Clima Online en Tiempo Real")
+
+# Mostrar un pequeño indicador visual discreto del estado del ciclo de 5 min
+st.caption(f"Centro de Control Geoanalítico con Monitoreo de Clima Online | 🔄 Auto-refresco activo cada 5 min (Último: {datetime.now().strftime('%H:%M:%S')})")
 
 coordenadas_provincias = {
     'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
@@ -50,8 +58,8 @@ coordenadas_provincias = {
     'BOLÍVAR': [-1.5910, -79.0022], 'CAÑAR': [-2.5518, -78.9392]
 }
 
-# 🚀 CONSULTA DE CLIMA EN VIVO DESDE LA API ONLINE (CORREGIDA)
-@st.cache_data(ttl=300)
+# 🚀 CONSULTA DE CLIMA EN VIVO DESDE LA API ONLINE
+@st.cache_data(ttl=300) # El caché expira exactamente cada 5 minutos
 def obtener_clima_horario(lat, lon):
     try:
         url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,weathercode&timezone=auto&forecast_days=1"
@@ -67,7 +75,6 @@ def obtener_clima_horario(lat, lon):
             elif codigo in [1, 2, 3]: estado, icono = "Nublado", "☁️"
             elif codigo in [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99]: estado, icono = "Lluvia", "🌧️"
             else: estado, icono = "Nublado", "☁️"
-            # Solucionado: Se cambió 'status' por 'estado' para evitar la falla de conexión
             datos_clima[hora_int] = {"Detalle": f"{icono} {estado} ({temp}°C)", "Icono": icono, "Estado": estado}
         return datos_clima
     except:
@@ -305,5 +312,9 @@ if df_raw is not None and not df_raw.empty:
             st.info("Sin registros para estructurar el análisis analítico derecho.")
 
     st.markdown("---")
+    
+    # ⏱️ Hilo de espera en segundo plano para activar el loop de refresco (300 segundos = 5 minutos)
+    time.sleep(300)
+    st.rerun()
 else:
     st.warning("⚠️ Esperando conexión con el archivo de Google Drive...")
