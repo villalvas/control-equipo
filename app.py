@@ -10,7 +10,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Estilos CSS corporativos limpios
+# Estilos CSS corporativos y modificación de tamaño de letra en tablas
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -18,6 +18,18 @@ st.markdown("""
     header {visibility: hidden;}
     .stDataFrame [data-testid="stDataFrameDownloadButton"] {display: none;}
     button[title="View fullscreen"] {display: none;}
+    
+    /* 🚀 MODIFICACIÓN DE TAMAÑO DE TEXTO EN TABLAS */
+    /* Tamaño de los datos de las celdas */
+    [data-testid="stTable"] td, [data-testid="stDataFrame"] td, div[data-testid="stDataFrame"] [role="gridcell"] {
+        font-size: 16px !important;
+        font-weight: 500 !important;
+    }
+    /* Tamaño de los encabezados de las tablas */
+    [data-testid="stTable"] th, [data-testid="stDataFrame"] th, div[data-testid="stDataFrame"] [role="columnheader"] {
+        font-size: 17px !important;
+        font-weight: bold !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -55,7 +67,7 @@ def obtener_clima_horario(lat, lon):
             elif codigo in [1, 2, 3]: estado, icono = "Nublado", "☁️"
             elif codigo in [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99]: estado, icono = "Lluvia", "🌧️"
             else: estado, icono = "Nublado", "☁️"
-            datos_clima[hora_int] = {"Detalle": f"{icono} {estado} ({temp}°C)", "Icono": icono, "Estado": estado}
+            datos_clima[hora_int] = {"Detalle": f"{icono} {estado} ({temp}°C)", "Icono": icono, "Estado": status}
         return datos_clima
     except:
         return {i: {"Detalle": "⚪ Sin Conexión", "Icono": "⚪", "Estado": "Normal"} for i in range(24)}
@@ -168,7 +180,6 @@ if df_raw is not None and not df_raw.empty:
     st.markdown("---")
 
     total_casos_historicos = len(df_filtrado)
-    # Cambio a Entero en Métrica Principal
     promedio_asistencias_dia = int(round(total_casos_historicos / num_fechas_reales, 0))
     st.metric(label=f"📊 Casos Promedio Esperados (Día {dia_sel})", value=f"{promedio_asistencias_dia} Asistencias")
 
@@ -180,7 +191,6 @@ if df_raw is not None and not df_raw.empty:
             if provincia_sel == "Todas":
                 st.write("### 📋 Demanda General por Provincias")
                 df_tabla_prov = df_base_filtros.groupby(col_provincia).size().reset_index(name='Casos Históricos')
-                # Cambio a Entero en Tabla Provincias
                 df_tabla_prov['Promedio Diario Proyectado'] = (df_tabla_prov['Casos Históricos'] / num_fechas_reales).round(0).astype(int)
                 
                 st.dataframe(
@@ -197,7 +207,6 @@ if df_raw is not None and not df_raw.empty:
                 st.write(f"### 📋 Demanda: Ciudades de {provincia_sel}")
                 if col_ciudad in df_filtrado.columns:
                     df_tabla_ciud = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos Históricos')
-                    # Cambio a Entero en Tabla Ciudades
                     df_tabla_ciud['Promedio Diario Proyectado'] = (df_tabla_ciud['Casos Históricos'] / num_fechas_reales).round(0).astype(int)
                     
                     st.dataframe(
@@ -219,7 +228,6 @@ if df_raw is not None and not df_raw.empty:
                 st.write("### 📋 Ranking de Servicios con Mayor Demanda")
                 df_origen_servicios = df_base_dia_estado[df_base_dia_estado[col_provincia] == provincia_sel] if provincia_sel != "Todas" else df_base_dia_estado
                 df_tabla_serv = df_origen_servicios.groupby(col_servicio).size().reset_index(name='Casos Históricos')
-                # Cambio a Entero en Tabla Servicios
                 df_tabla_serv['Promedio Diario Proyectado'] = (df_tabla_serv['Casos Históricos'] / num_fechas_reales).round(0).astype(int)
                 
                 st.dataframe(
@@ -236,7 +244,6 @@ if df_raw is not None and not df_raw.empty:
                 st.write("### ⏰ Casos Promedio vs. Estado del Clima Online")
                 if col_hora_agrupada in df_filtrado.columns:
                     df_tabla_horas = df_filtrado.groupby(col_hora_agrupada).size().reset_index(name='Casos Históricos')
-                    # Cambio a Entero en Tabla Horaria (Base)
                     df_tabla_horas['Promedio Base'] = (df_tabla_horas['Casos Históricos'] / num_fechas_reales).round(0).astype(int)
                     
                     df_tabla_horas[col_hora_agrupada] = pd.to_numeric(df_tabla_horas[col_hora_agrupada], errors='coerce')
@@ -259,7 +266,6 @@ if df_raw is not None and not df_raw.empty:
                             estado_c = diccionario_clima.get(hr, {"Estado": "Normal"})["Estado"]
                             
                             if estado_c == "Lluvia":
-                                # Cambio a Entero en Multiplicador por Lluvia
                                 nuevo_promedio = int(round(base * factor_ajuste, 0))
                                 valores_corregidos.append(f"🔥 {nuevo_promedio} (Alerta)")
                                 if hr > hora_actual and hr <= (hora_actual + 3):
