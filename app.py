@@ -50,7 +50,7 @@ coordenadas_provincias = {
     'BOLÍVAR': [-1.5910, -79.0022], 'CAÑAR': [-2.5518, -78.9392]
 }
 
-# 🚀 CONSULTA DE CLIMA EN VIVO DESDE LA API ONLINE
+# 🚀 CONSULTA DE CLIMA EN VIVO DESDE LA API ONLINE (CORREGIDA)
 @st.cache_data(ttl=300)
 def obtener_clima_horario(lat, lon):
     try:
@@ -67,7 +67,8 @@ def obtener_clima_horario(lat, lon):
             elif codigo in [1, 2, 3]: estado, icono = "Nublado", "☁️"
             elif codigo in [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99]: estado, icono = "Lluvia", "🌧️"
             else: estado, icono = "Nublado", "☁️"
-            datos_clima[hora_int] = {"Detalle": f"{icono} {estado} ({temp}°C)", "Icono": icono, "Estado": status}
+            # Solucionado: Se cambió 'status' por 'estado' para evitar la falla de conexión
+            datos_clima[hora_int] = {"Detalle": f"{icono} {estado} ({temp}°C)", "Icono": icono, "Estado": estado}
         return datos_clima
     except:
         return {i: {"Detalle": "⚪ Sin Conexión", "Icono": "⚪", "Estado": "Normal"} for i in range(24)}
