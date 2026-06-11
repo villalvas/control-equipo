@@ -42,7 +42,6 @@ coordenadas_provincias = {
 @st.cache_data(ttl=300)
 def obtener_clima_horario(lat, lon):
     try:
-        # Línea 45 corregida perfectamente aquí:
         url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,weathercode&timezone=auto&forecast_days=1"
         respuesta = requests.get(url).json()
         horas_raw = respuesta['hourly']['time']
@@ -181,13 +180,35 @@ if df_raw is not None and not df_raw.empty:
                 st.write("### 📋 Demanda General por Provincias")
                 df_tabla_prov = df_base_filtros.groupby(col_provincia).size().reset_index(name='Casos Históricos')
                 df_tabla_prov['Promedio Diario Proyectado'] = (df_tabla_prov['Casos Históricos'] / num_fechas_reales).round(1)
-                st.dataframe(df_tabla_prov.sort_values(by='Casos Históricos', ascending=False), use_container_width=True, hide_index=True)
+                
+                # Configuración de alineación de columnas integrada aquí
+                st.dataframe(
+                    df_tabla_prov.sort_values(by='Casos Históricos', ascending=False), 
+                    use_container_width=True, 
+                    hide_index=True,
+                    column_config={
+                        col_provincia: st.column_config.TextColumn(alignment="left"),
+                        "Casos Históricos": st.column_config.NumberColumn(alignment="center"),
+                        "Promedio Diario Proyectado": st.column_config.NumberColumn(alignment="center")
+                    }
+                )
             else:
                 st.write(f"### 📋 Demanda: Ciudades de {provincia_sel}")
                 if col_ciudad in df_filtrado.columns:
                     df_tabla_ciud = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos Históricos')
                     df_tabla_ciud['Promedio Diario Proyectado'] = (df_tabla_ciud['Casos Históricos'] / num_fechas_reales).round(1)
-                    st.dataframe(df_tabla_ciud.sort_values(by='Casos Históricos', ascending=False), use_container_width=True, hide_index=True)
+                    
+                    # Configuración de alineación de columnas integrada aquí
+                    st.dataframe(
+                        df_tabla_ciud.sort_values(by='Casos Históricos', ascending=False), 
+                        use_container_width=True, 
+                        hide_index=True,
+                        column_config={
+                            col_ciudad: st.column_config.TextColumn(alignment="left"),
+                            "Casos Históricos": st.column_config.NumberColumn(alignment="center"),
+                            "Promedio Diario Proyectado": st.column_config.NumberColumn(alignment="center")
+                        }
+                    )
         else:
             st.info("Sin registros para estructurar la tabla geográfica.")
 
@@ -198,7 +219,18 @@ if df_raw is not None and not df_raw.empty:
                 df_origen_servicios = df_base_dia_estado[df_base_dia_estado[col_provincia] == provincia_sel] if provincia_sel != "Todas" else df_base_dia_estado
                 df_tabla_serv = df_origen_servicios.groupby(col_servicio).size().reset_index(name='Casos Históricos')
                 df_tabla_serv['Promedio Diario Proyectado'] = (df_tabla_serv['Casos Históricos'] / num_fechas_reales).round(1)
-                st.dataframe(df_tabla_serv.sort_values(by='Casos Históricos', ascending=False), use_container_width=True, hide_index=True)
+                
+                # Configuración de alineación de columnas integrada aquí
+                st.dataframe(
+                    df_tabla_serv.sort_values(by='Casos Históricos', ascending=False), 
+                    use_container_width=True, 
+                    hide_index=True,
+                    column_config={
+                        col_servicio: st.column_config.TextColumn(alignment="left"),
+                        "Casos Históricos": st.column_config.NumberColumn(alignment="center"),
+                        "Promedio Diario Proyectado": st.column_config.NumberColumn(alignment="center")
+                    }
+                )
             else:
                 st.write("### ⏰ Casos Promedio vs. Estado del Clima Online")
                 if col_hora_agrupada in df_filtrado.columns:
@@ -224,7 +256,6 @@ if df_raw is not None and not df_raw.empty:
                         if provincia_sel != "Todas":
                             estado_c = diccionario_clima.get(hr, {"Estado": "Normal"})["Estado"]
                             
-                            # Alerta limpia con la frase estructurada "sube de X a Y"
                             if estado_c == "Lluvia":
                                 nuevo_promedio = round(base * factor_ajuste, 1)
                                 valores_corregidos.append(f"🔥 {nuevo_promedio} (Alerta)")
@@ -246,7 +277,19 @@ if df_raw is not None and not df_raw.empty:
                         st.info("ℹ️ Para activar el análisis de impacto meteorológico en vivo y alertas tempranas, por favor selecciona una Provincia.")
                     
                     df_tabla_horas.rename(columns={col_hora_agrupada: "BLOQUE HORARIO"}, inplace=True)
-                    st.dataframe(df_tabla_horas[['BLOQUE HORARIO', '🌤️ Clima Online', 'Promedio Base', 'Proyección Ajustada']], use_container_width=True, hide_index=True)
+                    
+                    # Configuración de alineación de columnas integrada aquí
+                    st.dataframe(
+                        df_tabla_horas[['BLOQUE HORARIO', '🌤️ Clima Online', 'Promedio Base', 'Proyección Ajustada']], 
+                        use_container_width=True, 
+                        hide_index=True,
+                        column_config={
+                            "BLOQUE HORARIO": st.column_config.NumberColumn(alignment="center"),
+                            "🌤️ Clima Online": st.column_config.TextColumn(alignment="left"),
+                            "Promedio Base": st.column_config.NumberColumn(alignment="center"),
+                            "Proyección Ajustada": st.column_config.TextColumn(alignment="center")
+                        }
+                    )
                 else:
                     st.info("No se localizó la columna de Bloques Horarios en la fuente de datos.")
         else:
