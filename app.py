@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import folium
 from streamlit_folium import st_folium
-import plotly.express as px
 
 # 1. Configuración de pantalla ultra ancha para el monitor de control
 st.set_page_config(
@@ -24,7 +23,7 @@ st.markdown("""
 
 # Título Principal
 st.title("🔮 Monitor de Proyección de Asistencias (Semana Tipo)")
-st.caption("Centro de Control Geoanalítico con Desglose Dinámico de Demanda")
+st.caption("Centro de Control Geoanalítico con Optimización de Tablas en Paralelo")
 
 # Conexión optimizada por GViz
 @st.cache_data(ttl=60)
@@ -54,10 +53,12 @@ if df_raw is not None and not df_raw.empty:
     col_hora_agrupada = "HORA AGRUPADA"
     col_fecha = "FECHA CREACIÓN DE ASISTENCIA" if "FECHA CREACIÓN DE ASISTENCIA" in df_raw.columns else "FECHA CREACION DE ASISTENCIA"
 
-    # Estandarizamos texto de provincias y ciudades
+    # Estandarizamos texto de provincias, ciudades y horas
     df_raw[col_provincia] = df_raw[col_provincia].astype(str).str.strip().str.upper()
     if col_ciudad in df_raw.columns:
         df_raw[col_ciudad] = df_raw[col_ciudad].astype(str).str.strip().str.upper()
+    if col_hora_agrupada in df_raw.columns:
+        df_raw[col_hora_agrupada] = df_raw[col_hora_agrupada].astype(str).str.strip()
 
     # ==========================================
     # 🎛️ PANEL DE FILTROS EN LA PANTALLA PRINCIPAL
@@ -96,17 +97,16 @@ if df_raw is not None and not df_raw.empty:
     if num_fechas_reales == 0: 
         num_fechas_reales = 1
 
-    # Base filtrada solo por Día y Estado (para cálculos de soporte global por servicio)
+    # Filtros base globales
     df_base_dia_estado = df_dia_especifico.copy()
     if estado_sel != "Todos" and col_estado in df_raw.columns:
         df_base_dia_estado = df_base_dia_estado[df_base_dia_estado[col_estado] == estado_sel]
 
-    # DataFrame intermedio aplicando filtro geográfico de provincia
     df_base_filtros = df_base_dia_estado.copy()
     if servicio_sel != "Todos":
         df_base_filtros = df_base_filtros[df_base_filtros[col_servicio] == servicio_sel]
 
-    # DataFrame Final cruzando filtros geográficos y de producto
+    # Cruce definitivo de datos
     df_filtrado = df_base_filtros.copy()
     if provincia_sel != "Todas":
         df_filtrado = df_filtrado[df_filtrado[col_provincia] == provincia_sel]
@@ -127,12 +127,11 @@ if df_raw is not None and not df_raw.empty:
     st.markdown("---")
     col_tabla_izq, col_tabla_der = st.columns([5, 5])
 
-    # COLUMNA IZQUIERDA: CONTROL GEOGRÁFICO (PROVINCIAS O CIUDADES)
+    # COLUMNA IZQUIERDA: UBICACIÓN GEOGRÁFICA (PROVINCIAS O CIUDADES)
     with col_tabla_izq:
         if total_casos_historicos > 0:
             if provincia_sel == "Todas":
                 st.write("### 📋 Demanda General por Provincias")
-                # Agrupamos considerando si ya hay un servicio filtrado o no
                 df_tabla_prov = df_base_filtros.groupby(col_provincia).size().reset_index(name='Casos Históricos')
                 df_tabla_prov['Promedio Diario Proyectado'] = (df_tabla_prov['Casos Históricos'] / num_fechas_reales).round(1)
                 df_tabla_prov = df_tabla_prov.sort_values(by='Casos Históricos', ascending=False)
@@ -149,12 +148,11 @@ if df_raw is not None and not df_raw.empty:
         else:
             st.info("Sin registros para estructurar la tabla geográfica.")
 
-    # COLUMNA DERECHA: CONTROL DE PRODUCTO DINÁMICO (SERVICIOS VS CIUDADES EN FOCO)
+    # COLUMNA DERECHA: REESTRUCTURADA PARA EVITAR DUPLICADOS
     with col_tabla_der:
         if total_casos_historicos > 0:
             if servicio_sel == "Todos":
                 st.write("### 📋 Ranking de Servicios con Mayor Demanda")
-                # Filtramos la tabla de servicios respetando la provincia seleccionada en el otro combo
                 df_origen_servicios = df_base_dia_estado.copy()
                 if provincia_sel != "Todas":
                     df_origen_servicios = df_origen_servicios[df_origen_servicios[col_provincia] == provincia_sel]
@@ -164,102 +162,68 @@ if df_raw is not None and not df_raw.empty:
                 df_tabla_serv = df_tabla_serv.sort_values(by='Casos Históricos', ascending=False)
                 st.dataframe(df_tabla_serv, use_container_width=True, hide_index=True)
             else:
-                st.write(f"### 📋 Ciudades Líderes en: {servicio_sel}")
-                if col_ciudad in df_filtrado.columns:
-                    # Desglose de ciudades enfocado al producto/servicio seleccionado
-                    df_tabla_foco = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos Históricos')
-                    df_tabla_foco['Promedio Diario Proyectado'] = (df_tabla_foco['Casos Históricos'] / num_fechas_reales).round(1)
-                    df_tabla_foco = df_tabla_foco.sort_values(by='Casos Históricos', ascending=False)
-                    st.dataframe(df_tabla_foco, use_container_width=True, hide_index=True)
+                # 🚀 CAMBIO CLAVE: Solicitud cumplida. Mostramos los datos horarios en formato tabla tabular limpia.
+                st.write("### ⏰ Casos Promedio Esperados por Hora")
+                if col_hora_agrupada in df_filtrado.columns:
+                    df_tabla_horas = df_filtrado.groupby(col_hora_agrupada).size().reset_index(name='Casos Históricos')
+                    df_tabla_horas['Promedio Diario Proyectado'] = (df_tabla_horas['Casos Históricos'] / num_fechas_reales).round(1)
+                    df_tabla_horas = df_tabla_horas.sort_values(by=col_hora_agrupada)
+                    st.dataframe(df_tabla_horas, use_container_width=True, hide_index=True)
                 else:
-                    st.info("No se encontró la columna de Ciudades en la base de datos.")
+                    st.info("No se localizó la columna de Bloques Horarios en la fuente de datos.")
         else:
-            st.info("Sin registros para estructurar la tabla de servicios.")
+            st.info("Sin registros para estructurar el análisis analítico derecho.")
 
     st.markdown("---")
 
     # ==========================================
-    # 🗺️ VISUALIZACIONES EN PANTALLA PARTIDA (50% | 50%)
+    # 🗺️ SECCIÓN INFERIOR: MAPA DE CONTROL GEORREFERENCIADO
     # ==========================================
-    col_izquierda, col_derecha = st.columns([5, 5])
+    st.write(f"### 🗺️ Distribución Geográfica de Demanda ({dia_sel})")
+    
+    resumen_provincias = df_filtrado.groupby(col_provincia).size().reset_index(name='Total')
+    resumen_provincias['Promedio'] = (resumen_provincias['Total'] / num_fechas_reales).round(1)
 
-    # --- LADO IZQUIERDO: EL MAPA CON ENFOQUE AUTOMÁTICO ---
-    with col_izquierda:
-        st.write(f"### 🗺️ Distribución Geográfica de Demanda ({dia_sel})")
+    coordenadas_provincias = {
+        'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
+        'MANABI': [-1.0543, -80.4544], 'MANABÍ': [-1.0543, -80.4544], 'EL ORO': [-3.2581, -79.9553], 
+        'LOJA': [-3.9931, -79.2042], 'TUNGURAHUA': [-1.2491, -78.6168], 'CHIMBORAZO': [-1.6743, -78.6483], 
+        'ESMERALDAS': [0.9682, -79.6517], 'LOS RIOS': [-1.4558, -79.4622], 'LOS RÍOS': [-1.4558, -79.4622],
+        'SANTO DOMINGO DE LOS TSÁCHILAS': [-0.2530, -79.1754], 'SANTO DOMINGO DE LOS TSACHILAS': [-0.2530, -79.1754], 
+        'SANTA ELENA': [-2.2262, -80.8584], 'IMBABURA': [0.3517, -78.1223], 'COTOPAXI': [-0.9352, -78.6155], 
+        'CARCHI': [0.7384, -77.7289], 'SUCUMBIOS': [0.0847, -76.8828], 'SUCUMBÍOS': [0.0847, -76.8828],
+        'ORELLANA': [-0.5665, -76.9872], 'NAPO': [-0.9902, -77.8129], 'PASTAZA': [-1.4870, -77.9954], 
+        'MORONA SANTIAGO': [-2.3087, -78.1114], 'ZAMORA CHINCHIPE': [-4.0692, -78.9566],
+        'GALAPAGOS': [-0.7402, -90.3119], 'GALÁPAGOS': [-0.7402, -90.3119], 'BOLIVAR': [-1.5910, -79.0022], 
+        'BOLÍVAR': [-1.5910, -79.0022], 'CAÑAR': [-2.5518, -78.9392]
+    }
+
+    lat_inicial, lon_inicial, zoom_inicial = -1.8312, -78.1834, 7
+    if provincia_sel != "Todas" and provincia_sel in coordenadas_provincias:
+        lat_inicial, lon_inicial = coordenadas_provincias[provincia_sel]
+        zoom_inicial = 9 
+
+    m = folium.Map(location=[lat_inicial, lon_inicial], zoom_start=zoom_inicial, tiles="CartoDB dark_matter")
+
+    for idx, row in resumen_provincias.iterrows():
+        prov = str(row[col_provincia]).strip()
+        prom_prov = float(row['Promedio'])
         
-        resumen_provincias = df_filtrado.groupby(col_provincia).size().reset_index(name='Total')
-        resumen_provincias['Promedio'] = (resumen_provincias['Total'] / num_fechas_reales).round(1)
-
-        coordenadas_provincias = {
-            'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
-            'MANABI': [-1.0543, -80.4544], 'MANABÍ': [-1.0543, -80.4544], 'EL ORO': [-3.2581, -79.9553], 
-            'LOJA': [-3.9931, -79.2042], 'TUNGURAHUA': [-1.2491, -78.6168], 'CHIMBORAZO': [-1.6743, -78.6483], 
-            'ESMERALDAS': [0.9682, -79.6517], 'LOS RIOS': [-1.4558, -79.4622], 'LOS RÍOS': [-1.4558, -79.4622],
-            'SANTO DOMINGO DE LOS TSÁCHILAS': [-0.2530, -79.1754], 'SANTO DOMINGO DE LOS TSACHILAS': [-0.2530, -79.1754], 
-            'SANTA ELENA': [-2.2262, -80.8584], 'IMBABURA': [0.3517, -78.1223], 'COTOPAXI': [-0.9352, -78.6155], 
-            'CARCHI': [0.7384, -77.7289], 'SUCUMBIOS': [0.0847, -76.8828], 'SUCUMBÍOS': [0.0847, -76.8828],
-            'ORELLANA': [-0.5665, -76.9872], 'NAPO': [-0.9902, -77.8129], 'PASTAZA': [-1.4870, -77.9954], 
-            'MORONA SANTIAGO': [-2.3087, -78.1114], 'ZAMORA CHINCHIPE': [-4.0692, -78.9566],
-            'GALAPAGOS': [-0.7402, -90.3119], 'GALÁPAGOS': [-0.7402, -90.3119], 'BOLIVAR': [-1.5910, -79.0022], 
-            'BOLÍVAR': [-1.5910, -79.0022], 'CAÑAR': [-2.5518, -78.9392]
-        }
-
-        lat_inicial, lon_inicial, zoom_inicial = -1.8312, -78.1834, 7
-        if provincia_sel != "Todas" and provincia_sel in coordenadas_provincias:
-            lat_inicial, lon_inicial = coordenadas_provincias[provincia_sel]
-            zoom_inicial = 9 
-
-        m = folium.Map(location=[lat_inicial, lon_inicial], zoom_start=zoom_inicial, tiles="CartoDB dark_matter")
-
-        for idx, row in resumen_provincias.iterrows():
-            prov = str(row[col_provincia]).strip()
-            prom_prov = float(row['Promedio'])
+        if prov in coordenadas_provincias and prom_prov > 0:
+            radio = min(max(prom_prov * 2.5, 6), 35)
             
-            if prov in coordenadas_provincias and prom_prov > 0:
-                radio = min(max(prom_prov * 2.5, 6), 35)
-                
-                folium.CircleMarker(
-                    location=coordenadas_provincias[prov],
-                    radius=radio,
-                    popup=f"<b>Provincia:</b> {prov}<br><b>Promedio Proyectado:</b> {prom_prov} casos",
-                    color="#00FFA6",
-                    fill=True,
-                    fill_color="#0055FF",
-                    fill_opacity=0.65,
-                    weight=2
-                ).add_to(m)
+            folium.CircleMarker(
+                location=coordenadas_provincias[prov],
+                radius=radio,
+                popup=f"<b>Provincia:</b> {prov}<br><b>Promedio Proyectado:</b> {prom_prov} casos",
+                color="#00FFA6",
+                fill=True,
+                fill_color="#0055FF",
+                fill_opacity=0.65,
+                weight=2
+            ).add_to(m)
 
-        st_folium(m, width="100%", height=550, key=f"mapa_control_{provincia_sel}")
+    st_folium(m, width="100%", height=500, key=f"mapa_control_{provincia_sel}")
 
-    # --- LADO DERECHO: CURVA HORARIA TIPO ---
-    with col_derecha:
-        if total_casos_historicos > 0:
-            if col_hora_agrupada in df_filtrado.columns:
-                st.write(f"### ⏰ Casos Promedio Esperados por Hora ({dia_sel})")
-                df_horas = df_filtrado[col_hora_agrupada].value_counts().reset_index()
-                df_horas.columns = [col_hora_agrupada, 'Total_Historico']
-                
-                df_horas['Promedio_Casos'] = (df_horas['Total_Historico'] / num_fechas_reales).round(1)
-                df_horas = df_horas.sort_values(by=col_hora_agrupada)
-                
-                fig_horas = px.bar(
-                    df_horas, 
-                    x=col_hora_agrupada, 
-                    y='Promedio_Casos',
-                    text_auto=True,
-                    labels={'Promedio_Casos': 'Asistencias Promedio'},
-                    color_discrete_sequence=['#00FFA6']
-                )
-                
-                fig_horas.update_xaxes(type="category", tickmode="linear")
-                fig_horas.update_layout(
-                    height=550, 
-                    margin=dict(t=10, b=10, l=10, r=10), 
-                    xaxis_title="Bloque Horario", 
-                    yaxis_title=None
-                )
-                st.plotly_chart(fig_horas, use_container_width=True)
-        else:
-            st.info("Sin registros suficientes para calcular la curva horaria con la combinación de filtros actual.")
 else:
     st.warning("⚠️ Esperando conexión con el archivo de Google Drive...")
