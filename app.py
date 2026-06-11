@@ -60,21 +60,32 @@ if df_raw is not None and not df_raw.empty:
         df_raw[col_ciudad] = df_raw[col_ciudad].astype(str).str.strip().str.upper()
 
     # ==========================================
-    # 🎛️ PANEL DE FILTROS EN LA PANTALLA PRINCIPAL
+    # 🎚️ PANEL DE FILTROS EN LA PANTALLA PRINCIPAL
     # ==========================================
     st.write("### 🎛️ Panel de Filtros de Operación")
     f1, f2, f3, f4 = st.columns(4)
     
     with f1:
-        dias_disponibles = list(df_raw[col_dia].dropna().unique())
-        dia_sel = st.selectbox("📅 Seleccionar Día Tipo:", dias_disponibles)
+        # 🗓️ ORDENACIÓN CRONOLÓGICA DE DÍAS DE LA SEMANA
+        dias_en_orden = ["LUNES", "MARTES", "MIÉRCOLES", "MIERCOLES", "JUEVES", "VIERNES", "SÁBADO", "SABADO", "DOMINGO"]
+        dias_existentes = df_raw[col_dia].dropna().unique()
+        # Filtrar y ordenar según la lista maestro respetando mayúsculas/acentos
+        dias_disponibles = [d for d in dias_en_orden if d in list(df_raw[col_dia].str.upper().unique())]
+        # Si hay días que no coinciden con el mapeo por alguna razón, los agregamos al final
+        extras = [d for d in dias_existentes if d.upper() not in dias_en_orden]
+        dias_finales = dias_disponibles + extras
+        
+        dia_sel = st.selectbox("📅 Seleccionar Día Tipo:", dias_finales)
     
     with f2:
         lista_servicios = ["Todos"] + list(df_raw[col_servicio].dropna().unique())
         servicio_sel = st.selectbox("🎯 Seleccionar Servicio:", lista_servicios)
 
     with f3:
-        lista_provincias = ["Todas"] + sorted(list(df_raw[col_provincia].dropna().unique()))
+        # 📍 ORDENACIÓN DE PROVINCIAS POR VOLUMEN DE ASISTENCIAS PROMEDIO
+        # Primero calculamos de forma global el peso de cada provincia en la base de datos
+        ranking_provincias = df_raw[col_provincia].value_counts().index.tolist()
+        lista_provincias = ["Todas"] + ranking_provincias
         provincia_sel = st.selectbox("📍 Seleccionar Provincia:", lista_provincias)
 
     with f4:
@@ -85,7 +96,7 @@ if df_raw is not None and not df_raw.empty:
             estado_sel = "Todos"
 
     # --- PROCESAMIENTO MATEMÁTICO ---
-    df_dia_especifico = df_raw[df_raw[col_dia] == dia_sel]
+    df_dia_especifico = df_raw[df_raw[col_dia].str.upper() == dia_sel.upper()]
     num_fechas_reales = df_dia_especifico[col_fecha].nunique() if col_fecha in df_dia_especifico.columns else 1
     if num_fechas_reales == 0: 
         num_fechas_reales = 1
@@ -118,7 +129,6 @@ if df_raw is not None and not df_raw.empty:
     if total_casos_historicos > 0:
         if provincia_sel == "Todas":
             st.write("### 📋 Desglose de Demanda General por Provincias")
-            # Agrupar por provincia de mayor a menor
             df_tabla = df_base_filtros.groupby(col_provincia).size().reset_index(name='Casos Históricos')
             df_tabla['Promedio Diario Proyectado'] = (df_tabla['Casos Históricos'] / num_fechas_reales).round(1)
             df_tabla = df_tabla.sort_values(by='Casos Históricos', ascending=False)
@@ -126,7 +136,6 @@ if df_raw is not None and not df_raw.empty:
         else:
             st.write(f"### 📋 Desglose de Demanda Interna: Ciudades de {provincia_sel}")
             if col_ciudad in df_filtrado.columns:
-                # Agrupar por ciudad/cantón de la provincia seleccionada
                 df_tabla = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos Históricos')
                 df_tabla['Promedio Diario Proyectado'] = (df_tabla['Casos Históricos'] / num_fechas_reales).round(1)
                 df_tabla = df_tabla.sort_values(by='Casos Históricos', ascending=False)
