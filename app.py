@@ -4,14 +4,14 @@ import folium
 from streamlit_folium import st_folium
 import plotly.express as px
 
-# 1. Configuración del monitor - Forzamos que la barra lateral permanezca visible
+# 1. Configuración del monitor - Forzamos apertura inicial de la barra lateral
 st.set_page_config(
     layout="wide", 
     page_title="Monitor de Proyecciones - Semana Tipo",
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS limpios para pantallas de monitoreo corporativo
+# Estilos CSS avanzados para obligar al menú izquierdo a quedarse fijo en pantalla
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -19,8 +19,16 @@ st.markdown("""
     header {visibility: hidden;}
     .stDataFrame [data-testid="stDataFrameDownloadButton"] {display: none;}
     button[title="View fullscreen"] {display: none;}
-    /* Asegurar estabilidad visual de la barra lateral */
-    [data-testid="stSidebar"] { min-width: 300px; max-width: 350px; }
+    
+    /* CODIGO DE FUERZA PARA PANTALLA DE MONITOR: Bloquea el menú izquierdo siempre abierto */
+    [data-testid="stSidebar"] {
+        min-width: 320px !important;
+        max-width: 320px !important;
+        position: fixed !important;
+    }
+    [data-testid="stSidebarCollapseButton"] {
+        display: none !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -51,7 +59,7 @@ if st.session_state.modulo_activo == "🏠 Inicio":
 # ==========================================
 if st.session_state.modulo_activo == "🔮 Proyecciones":
     st.title("🔮 Monitor de Proyección de Asistencias (Semana Tipo)")
-    st.caption("Indicadores Promediados por Día y Hora para Planificación de Turnos")
+    st.caption("Indicadores Promediados por Día, Hora y Filtros Operacionales")
 
     # Conexión optimizada por GViz
     @st.cache_data(ttl=60)
@@ -83,32 +91,32 @@ if st.session_state.modulo_activo == "🔮 Proyecciones":
         df_raw[col_provincia] = df_raw[col_provincia].astype(str).str.strip().str.upper()
 
         # ==========================================
-        # INTERFAZ DE FILTROS (SIEMPRE EN LA SIDEBAR)
+        # INTERFAZ DE FILTROS REFORZADA (BARRA LATERAL)
         # ==========================================
         st.sidebar.header("🎛️ Filtros del Monitor")
         
-        # Filtro Obligatorio de Día para calcular la Semana Tipo (Por defecto el primer día disponible)
+        # Filtro 1: Día Tipo (Obligatorio para la Semana Tipo)
         dias_disponibles = list(df_raw[col_dia].dropna().unique())
         dia_sel = st.sidebar.selectbox("Seleccionar Día Tipo:", dias_disponibles)
         
-        # Filtro Opcional de Servicio
+        # Filtro 2: Servicio
         lista_servicios = ["Todos"] + list(df_raw[col_servicio].dropna().unique())
         servicio_sel = st.sidebar.selectbox("Seleccionar Servicio:", lista_servicios)
 
-        # Filtro Opcional de Estado
+        # Filtro 3: Estado de Asistencia (Movido de Gráfico a Filtro de Control)
         if col_estado in df_raw.columns:
             lista_estados = ["Todos"] + list(df_raw[col_estado].dropna().unique())
-            estado_sel = st.sidebar.selectbox("Estado de Asistencia:", lista_estados)
+            estado_sel = st.sidebar.selectbox("Filtrar por Estado:", lista_estados)
         else:
             estado_sel = "Todos"
 
         # --- PROCESAMIENTO MATEMÁTICO EN RAM ---
-        # 1. Filtramos primero por el Día Tipo seleccionado para saber cuántas fechas reales de ese día existen en la historia
+        # 1. Filtramos primero por el Día Tipo seleccionado para calcular las fechas base reales
         df_dia_especifico = df_raw[df_raw[col_dia] == dia_sel]
         num_fechas_reales = df_dia_especifico[col_fecha].nunique() if col_fecha in df_dia_especifico.columns else 1
         if num_fechas_reales == 0: num_fechas_reales = 1
 
-        # 2. Aplicamos el resto de filtros secundarios elegidos por el usuario
+        # 2. Filtramos el resto de variables secundarias seleccionadas en el Menú
         df_filtrado = df_dia_especifico.copy()
         if servicio_sel != "Todos":
             df_filtrado = df_filtrado[df_filtrado[col_servicio] == servicio_sel]
@@ -116,10 +124,9 @@ if st.session_state.modulo_activo == "🔮 Proyecciones":
             df_filtrado = df_filtrado[df_filtrado[col_estado] == estado_sel]
 
         # ==========================================
-        # 📊 INDICADORES CLAVE (PROMEDIOS REALES)
+        # 📊 INDICADORES CLAVE (PROMEDIOS REALES DE LA SEMANA TIPO)
         # ==========================================
         total_casos_historicos = len(df_filtrado)
-        # División matemática: Casos Totales / Cantidad de días evaluados en la historia
         promedio_asistencias_dia = round(total_casos_historicos / num_fechas_reales, 1)
         
         if total_casos_historicos > 0:
@@ -131,7 +138,7 @@ if st.session_state.modulo_activo == "🔮 Proyecciones":
 
         kpi1, kpi2, kpi3 = st.columns(3)
         with kpi1:
-            st.metric(label=f"📅 Asistencias Promedio para un día {dia_sel}", value=f"{promedio_asistencias_dia} Casos / Día")
+            st.metric(label=f"📅 Casos Promedio Esperados (Día {dia_sel})", value=f"{promedio_asistencias_dia} Asistencias")
         with kpi2:
             st.metric(label="🎯 Servicio Mayoritario", value=str(top_servicio)[:22])
         with kpi3:
@@ -140,14 +147,14 @@ if st.session_state.modulo_activo == "🔮 Proyecciones":
         st.markdown("---")
 
         # ==========================================
-        # 🗺️ VISUALIZACIONES: MAPA Y CARGA HORARIA PROMEDIO
+        # 🗺️ VISUALIZACIONES EN PANTALLA PARTIDA (50% | 50%)
         # ==========================================
         col_izquierda, col_derecha = st.columns([5, 5])
 
+        # --- LADO IZQUIERDO: EL MAPA ---
         with col_izquierda:
-            st.write(f"### 🗺️ Demanda Promedio Regional ({dia_sel})")
+            st.write(f"### 🗺️ Distribución Geográfica de Demanda ({dia_sel})")
             
-            # Agrupación por provincia calculando su respectivo promedio diario real
             resumen_provincias = df_filtrado.groupby(col_provincia).size().reset_index(name='Total')
             resumen_provincias['Promedio'] = (resumen_provincias['Total'] / num_fechas_reales).round(1)
 
@@ -172,13 +179,12 @@ if st.session_state.modulo_activo == "🔮 Proyecciones":
                 prom_prov = float(row['Promedio'])
                 
                 if prov in coordenadas_provincias and prom_prov > 0:
-                    # El tamaño de la burbuja ahora responde al promedio diario esperado
                     radio = min(max(prom_prov * 2.5, 6), 35)
                     
                     folium.CircleMarker(
                         location=coordenadas_provincias[prov],
                         radius=radio,
-                        popup=f"<b>Provincia:</b> {prov}<br><b>Promedio Esperado:</b> {prom_prov} casos",
+                        popup=f"<b>Provincia:</b> {prov}<br><b>Promedio Proyectado:</b> {prom_prov} casos",
                         color="#00FFA6",
                         fill=True,
                         fill_color="#0055FF",
@@ -186,47 +192,33 @@ if st.session_state.modulo_activo == "🔮 Proyecciones":
                         weight=2
                     ).add_to(m)
 
-            st_folium(m, width="100%", height=530)
+            st_folium(m, width="100%", height=550)
 
+        # --- LADO DERECHO: CURVA HORARIA TIPO EXPANDIDA ---
         with col_derecha:
             if total_casos_historicos > 0:
-                # Gráfico 1: Carga Promedio por Hora Agrupada para la Semana Tipo
                 if col_hora_agrupada in df_filtrado.columns:
-                    st.write(f"### ⏰ Casos Promedio Esperados por Hora ({dia_sel})")
+                    st.write(f"### ⏰ Curva de Carga Horaria Promedio ({dia_sel})")
                     df_horas = df_filtrado[col_hora_agrupada].value_counts().reset_index()
                     df_horas.columns = [col_hora_agrupada, 'Total_Historico']
                     
-                    # Dividimos el volumen de cada hora para obtener su promedio real por bloque horario
+                    # Cálculo del promedio esperado para cada bloque horario específico
                     df_horas['Promedio_Casos'] = (df_horas['Total_Historico'] / num_fechas_reales).round(1)
                     df_horas = df_horas.sort_values(by=col_hora_agrupada)
                     
+                    # Gráfico a lo alto de la pantalla, ideal para monitores
                     fig_horas = px.bar(
                         df_horas, 
                         x=col_hora_agrupada, 
                         y='Promedio_Casos',
                         text_auto=True,
-                        labels={'Promedio_Casos': 'Casos Promedio'},
+                        labels={'Promedio_Casos': 'Asistencias Promedio'},
                         color_discrete_sequence=['#00FFA6']
                     )
-                    fig_horas.update_layout(height=240, margin=dict(t=10, b=10, l=10, r=10), xaxis_title="Bloque Horario", yaxis_title=None)
+                    # Aumentamos la altura del gráfico a 500 para ocupar el espacio del gráfico de pastel removido
+                    fig_horas.update_layout(height=500, margin=dict(t=10, b=10, l=10, r=10), xaxis_title="Bloque Horario", yaxis_title=None)
                     st.plotly_chart(fig_horas, use_container_width=True)
-                
-                # Gráfico 2: Composición Porcentual de Estatus
-                if col_estado in df_filtrado.columns:
-                    st.write("### 📌 Distribución de Estatus Operativo")
-                    df_status = df_filtrado[col_estado].value_counts().reset_index()
-                    df_status.columns = [col_estado, 'Cantidad']
-                    
-                    fig_status = px.pie(
-                        df_status, 
-                        names=col_estado, 
-                        values='Cantidad',
-                        hole=0.4,
-                        color_discrete_sequence=px.colors.sequential.YlGnBu_r
-                    )
-                    fig_status.update_layout(height=230, margin=dict(t=10, b=10, l=10, r=10), showlegend=True)
-                    st.plotly_chart(fig_status, use_container_width=True)
             else:
-                st.info("Sin registros suficientes para calcular los promedios con los filtros actuales.")
+                st.info("Sin registros suficientes para calcular la curva horaria con la combinación de filtros actual.")
     else:
         st.warning("⚠️ Esperando conexión con el archivo de Google Drive...")
