@@ -207,7 +207,6 @@ if df_raw is not None and not df_raw.empty:
                     df_tabla_horas = df_tabla_horas.dropna(subset=[col_hora_agrupada]).sort_values(by=col_hora_agrupada, ascending=True)
                     df_tabla_horas[col_hora_agrupada] = df_tabla_horas[col_hora_agrupada].astype(int)
                     
-                    # 🚀 ASIGNACIÓN DE CLIMA CONDICIONADA
                     if provincia_sel != "Todas":
                         df_tabla_horas['🌤️ Clima Online'] = df_tabla_horas[col_hora_agrupada].map(lambda x: diccionario_clima.get(x, {"Detalle": "⚪ N/A"})["Detalle"])
                     else:
@@ -221,18 +220,17 @@ if df_raw is not None and not df_raw.empty:
                         hr = row[col_hora_agrupada]
                         base = row['Promedio Base']
                         
-                        # Si hay provincia seleccionada, evaluamos alertas climáticas
                         if provincia_sel != "Todas":
                             estado_c = diccionario_clima.get(hr, {"Estado": "Normal"})["Estado"]
                             if estado_c == "Lluvia":
                                 nuevo_promedio = round(base * factor_ajuste, 1)
                                 valores_corregidos.append(f"🔥 {nuevo_promedio} (Alerta)")
                                 if hr > hora_actual and hr <= (hora_actual + 3):
-                                    alertas_activas.append(f"🚨 **Alerta de Impacto por Clima Actual [{hr}:00]:** El reporte online detecta Lluvia entrante en {provincia_sel}. Históricamente la demanda sube a **{nuevo_promedio} casos** ($\times{factor_ajuste}$).")
+                                    # 🚀 ALERTA OPERATIVA PURA: Eliminados paréntesis y multiplicadores matemáticos confuso
+                                    alertas_activas.append(f"🚨 **Alerta de Impacto por Clima Actual [{hr}:00]:** El reporte online detecta Lluvia entrante en {provincia_sel}. Históricamente la demanda de asistencias sube a **{nuevo_promedio} casos**. ¡Asegurar disponibilidad de unidades!")
                             else:
                                 valores_corregidos.append(f"{base} (Normal)")
                         else:
-                            # Si está en "Todas", la proyección ajustada es simplemente la base normal
                             valores_corregidos.append(f"{base} (Normal)")
                     
                     df_tabla_horas['Proyección Ajustada'] = valores_corregidos
