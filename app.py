@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 
 # 1. Configuración de pantalla ultra ancha para el monitor de control
@@ -35,7 +35,6 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # 🔄 MECANISMO DE AUTO-REFRESCO AUTOMÁTICO (Cada 5 minutos)
-# Definimos 300 segundos. Esto recargará la app completa de forma invisible para mantener el clima al día.
 if "last_refresh" not in st.session_state:
     st.session_state.last_refresh = time.time()
 
@@ -58,11 +57,18 @@ coordenadas_provincias = {
     'BOLÍVAR': [-1.5910, -79.0022], 'CAÑAR': [-2.5518, -78.9392]
 }
 
-# 🚀 CONSULTA DE CLIMA EN VIVO DESDE LA API ONLINE
-@st.cache_data(ttl=300) # El caché expira exactamente cada 5 minutos
-def obtener_clima_horario(lat, lon):
+# Mapeo de días en español para cálculos de fechas
+diccionario_dias = {
+    "LUNES": 0, "MARTES": 1, "MIÉRCOLES": 2, "MIERCOLES": 2, 
+    "JUEVES": 3, "VIERNES": 4, "SÁBADO": 5, "SABADO": 5, "DOMINGO": 6
+}
+
+# 🚀 CONSULTA DE CLIMA EN VIVO DESDE LA API ONLINE (AMPLIADA A 7 DÍAS DE PRONÓSTICO)
+@st.cache_data(ttl=300)
+def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
     try:
-        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,weathercode&timezone=auto&forecast_days=1"
+        # Ampliamos forecast_days a 7 para cubrir toda la semana entrante
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,weathercode&timezone=auto&forecast_days=7"
         respuesta = requests.get(url).json()
         horas_raw = respuesta['hourly']['time']
         temperaturas = respuesta['hourly']['temperature_2m']
@@ -70,13 +76,18 @@ def obtener_clima_horario(lat, lon):
         
         datos_clima = {}
         for h, temp, codigo in zip(horas_raw, temperaturas, codigos_clima):
-            hora_int = int(h.split("T")[1].split(":")[0])
-            if codigo == 0: estado, icono = "Despejado", "☀️"
-            elif codigo in [1, 2, 3]: estado, icono = "Nublado", "☁️"
-            elif codigo in [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99]: estado, icono = "Lluvia", "🌧️"
-            else: estado, icono = "Nublado", "☁️"
-            datos_clima[hora_int] = {"Detalle": f"{icono} {estado} ({temp}°C)", "Icono": icono, "Estado": estado}
-        return datos_clima
+            # h viene en formato "YYYY-MM-DDTHH:MM"
+            fecha_part, hora_part = h.split("T")
+            if fecha_part == fecha_objetivo_str:
+                hora_int = int(hora_part.split(":")[0])
+                if codigo == 0: estado, icono = "Despejado", "☀️"
+                elif codigo in [1, 2, 3]: estado, icono = "Nublado", "☁️"
+                elif codigo in [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99]: estado, icono = "Lluvia", "🌧️"
+                else: estado, icono = "Nublado", "☁️"
+                datos_clima[hora_int] = {"Detalle": f"{icono} {estado} ({temp}°C)", "Icono": icono, "Estado": estado}
+        
+        # Si por alguna razón la fecha queda muy lejos del rango de 7 días, devolvemos vacío para activar el plan B
+        return datos_clima if datos_clima else {i: {"Detalle": "⚪ Sin Predicción", "Icono": "⚪", "Estado": "Normal"} for i in range(24)}
     except:
         return {i: {"Detalle": "⚪ Sin Conexión", "Icono": "⚪", "Estado": "Normal"} for i in range(24)}
 
@@ -156,7 +167,17 @@ if df_raw is not None and not df_raw.empty:
     with f4:
         estado_sel = st.selectbox("📌 Filtrar por Estado:", ["Todos"] + list(df_raw[col_estado].dropna().unique())) if col_estado in df_raw.columns else "Todos"
 
-    # Procesamiento
+    # 🗺️ LÓGICA DE DETECCIÓN DE FECHA FUTURA SEGÚN EL DÍA SELECCIONADO
+    hoy = datetime.now()
+    dia_actual_num = hoy.weekday() # 0=Lunes, 6=Domingo
+    dia_destino_num = diccionario_dias.get(dia_sel.upper(), dia_actual_num)
+    
+    # Calculamos cuántos días faltan para llegar a ese día de la semana objetivo
+    dias_diferencia = (dia_destino_num - dia_actual_num) % 7
+    fecha_target = hoy + timedelta(days=dias_diferencia)
+    fecha_target_str = fecha_target.strftime("%Y-%m-%d")
+
+    # Procesamiento de Data Histórica
     df_dia_especifico = df_raw[df_raw[col_dia].str.upper() == dia_sel.upper()]
     num_fechas_reales = df_dia_especifico[col_fecha].nunique() if col_fecha in df_dia_especifico.columns else 1
     if num_fechas_reales == 0: num_fechas_reales = 1
@@ -174,12 +195,13 @@ if df_raw is not None and not df_raw.empty:
         df_filtrado = df_filtrado[df_filtrado[col_provincia] == provincia_sel]
 
     # Tiempo real operativo
-    hora_actual = datetime.now().hour
+    hora_actual = hoy.hour
 
-    # Lógica de Clima condicionada al Filtro de Provincia
+    # Lógica de Clima condicionada al Filtro de Provincia y Fecha Objetivo
     if provincia_sel != "Todas":
         lat_c, lon_c = coordenadas_provincias.get(provincia_sel, [-0.2298, -78.5249])
-        diccionario_clima = obtener_clima_horario(lat_c, lon_c)
+        # Pasamos la fecha calculada para que extraiga el clima exacto de ese día futuro
+        diccionario_clima = obtener_clima_horario_futuro(lat_c, lon_c, fecha_target_str)
         factor_ajuste = calcular_factor_lluvia_en_vivo(df_filtrado, lat_c, lon_c)
     else:
         diccionario_clima = {}
@@ -249,7 +271,8 @@ if df_raw is not None and not df_raw.empty:
                     }
                 )
             else:
-                st.write("### ⏰ Casos Promedio vs. Estado del Clima Online")
+                # Modificado el título dinámicamente para dar claridad de qué día se muestra el clima
+                st.write(f"### ⏰ Promedios vs. Estado del Clima para el {dia_sel.title()} ({fecha_target.strftime('%d/%m')})")
                 if col_hora_agrupada in df_filtrado.columns:
                     df_tabla_horas = df_filtrado.groupby(col_hora_agrupada).size().reset_index(name='Casos Históricos')
                     df_tabla_horas['Promedio Base'] = (df_tabla_horas['Casos Históricos'] / num_fechas_reales).round(0).astype(int)
@@ -276,7 +299,8 @@ if df_raw is not None and not df_raw.empty:
                             if estado_c == "Lluvia":
                                 nuevo_promedio = int(round(base * factor_ajuste, 0))
                                 valores_corregidos.append(f"🔥 {nuevo_promedio} (Alerta)")
-                                if hr > hora_actual and hr <= (hora_actual + 3):
+                                # Las alertas críticas de despacho inmediato solo saltan si el día seleccionado es HOY
+                                if dias_diferencia == 0 and hr > hora_actual and hr <= (hora_actual + 3):
                                     alertas_activas.append(f"🚨 **Alerta de Impacto por Clima Actual [{hr}:00]:** El reporte online detecta Lluvia entrante en {provincia_sel}. Históricamente la demanda de asistencias sube de {base} a {nuevo_promedio} casos. ¡Asegurar disponibilidad de unidades!")
                             else:
                                 valores_corregidos.append(f"{base} (Normal)")
@@ -289,7 +313,10 @@ if df_raw is not None and not df_raw.empty:
                         if alertas_activas:
                             for alerta in alertas_activas: st.error(alerta)
                         else:
-                            st.success(f"✅ Reporte Online: Clima estable para las próximas horas en {provincia_sel}. Sin alertas meteorológicas.")
+                            if dias_diferencia == 0:
+                                st.success(f"✅ Reporte Online: Clima estable para las próximas horas en {provincia_sel}. Sin alertas meteorológicas.")
+                            else:
+                                st.info(f"ℹ️ Reporte de Planificación: Revisando pronóstico extendido para el día {dia_sel.title()}.")
                     else:
                         st.info("ℹ️ Para activar el análisis de impacto meteorológico en vivo y alertas tempranas, por favor selecciona una Provincia.")
                     
@@ -313,7 +340,7 @@ if df_raw is not None and not df_raw.empty:
 
     st.markdown("---")
     
-    # ⏱️ Hilo de espera en segundo plano para activar el loop de refresco (300 segundos = 5 minutos)
+    # ⏱️ Hilo de espera en segundo plano (300 segundos = 5 minutos)
     time.sleep(300)
     st.rerun()
 else:
