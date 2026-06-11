@@ -41,7 +41,7 @@ coordenadas_provincias = {
 }
 
 # 🚀 CONSULTA DE CLIMA EN VIVO DESDE LA API ONLINE
-@st.cache_data(ttl=300) # Se reduce el tiempo de caché a 5 minutos para detectar cambios climáticos rápidos
+@st.cache_data(ttl=300)
 def obtener_clima_horario(lat, lon):
     try:
         url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,weathercode&timezone=auto&forecast_days=1"
@@ -62,7 +62,7 @@ def obtener_clima_horario(lat, lon):
     except:
         return {i: {"Detalle": "⚪ Sin Conexión", "Icono": "⚪", "Estado": "Normal"} for i in range(24)}
 
-# 🚀 CÁLCULO CIENTÍFICO EN CALIENTE DEL MULTIPLICADOR HISTÓRICO
+# 🚀 CÁLCULO CIENTÍFICO DEL MULTIPLICADOR HISTÓRICO
 @st.cache_data(ttl=3600)
 def calcular_factor_lluvia_en_vivo(df_historico, lat, lon):
     try:
@@ -155,12 +155,14 @@ if df_raw is not None and not df_raw.empty:
     if provincia_sel != "Todas":
         df_filtrado = df_filtrado[df_filtrado[col_provincia] == provincia_sel]
 
-    # Datos de Clima actualizados en tiempo real (Online)
-    provincia_clima = "PICHINCHA" if provincia_sel == "Todas" else provincia_sel
-    lat_c, lon_c = coordenadas_provincias.get(provincia_clima, [-0.2298, -78.5249])
-    diccionario_clima = obtener_clima_horario(lat_c, lon_c)
-    
-    factor_ajuste = calcular_factor_lluvia_en_vivo(df_filtrado, lat_c, lon_c)
+    # Lógica de Clima condicionada al Filtro de Provincia
+    if provincia_sel != "Todas":
+        lat_c, lon_c = coordenadas_provincias.get(provincia_sel, [-0.2298, -78.5249])
+        diccionario_clima = obtener_clima_horario(lat_c, lon_c)
+        factor_ajuste = calcular_factor_lluvia_en_vivo(df_filtrado, lat_c, lon_c)
+    else:
+        diccionario_clima = {}
+        factor_ajuste = 1.0
 
     st.markdown("---")
 
@@ -196,7 +198,6 @@ if df_raw is not None and not df_raw.empty:
                 df_tabla_serv['Promedio Diario Proyectado'] = (df_tabla_serv['Casos Históricos'] / num_fechas_reales).round(1)
                 st.dataframe(df_tabla_serv.sort_values(by='Casos Históricos', ascending=False), use_container_width=True, hide_index=True)
             else:
-                # 🚀 TÍTULO ACTUALIZADO: Refleja que la información de la tabla es Clima Online
                 st.write("### ⏰ Casos Promedio vs. Estado del Clima Online")
                 if col_hora_agrupada in df_filtrado.columns:
                     df_tabla_horas = df_filtrado.groupby(col_hora_agrupada).size().reset_index(name='Casos Históricos')
@@ -206,8 +207,11 @@ if df_raw is not None and not df_raw.empty:
                     df_tabla_horas = df_tabla_horas.dropna(subset=[col_hora_agrupada]).sort_values(by=col_hora_agrupada, ascending=True)
                     df_tabla_horas[col_hora_agrupada] = df_tabla_horas[col_hora_agrupada].astype(int)
                     
-                    # 🚀 ENCABEZADO ACTUALIZADO: Clima Online (En Vivo)
-                    df_tabla_horas['🌤️ Clima Online (En Vivo)'] = df_tabla_horas[col_hora_agrupada].map(lambda x: diccionario_clima.get(x, {"Detalle": "⚪ N/A"})["Detalle"])
+                    # 🚀 ASIGNACIÓN DE CLIMA CONDICIONADA
+                    if provincia_sel != "Todas":
+                        df_tabla_horas['🌤️ Clima Online'] = df_tabla_horas[col_hora_agrupada].map(lambda x: diccionario_clima.get(x, {"Detalle": "⚪ N/A"})["Detalle"])
+                    else:
+                        df_tabla_horas['🌤️ Clima Online'] = "🌍 Nacional (Filtre Provincia)"
                     
                     valores_corregidos = []
                     hora_actual = datetime.now().hour
@@ -216,27 +220,33 @@ if df_raw is not None and not df_raw.empty:
                     for idx, row in df_tabla_horas.iterrows():
                         hr = row[col_hora_agrupada]
                         base = row['Promedio Base']
-                        estado_c = diccionario_clima.get(hr, {"Estado": "Normal"})["Estado"]
                         
-                        if estado_c == "Lluvia":
-                            nuevo_promedio = round(base * factor_ajuste, 1)
-                            valores_corregidos.append(f"🔥 {nuevo_promedio} (Alerta)")
-                            
-                            if hr > hora_actual and hr <= (hora_actual + 3):
-                                # 🚀 ALERTA CORREGIDA: Se alinea al concepto Online en Vivo
-                                alertas_activas.append(f"🚨 **Alerta de Impacto por Clima Actual [{hr}:00]:** El reporte online detecta Lluvia entrante. Históricamente la demanda sube a **{nuevo_promedio} casos** por Factor Climático ($\times{factor_ajuste}$).")
+                        # Si hay provincia seleccionada, evaluamos alertas climáticas
+                        if provincia_sel != "Todas":
+                            estado_c = diccionario_clima.get(hr, {"Estado": "Normal"})["Estado"]
+                            if estado_c == "Lluvia":
+                                nuevo_promedio = round(base * factor_ajuste, 1)
+                                valores_corregidos.append(f"🔥 {nuevo_promedio} (Alerta)")
+                                if hr > hora_actual and hr <= (hora_actual + 3):
+                                    alertas_activas.append(f"🚨 **Alerta de Impacto por Clima Actual [{hr}:00]:** El reporte online detecta Lluvia entrante en {provincia_sel}. Históricamente la demanda sube a **{nuevo_promedio} casos** ($\times{factor_ajuste}$).")
+                            else:
+                                valores_corregidos.append(f"{base} (Normal)")
                         else:
+                            # Si está en "Todas", la proyección ajustada es simplemente la base normal
                             valores_corregidos.append(f"{base} (Normal)")
                     
                     df_tabla_horas['Proyección Ajustada'] = valores_corregidos
                     
-                    if alertas_activas:
-                        for alerta in alertas_activas: st.error(alerta)
+                    if provincia_sel != "Todas":
+                        if alertas_activas:
+                            for alerta in alertas_activas: st.error(alerta)
+                        else:
+                            st.success(f"✅ Reporte Online: Clima estable para las próximas horas en {provincia_sel}. Sin alertas meteorológicas.")
                     else:
-                        st.success(f"✅ Reporte Online: Clima estable para las próximas horas en {provincia_clima}. Sin alertas meteorológicas activos.")
+                        st.info("ℹ️ Para activar el análisis de impacto meteorológico en vivo y alertas tempranas, por favor selecciona una Provincia en el panel superior.")
                     
                     df_tabla_horas.rename(columns={col_hora_agrupada: "BLOQUE HORARIO"}, inplace=True)
-                    st.dataframe(df_tabla_horas[['BLOQUE HORARIO', '🌤️ Clima Online (En Vivo)', 'Promedio Base', 'Proyección Ajustada']], use_container_width=True, hide_index=True)
+                    st.dataframe(df_tabla_horas[['BLOQUE HORARIO', '🌤️ Clima Online', 'Promedio Base', 'Proyección Ajustada']], use_container_width=True, hide_index=True)
                 else:
                     st.info("No se localizó la columna de Bloques Horarios en la fuente de datos.")
         else:
