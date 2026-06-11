@@ -148,7 +148,7 @@ if df_raw is not None and not df_raw.empty:
         else:
             st.info("Sin registros para estructurar la tabla geográfica.")
 
-    # COLUMNA DERECHA: REESTRUCTURADA PARA EVITAR DUPLICADOS
+    # COLUMNA DERECHA: REESTRUCTURADA Y ORDENADA CRONOLÓGICAMENTE
     with col_tabla_der:
         if total_casos_historicos > 0:
             if servicio_sel == "Todos":
@@ -162,12 +162,15 @@ if df_raw is not None and not df_raw.empty:
                 df_tabla_serv = df_tabla_serv.sort_values(by='Casos Históricos', ascending=False)
                 st.dataframe(df_tabla_serv, use_container_width=True, hide_index=True)
             else:
-                # 🚀 CAMBIO CLAVE: Solicitud cumplida. Mostramos los datos horarios en formato tabla tabular limpia.
+                # 🚀 CORRECCIÓN: Ahora se agrupa y se ordena explícitamente de menor a mayor bloque horario
                 st.write("### ⏰ Casos Promedio Esperados por Hora")
                 if col_hora_agrupada in df_filtrado.columns:
                     df_tabla_horas = df_filtrado.groupby(col_hora_agrupada).size().reset_index(name='Casos Históricos')
                     df_tabla_horas['Promedio Diario Proyectado'] = (df_tabla_horas['Casos Históricos'] / num_fechas_reales).round(1)
-                    df_tabla_horas = df_tabla_horas.sort_values(by=col_hora_agrupada)
+                    
+                    # Se fuerza la ordenación cronológica del bloque horario (00, 01, 02... o rangos de texto ordenados)
+                    df_tabla_horas = df_tabla_horas.sort_values(by=col_hora_agrupada, ascending=True)
+                    
                     st.dataframe(df_tabla_horas, use_container_width=True, hide_index=True)
                 else:
                     st.info("No se localizó la columna de Bloques Horarios en la fuente de datos.")
