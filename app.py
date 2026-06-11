@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import folium
 from streamlit_folium import st_folium
+import requests
+from datetime import datetime
 
 # 1. Configuración de pantalla ultra ancha para el monitor de control
 st.set_page_config(
@@ -22,8 +24,53 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # Título Principal
-st.title("🔮 Monitor de Proyección de Asistencias (Semana Tipo)")
-st.caption("Centro de Control Geoanalítico con Optimización de Tablas en Paralelo")
+st.title("🔮 Monitor de Proyección y Alerta Temprana Operativa")
+st.caption("Centro de Control Geoanalítico con Cruce Meteorológico Horario Predictivo")
+
+# Diccionario Global de Coordenadas para Mapa y Clima
+coordenadas_provincias = {
+    'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
+    'MANABI': [-1.0543, -80.4544], 'MANABÍ': [-1.0543, -80.4544], 'EL ORO': [-3.2581, -79.9553], 
+    'LOJA': [-3.9931, -79.2042], 'TUNGURAHUA': [-1.2491, -78.6168], 'CHIMBORAZO': [-1.6743, -78.6483], 
+    'ESMERALDAS': [0.9682, -79.6517], 'LOS RIOS': [-1.4558, -79.4622], 'LOS RÍOS': [-1.4558, -79.4622],
+    'SANTO DOMINGO DE LOS TSÁCHILAS': [-0.2530, -79.1754], 'SANTO DOMINGO DE LOS TSACHILAS': [-0.2530, -79.1754], 
+    'SANTA ELENA': [-2.2262, -80.8584], 'IMBABURA': [0.3517, -78.1223], 'COTOPAXI': [-0.9352, -78.6155], 
+    'CARCHI': [0.7384, -77.7289], 'SUCUMBIOS': [0.0847, -76.8828], 'SUCUMBÍOS': [0.0847, -76.8828],
+    'ORELLANA': [-0.5665, -76.9872], 'NAPO': [-0.9902, -77.8129], 'PASTAZA': [-1.4870, -77.9954], 
+    'MORONA SANTIAGO': [-2.3087, -78.1114], 'ZAMORA CHINCHIPE': [-4.0692, -78.9566],
+    'GALAPAGOS': [-0.7402, -90.3119], 'GALÁPAGOS': [-0.7402, -90.3119], 'BOLIVAR': [-1.5910, -79.0022], 
+    'BOLÍVAR': [-1.5910, -79.0022], 'CAÑAR': [-2.5518, -78.9392]
+}
+
+# 🚀 FUNCIÓN MÁGICA: Consultar clima horario proyectado para hoy de forma gratuita
+@st.cache_data(ttl=900) # Guarda el clima por 15 minutos para no saturar la carga
+def obtener_clima_horario(lat, lon):
+    try:
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,weathercode&timezone=auto&forecast_days=1"
+        respuesta = requests.get(url).json()
+        
+        horas_raw = respuesta['hourly']['time']
+        temperaturas = respuesta['hourly']['temperature_2m']
+        codigos_clima = respuesta['hourly']['weathercode']
+        
+        datos_clima = {}
+        for h, temp, codigo in zip(horas_raw, temperaturas, codigos_clima):
+            # Extraemos solo el entero de la hora (de 0 a 23)
+            hora_int = int(h.split("T")[1].split(":")[0])
+            
+            # Mapeo internacional de códigos meteorológicos WMO a texto e iconos operativos
+            if codigo == 0: estado, icono = "Despejado", "☀️"
+            elif codigo in [1, 2, 3]: estado, icono = "Nublado", "☁️"
+            elif codigo in [51, 53, 55, 61, 63, 65]: estado, icono = "Lluvia", "🌧️"
+            elif codigo in [80, 81, 82]: estado, icono = "Chubascos", "🌦️"
+            elif codigo in [95, 96, 99]: estado, icono = "Tormenta", "⚡"
+            else: estado, icono = "Nublado", "☁️"
+            
+            datos_clima[hora_int] = {"Detalle": f"{icono} {estado} ({temp}°C)", "Icono": icono, "Estado": estado}
+        return datos_clima
+    except:
+        # Retorno seguro en caso de falla de red externa
+        return {i: {"Detalle": "⚪ Sin Datos", "Icono": "⚪", "Estado": "Normal"} for i in range(24)}
 
 # Conexión optimizada por GViz
 @st.cache_data(ttl=60)
@@ -41,10 +88,8 @@ def cargar_datos_vía_gviz():
 df_raw = cargar_datos_vía_gviz()
 
 if df_raw is not None and not df_raw.empty:
-    # Limpieza estándar de nombres de columnas
     df_raw.columns = df_raw.columns.str.strip().str.upper()
 
-    # Mapeo de columnas esenciales de tu Drive
     col_provincia = "PROVINCIA"
     col_ciudad = "CIUDAD" if "CIUDAD" in df_raw.columns else ("CANTON" if "CANTON" in df_raw.columns else "CANTÓN")
     col_servicio = "SERVICIO"
@@ -53,7 +98,6 @@ if df_raw is not None and not df_raw.empty:
     col_hora_agrupada = "HORA AGRUPADA"
     col_fecha = "FECHA CREACIÓN DE ASISTENCIA" if "FECHA CREACIÓN DE ASISTENCIA" in df_raw.columns else "FECHA CREACION DE ASISTENCIA"
 
-    # Estandarizamos texto de provincias y ciudades
     df_raw[col_provincia] = df_raw[col_provincia].astype(str).str.strip().str.upper()
     if col_ciudad in df_raw.columns:
         df_raw[col_ciudad] = df_raw[col_ciudad].astype(str).str.strip().str.upper()
@@ -70,7 +114,6 @@ if df_raw is not None and not df_raw.empty:
         dias_disponibles = [d for d in dias_en_orden if d in list(df_raw[col_dia].str.upper().unique())]
         extras = [d for d in dias_existentes if d.upper() not in dias_en_orden]
         dias_finales = dias_disponibles + extras
-        
         dia_sel = st.selectbox("📅 Seleccionar Día Tipo:", dias_finales)
     
     with f2:
@@ -92,10 +135,8 @@ if df_raw is not None and not df_raw.empty:
     # --- PROCESAMIENTO MATEMÁTICO ---
     df_dia_especifico = df_raw[df_raw[col_dia].str.upper() == dia_sel.upper()]
     num_fechas_reales = df_dia_especifico[col_fecha].nunique() if col_fecha in df_dia_especifico.columns else 1
-    if num_fechas_reales == 0: 
-        num_fechas_reales = 1
+    if num_fechas_reales == 0: num_fechas_reales = 1
 
-    # Filtros base globales
     df_base_dia_estado = df_dia_especifico.copy()
     if estado_sel != "Todos" and col_estado in df_raw.columns:
         df_base_dia_estado = df_base_dia_estado[df_base_dia_estado[col_estado] == estado_sel]
@@ -104,10 +145,14 @@ if df_raw is not None and not df_raw.empty:
     if servicio_sel != "Todos":
         df_base_filtros = df_base_filtros[df_base_filtros[col_servicio] == servicio_sel]
 
-    # Cruce definitivo de datos
     df_filtrado = df_base_filtros.copy()
     if provincia_sel != "Todas":
         df_filtrado = df_filtrado[df_filtrado[col_provincia] == provincia_sel]
+
+    # --- ENRUTAMIENTO DEL CLIMA EN TIEMPO REAL ---
+    provincia_clima = "PICHINCHA" if provincia_sel == "Todas" else provincia_sel
+    lat_c, lon_c = coordenadas_provincias.get(provincia_clima, [-0.2298, -78.5249])
+    diccionario_clima = obtener_clima_horario(lat_c, lon_c)
 
     st.markdown("---")
 
@@ -125,7 +170,6 @@ if df_raw is not None and not df_raw.empty:
     st.markdown("---")
     col_tabla_izq, col_tabla_der = st.columns([5, 5])
 
-    # COLUMNA IZQUIERDA: UBICACIÓN GEOGRÁFICA (PROVINCIAS O CIUDADES)
     with col_tabla_izq:
         if total_casos_historicos > 0:
             if provincia_sel == "Todas":
@@ -146,7 +190,6 @@ if df_raw is not None and not df_raw.empty:
         else:
             st.info("Sin registros para estructurar la tabla geográfica.")
 
-    # COLUMNA DERECHA: SECCIÓN REESTRUCTURADA CON CASTING NUMÉRICO DE HORAS
     with col_tabla_der:
         if total_casos_historicos > 0:
             if servicio_sel == "Todos":
@@ -160,24 +203,40 @@ if df_raw is not None and not df_raw.empty:
                 df_tabla_serv = df_tabla_serv.sort_values(by='Casos Históricos', ascending=False)
                 st.dataframe(df_tabla_serv, use_container_width=True, hide_index=True)
             else:
-                st.write("### ⏰ Casos Promedio Esperados por Hora")
+                st.write("### ⏰ Casos Promedio Esperados por Hora + Clima Proyectado")
                 if col_hora_agrupada in df_filtrado.columns:
-                    # Agrupamos los datos crudos
                     df_tabla_horas = df_filtrado.groupby(col_hora_agrupada).size().reset_index(name='Casos Históricos')
                     df_tabla_horas['Promedio Diario Proyectado'] = (df_tabla_horas['Casos Históricos'] / num_fechas_reales).round(1)
                     
-                    # 🚀 SOLUCIÓN CLAVE: Convertimos temporalmente a número para evitar orden alfabético (1, 10, 11...)
                     df_tabla_horas[col_hora_agrupada] = pd.to_numeric(df_tabla_horas[col_hora_agrupada], errors='coerce')
-                    
-                    # Limpiamos posibles valores vacíos que rompan la ordenación
-                    df_tabla_horas = df_tabla_horas.dropna(subset=[col_hora_agrupada])
-                    
-                    # Ordenamos cronológicamente de forma matemática pura (0, 1, 2, 3...)
-                    df_tabla_horas = df_tabla_horas.sort_values(by=col_hora_agrupada, ascending=True)
-                    
-                    # Opcional: regresamos a formato entero limpio para evitar que se muestre como flotante (0.0, 1.0)
+                    df_tabla_horas = df_tabla_horas.dropna(subset=[col_hora_agrupada]).sort_values(by=col_hora_agrupada, ascending=True)
                     df_tabla_horas[col_hora_agrupada] = df_tabla_horas[col_hora_agrupada].astype(int)
                     
+                    # 🚀 ACOPLAMIENTO PREDICTIVO DEL CLIMA HORA POR HORA
+                    df_tabla_horas['Monitoreo Clima Proyectado'] = df_tabla_horas[col_hora_agrupada].map(lambda x: diccionario_clima.get(x, {"Detalle": "⚪ N/A"})["Detalle"])
+                    
+                    # --- LÓGICA DE ALERTA TEMPRANA EN TIEMPO REAL ---
+                    hora_actual = datetime.now().hour
+                    alertas_activas = []
+                    
+                    for idx, row in df_tabla_horas.iterrows():
+                        hr = row[col_hora_agrupada]
+                        estado_c = diccionario_clima.get(hr, {"Estado": "Normal"})["Estado"]
+                        
+                        # Si es una hora futura cercana (dentro de las próximas 4 horas) y va a llover/tormenta
+                        if hr > hora_actual and hr <= (hora_actual + 4) and estado_c in ["Lluvia", "Tormenta"]:
+                            horas_para_anticiparse = hr - hora_actual
+                            alertas_activas.append(f"⚠️ **Alerta Preventiva:** A las {hr}:00 (en {horas_para_anticiparse} horas) se proyecta **{estado_c}** con una demanda estimada de **{row['Promedio Diario Proyectado']} asistencias**.")
+                    
+                    # Si existen amenazas climáticas, desplegamos el panel operativo de atención
+                    if alertas_activas:
+                        for alerta in alertas_activas:
+                            st.error(alerta)
+                    else:
+                        st.success(f"✅ Control de Clima estable para las próximas horas en {provincia_clima}.")
+                    
+                    # Renombrado de columna para mejorar diseño en pantalla
+                    df_tabla_horas.rename(columns={col_hora_agrupada: "BLOQUE HORARIO"}, inplace=True)
                     st.dataframe(df_tabla_horas, use_container_width=True, hide_index=True)
                 else:
                     st.info("No se localizó la columna de Bloques Horarios en la fuente de datos.")
@@ -194,26 +253,16 @@ if df_raw is not None and not df_raw.empty:
     resumen_provincias = df_filtrado.groupby(col_provincia).size().reset_index(name='Total')
     resumen_provincias['Promedio'] = (resumen_provincias['Total'] / num_fechas_reales).round(1)
 
-    coordenadas_provincias = {
-        'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
-        'MANABI': [-1.0543, -80.4544], 'MANABÍ': [-1.0543, -80.4544], 'EL ORO': [-3.2581, -79.9553], 
-        'LOJA': [-3.9931, -79.2042], 'TUNGURAHUA': [-1.2491, -78.6168], 'CHIMBORAZO': [-1.6743, -78.6483], 
-        'ESMERALDAS': [0.9682, -79.6517], 'LOS RIOS': [-1.4558, -79.4622], 'LOS RÍOS': [-1.4558, -79.4622],
-        'SANTO DOMINGO DE LOS TSÁCHILAS': [-0.2530, -79.1754], 'SANTO DOMINGO DE LOS TSACHILAS': [-0.2530, -79.1754], 
-        'SANTA ELENA': [-2.2262, -80.8584], 'IMBABURA': [0.3517, -78.1223], 'COTOPAXI': [-0.9352, -78.6155], 
-        'CARCHI': [0.7384, -77.7289], 'SUCUMBIOS': [0.0847, -76.8828], 'SUCUMBÍOS': [0.0847, -76.8828],
-        'ORELLANA': [-0.5665, -76.9872], 'NAPO': [-0.9902, -77.8129], 'PASTAZA': [-1.4870, -77.9954], 
-        'MORONA SANTIAGO': [-2.3087, -78.1114], 'ZAMORA CHINCHIPE': [-4.0692, -78.9566],
-        'GALAPAGOS': [-0.7402, -90.3119], 'GALÁPAGOS': [-0.7402, -90.3119], 'BOLIVAR': [-1.5910, -79.0022], 
-        'BOLÍVAR': [-1.5910, -79.0022], 'CAÑAR': [-2.5518, -78.9392]
-    }
-
     lat_inicial, lon_inicial, zoom_inicial = -1.8312, -78.1834, 7
     if provincia_sel != "Todas" and provincia_sel in coordenadas_provincias:
         lat_inicial, lon_inicial = coordenadas_provincias[provincia_sel]
         zoom_inicial = 9 
 
     m = folium.Map(location=[lat_inicial, lon_inicial], zoom_start=zoom_inicial, tiles="CartoDB dark_matter")
+
+    # Activar capa nativa de tráfico en tiempo real si el operador está auditando una provincia específica
+    if provincia_sel != "Todas":
+        folium.TileLayer('cartodb positron', name="Vista Clara").add_to(m)
 
     for idx, row in resumen_provincias.iterrows():
         prov = str(row[col_provincia]).strip()
