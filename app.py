@@ -24,7 +24,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 st.title("🔮 Monitor de Proyección y Alerta Temprana Operativa")
-st.caption("Centro de Control Geoanalítico con Cruce Meteorológico Horario Predictivo")
+st.caption("Centro de Control Geoanalítico con Monitoreo de Clima Online en Tiempo Real")
 
 coordenadas_provincias = {
     'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
@@ -40,8 +40,8 @@ coordenadas_provincias = {
     'BOLÍVAR': [-1.5910, -79.0022], 'CAÑAR': [-2.5518, -78.9392]
 }
 
-# 🚀 CONSULTA DE CLIMA PRESENTE Y FUTURO PARA HOY
-@st.cache_data(ttl=900)
+# 🚀 CONSULTA DE CLIMA EN VIVO DESDE LA API ONLINE
+@st.cache_data(ttl=300) # Se reduce el tiempo de caché a 5 minutos para detectar cambios climáticos rápidos
 def obtener_clima_horario(lat, lon):
     try:
         url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,weathercode&timezone=auto&forecast_days=1"
@@ -60,24 +60,21 @@ def obtener_clima_horario(lat, lon):
             datos_clima[hora_int] = {"Detalle": f"{icono} {estado} ({temp}°C)", "Icono": icono, "Estado": estado}
         return datos_clima
     except:
-        return {i: {"Detalle": "⚪ Sin Datos", "Icono": "⚪", "Estado": "Normal"} for i in range(24)}
+        return {i: {"Detalle": "⚪ Sin Conexión", "Icono": "⚪", "Estado": "Normal"} for i in range(24)}
 
-# 🚀 CONSULTA DEL HISTÓRICO DE AUDITORÍA EN VIVO (Cálculo del Factor Real)
+# 🚀 CÁLCULO CIENTÍFICO EN CALIENTE DEL MULTIPLICADOR HISTÓRICO
 @st.cache_data(ttl=3600)
 def calcular_factor_lluvia_en_vivo(df_historico, lat, lon):
     try:
-        # Tomamos una muestra rápida de los últimos 60 registros del segmento para evaluar velocidad vs impacto
         df_quick = df_historico.dropna(subset=["FECHA CREACIÓN DE ASISTENCIA", "HORA CREACIÓN DE ASISTENCIA"]).tail(60)
         if df_quick.empty:
-            return 1.35 # Factor preventivo base por defecto (+35%)
+            return 1.35
         
         fechas_unicas = df_quick["FECHA CREACIÓN DE ASISTENCIA"].astype(str).str.split().str[0].unique()
-        
-        # Consultamos el bloque de clima de esas fechas pasadas
         lluvias_detectadas = 0
         total_evaluado = 0
         
-        for fecha in fechas_unicas[:4]: # Evaluamos los bloques de días más recientes
+        for fecha in fechas_unicas[:4]:
             url_historial = f"https://archive-api.open-meteo.com/v1/archive?latitude={lat}&longitude={lon}&start_date={fecha}&end_date={fecha}&hourly=weathercode&timezone=auto"
             res = requests.get(url_historial).json()
             if 'hourly' in res:
@@ -87,7 +84,6 @@ def calcular_factor_lluvia_en_vivo(df_historico, lat, lon):
         
         if total_evaluado > 0 and lluvias_detectadas > 0:
             ratio = lluvias_detectadas / total_evaluado
-            # Si históricamente hay alta coincidencia de afectación, calculamos un factor proporcional matemático escalado
             return round(1.2 + (ratio * 1.5), 2)
         return 1.35
     except:
@@ -159,12 +155,11 @@ if df_raw is not None and not df_raw.empty:
     if provincia_sel != "Todas":
         df_filtrado = df_filtrado[df_filtrado[col_provincia] == provincia_sel]
 
-    # Datos de Clima actualizados en vivo
+    # Datos de Clima actualizados en tiempo real (Online)
     provincia_clima = "PICHINCHA" if provincia_sel == "Todas" else provincia_sel
     lat_c, lon_c = coordenadas_provincias.get(provincia_clima, [-0.2298, -78.5249])
     diccionario_clima = obtener_clima_horario(lat_c, lon_c)
     
-    # 💥 CÁLCULO CIENTÍFICO EN CALIENTE DEL MULTIPLICADOR HISTÓRICO
     factor_ajuste = calcular_factor_lluvia_en_vivo(df_filtrado, lat_c, lon_c)
 
     st.markdown("---")
@@ -201,7 +196,8 @@ if df_raw is not None and not df_raw.empty:
                 df_tabla_serv['Promedio Diario Proyectado'] = (df_tabla_serv['Casos Históricos'] / num_fechas_reales).round(1)
                 st.dataframe(df_tabla_serv.sort_values(by='Casos Históricos', ascending=False), use_container_width=True, hide_index=True)
             else:
-                st.write("### ⏰ Proyección con Factor de Impacto Climático ")
+                # 🚀 TÍTULO ACTUALIZADO: Refleja que la información de la tabla es Clima Online
+                st.write("### ⏰ Casos Promedio vs. Estado del Clima Online")
                 if col_hora_agrupada in df_filtrado.columns:
                     df_tabla_horas = df_filtrado.groupby(col_hora_agrupada).size().reset_index(name='Casos Históricos')
                     df_tabla_horas['Promedio Base'] = (df_tabla_horas['Casos Históricos'] / num_fechas_reales).round(1)
@@ -210,10 +206,9 @@ if df_raw is not None and not df_raw.empty:
                     df_tabla_horas = df_tabla_horas.dropna(subset=[col_hora_agrupada]).sort_values(by=col_hora_agrupada, ascending=True)
                     df_tabla_horas[col_hora_agrupada] = df_tabla_horas[col_hora_agrupada].astype(int)
                     
-                    # Pegamos el clima proyectado de hoy
-                    df_tabla_horas['Clima Proyectado'] = df_tabla_horas[col_hora_agrupada].map(lambda x: diccionario_clima.get(x, {"Detalle": "⚪ N/A"})["Detalle"])
+                    # 🚀 ENCABEZADO ACTUALIZADO: Clima Online (En Vivo)
+                    df_tabla_horas['🌤️ Clima Online (En Vivo)'] = df_tabla_horas[col_hora_agrupada].map(lambda x: diccionario_clima.get(x, {"Detalle": "⚪ N/A"})["Detalle"])
                     
-                    # 🚀 RECALCULADO MATEMÁTICO EN VIVO ANTE LA LLUVIA
                     valores_corregidos = []
                     hora_actual = datetime.now().hour
                     alertas_activas = []
@@ -224,12 +219,12 @@ if df_raw is not None and not df_raw.empty:
                         estado_c = diccionario_clima.get(hr, {"Estado": "Normal"})["Estado"]
                         
                         if estado_c == "Lluvia":
-                            # Multiplicamos el promedio base por el factor extraído de la auditoría en caliente
                             nuevo_promedio = round(base * factor_ajuste, 1)
                             valores_corregidos.append(f"🔥 {nuevo_promedio} (Alerta)")
                             
                             if hr > hora_actual and hr <= (hora_actual + 3):
-                                alertas_activas.append(f"🚨 **Alerta Preventiva [{hr}:00]:** En {hr - hora_actual} horas empieza Lluvia. ¡Históricamente tu demanda subirá a **{nuevo_promedio} casos** por Factor de Impacto Climático ($\times{factor_ajuste}$)! Asegura disponibilidad.")
+                                # 🚀 ALERTA CORREGIDA: Se alinea al concepto Online en Vivo
+                                alertas_activas.append(f"🚨 **Alerta de Impacto por Clima Actual [{hr}:00]:** El reporte online detecta Lluvia entrante. Históricamente la demanda sube a **{nuevo_promedio} casos** por Factor Climático ($\times{factor_ajuste}$).")
                         else:
                             valores_corregidos.append(f"{base} (Normal)")
                     
@@ -238,11 +233,12 @@ if df_raw is not None and not df_raw.empty:
                     if alertas_activas:
                         for alerta in alertas_activas: st.error(alerta)
                     else:
-                        st.success(f"✅ Estabilidad operativa para las próximas horas en {provincia_clima}. Sin anomalías climáticas.")
+                        st.success(f"✅ Reporte Online: Clima estable para las próximas horas en {provincia_clima}. Sin alertas meteorológicas activos.")
                     
                     df_tabla_horas.rename(columns={col_hora_agrupada: "BLOQUE HORARIO"}, inplace=True)
-                    # Dejamos visibles solo las columnas operativas más limpias
-                    st.dataframe(df_tabla_horas[['BLOQUE HORARIO', 'Clima Proyectado', 'Promedio Base', 'Proyección Ajustada']], use_container_width=True, hide_index=True)
+                    st.dataframe(df_tabla_horas[['BLOQUE HORARIO', '🌤️ Clima Online (En Vivo)', 'Promedio Base', 'Proyección Ajustada']], use_container_width=True, hide_index=True)
+                else:
+                    st.info("No se localizó la columna de Bloques Horarios en la fuente de datos.")
         else:
             st.info("Sin registros para estructurar el análisis analítico derecho.")
 
