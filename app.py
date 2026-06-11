@@ -11,7 +11,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Estilos CSS corporativos limpios para quitar elementos distractores en pantallas de oficina
+# Estilos CSS corporativos limpios
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -101,25 +101,30 @@ if df_raw is not None and not df_raw.empty:
     st.markdown("---")
 
     # ==========================================
-    # 📊 INDICADORES CLAVE (PROMEDIOS REALES)
+    # 📊 INDICADOR ÚNICO (SOLO PROMEDIO)
     # ==========================================
     total_casos_historicos = len(df_filtrado)
     promedio_asistencias_dia = round(total_casos_historicos / num_fechas_reales, 1)
     
+    # Se muestra únicamente la métrica del promedio solicitado
+    st.metric(label=f"📊 Casos Promedio Esperados (Día {dia_sel})", value=f"{promedio_asistencias_dia} Asistencias")
+
+    # ==========================================
+    # 📋 TABLA DE RESUMEN OPERACIONAL
+    # ==========================================
     if total_casos_historicos > 0:
         top_servicio = df_filtrado[col_servicio].value_counts().idxmax()
         top_provincia = df_filtrado[col_provincia].value_counts().idxmax() if provincia_sel == "Todas" else provincia_sel
+        
+        # Estructuramos los datos quitados en un DataFrame limpio
+        df_resumen = pd.DataFrame({
+            "Métrica Operacional": ["Servicio Mayoritario", "Provincia en Foco", "Total Registros Históricos Analizados"],
+            "Detalle / Resultado": [str(top_servicio), str(top_provincia), f"{total_casos_historicos} casos"]
+        })
+        st.write("### 📋 Resumen de Variables en Foco")
+        st.dataframe(df_resumen, use_container_width=True, hide_index=True)
     else:
-        top_servicio = "---"
-        top_provincia = "---"
-
-    kpi1, kpi2, kpi3 = st.columns(3)
-    with kpi1:
-        st.metric(label=f"📊 Casos Promedio Esperados (Día {dia_sel})", value=f"{promedio_asistencias_dia} Asistencias")
-    with kpi2:
-        st.metric(label="🎯 Servicio Mayoritario", value=str(top_servicio)[:22])
-    with kpi3:
-        st.metric(label="📍 Provincia en Foco", value=str(top_provincia))
+        st.info("No hay suficientes datos con los filtros seleccionados para armar la tabla de resumen.")
 
     st.markdown("---")
 
@@ -135,7 +140,6 @@ if df_raw is not None and not df_raw.empty:
         resumen_provincias = df_filtrado.groupby(col_provincia).size().reset_index(name='Total')
         resumen_provincias['Promedio'] = (resumen_provincias['Total'] / num_fechas_reales).round(1)
 
-        # 🛠️ DICCIONARIO CORREGIDO Y SINTAXIS BLINDADA 🛠️
         coordenadas_provincias = {
             'PICHINCHA': [-0.2298, -78.5249], 
             'GUAYAS': [-2.1894, -79.8890], 
@@ -169,7 +173,6 @@ if df_raw is not None and not df_raw.empty:
             'CAÑAR': [-2.5518, -78.9392]
         }
 
-        # LÓGICA DE COORDENADAS: Si filtra provincia hace foco (zoom 9), si pone "Todas" abre el mapa completo (zoom 7)
         lat_inicial, lon_inicial, zoom_inicial = -1.8312, -78.1834, 7
         if provincia_sel != "Todas" and provincia_sel in coordenadas_provincias:
             lat_inicial, lon_inicial = coordenadas_provincias[provincia_sel]
