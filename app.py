@@ -53,12 +53,10 @@ if df_raw is not None and not df_raw.empty:
     col_hora_agrupada = "HORA AGRUPADA"
     col_fecha = "FECHA CREACIÓN DE ASISTENCIA" if "FECHA CREACIÓN DE ASISTENCIA" in df_raw.columns else "FECHA CREACION DE ASISTENCIA"
 
-    # Estandarizamos texto de provincias, ciudades y horas
+    # Estandarizamos texto de provincias y ciudades
     df_raw[col_provincia] = df_raw[col_provincia].astype(str).str.strip().str.upper()
     if col_ciudad in df_raw.columns:
         df_raw[col_ciudad] = df_raw[col_ciudad].astype(str).str.strip().str.upper()
-    if col_hora_agrupada in df_raw.columns:
-        df_raw[col_hora_agrupada] = df_raw[col_hora_agrupada].astype(str).str.strip()
 
     # ==========================================
     # 🎛️ PANEL DE FILTROS EN LA PANTALLA PRINCIPAL
@@ -148,7 +146,7 @@ if df_raw is not None and not df_raw.empty:
         else:
             st.info("Sin registros para estructurar la tabla geográfica.")
 
-    # COLUMNA DERECHA: REESTRUCTURADA Y ORDENADA CRONOLÓGICAMENTE
+    # COLUMNA DERECHA: SECCIÓN REESTRUCTURADA CON CASTING NUMÉRICO DE HORAS
     with col_tabla_der:
         if total_casos_historicos > 0:
             if servicio_sel == "Todos":
@@ -162,14 +160,23 @@ if df_raw is not None and not df_raw.empty:
                 df_tabla_serv = df_tabla_serv.sort_values(by='Casos Históricos', ascending=False)
                 st.dataframe(df_tabla_serv, use_container_width=True, hide_index=True)
             else:
-                # 🚀 CORRECCIÓN: Ahora se agrupa y se ordena explícitamente de menor a mayor bloque horario
                 st.write("### ⏰ Casos Promedio Esperados por Hora")
                 if col_hora_agrupada in df_filtrado.columns:
+                    # Agrupamos los datos crudos
                     df_tabla_horas = df_filtrado.groupby(col_hora_agrupada).size().reset_index(name='Casos Históricos')
                     df_tabla_horas['Promedio Diario Proyectado'] = (df_tabla_horas['Casos Históricos'] / num_fechas_reales).round(1)
                     
-                    # Se fuerza la ordenación cronológica del bloque horario (00, 01, 02... o rangos de texto ordenados)
+                    # 🚀 SOLUCIÓN CLAVE: Convertimos temporalmente a número para evitar orden alfabético (1, 10, 11...)
+                    df_tabla_horas[col_hora_agrupada] = pd.to_numeric(df_tabla_horas[col_hora_agrupada], errors='coerce')
+                    
+                    # Limpiamos posibles valores vacíos que rompan la ordenación
+                    df_tabla_horas = df_tabla_horas.dropna(subset=[col_hora_agrupada])
+                    
+                    # Ordenamos cronológicamente de forma matemática pura (0, 1, 2, 3...)
                     df_tabla_horas = df_tabla_horas.sort_values(by=col_hora_agrupada, ascending=True)
+                    
+                    # Opcional: regresamos a formato entero limpio para evitar que se muestre como flotante (0.0, 1.0)
+                    df_tabla_horas[col_hora_agrupada] = df_tabla_horas[col_hora_agrupada].astype(int)
                     
                     st.dataframe(df_tabla_horas, use_container_width=True, hide_index=True)
                 else:
