@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo  # 🌍 Librería para controlar zonas horarias
 import time
 
 # 1. Configuración de pantalla ultra ancha para el monitor de control
@@ -38,10 +39,14 @@ st.markdown("""
 if "last_refresh" not in st.session_state:
     st.session_state.last_refresh = time.time()
 
+# Definimos la zona horaria de Ecuador de forma explícita
+zona_ecuador = ZoneInfo("America/Guayaquil")
+hora_ecuador_actual = datetime.now(zona_ecuador)
+
 st.title("🔮 Monitor de Proyección y Alerta Temprana Operativa")
 
-# Mostrar un pequeño indicador visual discreto del estado del ciclo de 5 min
-st.caption(f"Centro de Control Geoanalítico con Monitoreo de Clima Online | 🔄 Auto-refresco activo cada 5 min (Último: {datetime.now().strftime('%H:%M:%S')})")
+# 🧭 SOLUCIONADO: El indicador de auto-refresco ahora muestra la hora local exacta de Ecuador (Formato 12 horas con PM/AM)
+st.caption(f"Centro de Control Geoanalítico con Monitoreo de Clima Online | 🔄 Auto-refresco activo cada 5 min (Último: {hora_ecuador_actual.strftime('%I:%M:%S %p')})")
 
 coordenadas_provincias = {
     'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
@@ -57,17 +62,15 @@ coordenadas_provincias = {
     'BOLÍVAR': [-1.5910, -79.0022], 'CAÑAR': [-2.5518, -78.9392]
 }
 
-# Mapeo de días en español para cálculos de fechas
 diccionario_dias = {
     "LUNES": 0, "MARTES": 1, "MIÉRCOLES": 2, "MIERCOLES": 2, 
     "JUEVES": 3, "VIERNES": 4, "SÁBADO": 5, "SABADO": 5, "DOMINGO": 6
 }
 
-# 🚀 CONSULTA DE CLIMA EN VIVO DESDE LA API ONLINE (AMPLIADA A 7 DÍAS DE PRONÓSTICO)
+# 🚀 CONSULTA DE CLIMA EN VIVO DESDE LA API ONLINE
 @st.cache_data(ttl=300)
 def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
     try:
-        # Ampliamos forecast_days a 7 para cubrir toda la semana entrante
         url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,weathercode&timezone=auto&forecast_days=7"
         respuesta = requests.get(url).json()
         horas_raw = respuesta['hourly']['time']
@@ -76,7 +79,6 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
         
         datos_clima = {}
         for h, temp, codigo in zip(horas_raw, temperaturas, codigos_clima):
-            # h viene en formato "YYYY-MM-DDTHH:MM"
             fecha_part, hora_part = h.split("T")
             if fecha_part == fecha_objetivo_str:
                 hora_int = int(hora_part.split(":")[0])
@@ -86,7 +88,6 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
                 else: estado, icono = "Nublado", "☁️"
                 datos_clima[hora_int] = {"Detalle": f"{icono} {estado} ({temp}°C)", "Icono": icono, "Estado": estado}
         
-        # Si por alguna razón la fecha queda muy lejos del rango de 7 días, devolvemos vacío para activar el plan B
         return datos_clima if datos_clima else {i: {"Detalle": "⚪ Sin Predicción", "Icono": "⚪", "Estado": "Normal"} for i in range(24)}
     except:
         return {i: {"Detalle": "⚪ Sin Conexión", "Icono": "⚪", "Estado": "Normal"} for i in range(24)}
@@ -167,14 +168,12 @@ if df_raw is not None and not df_raw.empty:
     with f4:
         estado_sel = st.selectbox("📌 Filtrar por Estado:", ["Todos"] + list(df_raw[col_estado].dropna().unique())) if col_estado in df_raw.columns else "Todos"
 
-    # 🗺️ LÓGICA DE DETECCIÓN DE FECHA FUTURA SEGÚN EL DÍA SELECCIONADO
-    hoy = datetime.now()
-    dia_actual_num = hoy.weekday() # 0=Lunes, 6=Domingo
+    # Lógica de detección de fecha futura respetando zona horaria local
+    dia_actual_num = hora_ecuador_actual.weekday() 
     dia_destino_num = diccionario_dias.get(dia_sel.upper(), dia_actual_num)
     
-    # Calculamos cuántos días faltan para llegar a ese día de la semana objetivo
     dias_diferencia = (dia_destino_num - dia_actual_num) % 7
-    fecha_target = hoy + timedelta(days=dias_diferencia)
+    fecha_target = hora_ecuador_actual + timedelta(days=dias_diferencia)
     fecha_target_str = fecha_target.strftime("%Y-%m-%d")
 
     # Procesamiento de Data Histórica
@@ -194,13 +193,12 @@ if df_raw is not None and not df_raw.empty:
     if provincia_sel != "Todas":
         df_filtrado = df_filtrado[df_filtrado[col_provincia] == provincia_sel]
 
-    # Tiempo real operativo
-    hora_actual = hoy.hour
+    # Hora actual calculada con base en Ecuador
+    hora_actual = hora_ecuador_actual.hour
 
     # Lógica de Clima condicionada al Filtro de Provincia y Fecha Objetivo
     if provincia_sel != "Todas":
         lat_c, lon_c = coordenadas_provincias.get(provincia_sel, [-0.2298, -78.5249])
-        # Pasamos la fecha calculada para que extraiga el clima exacto de ese día futuro
         diccionario_clima = obtener_clima_horario_futuro(lat_c, lon_c, fecha_target_str)
         factor_ajuste = calcular_factor_lluvia_en_vivo(df_filtrado, lat_c, lon_c)
     else:
@@ -271,7 +269,6 @@ if df_raw is not None and not df_raw.empty:
                     }
                 )
             else:
-                # Modificado el título dinámicamente para dar claridad de qué día se muestra el clima
                 st.write(f"### ⏰ Promedios vs. Estado del Clima para el {dia_sel.title()} ({fecha_target.strftime('%d/%m')})")
                 if col_hora_agrupada in df_filtrado.columns:
                     df_tabla_horas = df_filtrado.groupby(col_hora_agrupada).size().reset_index(name='Casos Históricos')
@@ -299,7 +296,6 @@ if df_raw is not None and not df_raw.empty:
                             if estado_c == "Lluvia":
                                 nuevo_promedio = int(round(base * factor_ajuste, 0))
                                 valores_corregidos.append(f"🔥 {nuevo_promedio} (Alerta)")
-                                # Las alertas críticas de despacho inmediato solo saltan si el día seleccionado es HOY
                                 if dias_diferencia == 0 and hr > hora_actual and hr <= (hora_actual + 3):
                                     alertas_activas.append(f"🚨 **Alerta de Impacto por Clima Actual [{hr}:00]:** El reporte online detecta Lluvia entrante en {provincia_sel}. Históricamente la demanda de asistencias sube de {base} a {nuevo_promedio} casos. ¡Asegurar disponibilidad de unidades!")
                             else:
