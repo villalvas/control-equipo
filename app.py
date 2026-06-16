@@ -86,7 +86,6 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
                 elif codigo in [1, 2, 3]: estado, icono = "Nublado", "☁️"
                 elif codigo in [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99]: estado, icono = "Lluvia", "🌧️"
                 else: estado, icono = "Nublado", "☁️"
-                datos_clima[hora_int] = {"Detalle": f"{icono} {estado} ({temp}°C)", "Icono": icono, "Estado": status for status, state in [("Normal", "Normal")] if False else estado}
                 datos_clima[hora_int] = {"Detalle": f"{icono} {estado} ({temp}°C)", "Icono": icono, "Estado": estado}
         
         return datos_clima if datos_clima else {i: {"Detalle": "⚪ Sin Predicción", "Icono": "⚪", "Estado": "Normal"} for i in range(24)}
@@ -168,10 +167,9 @@ if df_raw is not None and not df_raw.empty:
         lista_provincias = ["Todas"] + df_raw[col_provincia].value_counts().index.tolist()
         provincia_sel = st.selectbox("📍 Seleccionar Provincia:", lista_provincias)
 
-    # 🏙️ NUEVO FILTRO CONCATENADO MULTISELECCIÓN DE CIUDADES
+    # 🏙️ FILTRO CONCATENADO MULTISELECCIÓN DE CIUDADES
     with f4:
         if provincia_sel != "Todas":
-            # Extrae las ciudades que pertenecen exclusivamente a la provincia seleccionada
             ciudades_disponibles = df_raw[df_raw[col_provincia] == provincia_sel][col_ciudad].dropna().unique().tolist()
             ciudades_disponibles = sorted(ciudades_disponibles)
             
@@ -213,11 +211,10 @@ if df_raw is not None and not df_raw.empty:
     if servicio_sel != "Todos":
         df_base_filtros = df_base_filtros[df_base_filtros[col_servicio] == servicio_sel]
 
-    # Aplicación estricta de filtros geográficos concatenados
+    # Aplicación de filtros geográficos concatenados
     df_filtrado = df_base_filtros.copy()
     if provincia_sel != "Todas":
         df_filtrado = df_filtrado[df_filtrado[col_provincia] == provincia_sel]
-        # Si el operador escogió ciudades en el multiselect, filtramos el DataFrame por esa lista (.isin)
         if ciudad_sel:
             df_filtrado = df_filtrado[df_filtrado[col_ciudad].isin(ciudad_sel)]
 
@@ -260,7 +257,6 @@ if df_raw is not None and not df_raw.empty:
                     }
                 )
             else:
-                # Modificado dinámicamente si hay ciudades seleccionadas en el filtro múltiple
                 if ciudad_sel:
                     st.write(f"### 📋 Demanda: Ciudades Seleccionadas de {provincia_sel}")
                 else:
