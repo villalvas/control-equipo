@@ -86,6 +86,7 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
                 elif codigo in [1, 2, 3]: estado, icono = "Nublado", "☁️"
                 elif codigo in [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99]: estado, icono = "Lluvia", "🌧️"
                 else: estado, icono = "Nublado", "☁️"
+                datos_clima[hora_int] = {"Detalle": f"{icono} {estado} ({temp}°C)", "Icono": icono, "Estado": status for status, state in [("Normal", "Normal")] if False else estado}
                 datos_clima[hora_int] = {"Detalle": f"{icono} {estado} ({temp}°C)", "Icono": icono, "Estado": estado}
         
         return datos_clima if datos_clima else {i: {"Detalle": "⚪ Sin Predicción", "Icono": "⚪", "Estado": "Normal"} for i in range(24)}
@@ -145,10 +146,12 @@ if df_raw is not None and not df_raw.empty:
     col_fecha = "FECHA CREACIÓN DE ASISTENCIA" if "FECHA CREACIÓN DE ASISTENCIA" in df_raw.columns else "FECHA CREACION DE ASISTENCIA"
 
     df_raw[col_provincia] = df_raw[col_provincia].astype(str).str.strip().str.upper()
+    if col_ciudad in df_raw.columns:
+        df_raw[col_ciudad] = df_raw[col_ciudad].astype(str).str.strip()
 
-    # Panel de Filtros
+    # Panel de Filtros (Rediseñado dinámicamente de 4 a 5 columnas para alojar las ciudades)
     st.write("### 🎛️ Panel de Filtros de Operación")
-    f1, f2, f3, f4 = st.columns(4)
+    f1, f2, f3, f4, f5 = st.columns([2, 2, 2, 3, 2])
     
     with f1:
         dias_en_orden = ["LUNES", "MARTES", "MIÉRCOLES", "MIERCOLES", "JUEVES", "VIERNES", "SÁBADO", "SABADO", "DOMINGO"]
@@ -165,7 +168,28 @@ if df_raw is not None and not df_raw.empty:
         lista_provincias = ["Todas"] + df_raw[col_provincia].value_counts().index.tolist()
         provincia_sel = st.selectbox("📍 Seleccionar Provincia:", lista_provincias)
 
+    # 🏙️ NUEVO FILTRO CONCATENADO MULTISELECCIÓN DE CIUDADES
     with f4:
+        if provincia_sel != "Todas":
+            # Extrae las ciudades que pertenecen exclusivamente a la provincia seleccionada
+            ciudades_disponibles = df_raw[df_raw[col_provincia] == provincia_sel][col_ciudad].dropna().unique().tolist()
+            ciudades_disponibles = sorted(ciudades_disponibles)
+            
+            ciudad_sel = st.multiselect(
+                "🏙️ Filtrar Ciudades (Una o Varias):",
+                options=ciudades_disponibles,
+                default=[],
+                placeholder="Todas las ciudades"
+            )
+        else:
+            ciudad_sel = st.multiselect(
+                "🏙️ Filtrar Ciudades (Una o Varias):",
+                options=[],
+                disabled=True,
+                placeholder="Filtre por Provincia primero"
+            )
+
+    with f5:
         estado_sel = st.selectbox("📌 Filtrar por Estado:", ["Todos"] + list(df_raw[col_estado].dropna().unique())) if col_estado in df_raw.columns else "Todos"
 
     # Lógica de detección de fecha futura respetando zona horaria local
@@ -189,9 +213,13 @@ if df_raw is not None and not df_raw.empty:
     if servicio_sel != "Todos":
         df_base_filtros = df_base_filtros[df_base_filtros[col_servicio] == servicio_sel]
 
+    # Aplicación estricta de filtros geográficos concatenados
     df_filtrado = df_base_filtros.copy()
     if provincia_sel != "Todas":
         df_filtrado = df_filtrado[df_filtrado[col_provincia] == provincia_sel]
+        # Si el operador escogió ciudades en el multiselect, filtramos el DataFrame por esa lista (.isin)
+        if ciudad_sel:
+            df_filtrado = df_filtrado[df_filtrado[col_ciudad].isin(ciudad_sel)]
 
     # Hora actual calculada con base en Ecuador
     hora_actual = hora_ecuador_actual.hour
@@ -232,7 +260,12 @@ if df_raw is not None and not df_raw.empty:
                     }
                 )
             else:
-                st.write(f"### 📋 Demanda: Ciudades de {provincia_sel}")
+                # Modificado dinámicamente si hay ciudades seleccionadas en el filtro múltiple
+                if ciudad_sel:
+                    st.write(f"### 📋 Demanda: Ciudades Seleccionadas de {provincia_sel}")
+                else:
+                    st.write(f"### 📋 Demanda: Ciudades de {provincia_sel}")
+                    
                 if col_ciudad in df_filtrado.columns:
                     df_tabla_ciud = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos Históricos')
                     df_tabla_ciud['Promedio Diario Proyectado'] = (df_tabla_ciud['Casos Históricos'] / num_fechas_reales).round(0).astype(int)
@@ -254,8 +287,7 @@ if df_raw is not None and not df_raw.empty:
         if total_casos_historicos > 0:
             if servicio_sel == "Todos":
                 st.write("### 📋 Ranking de Servicios con Mayor Demanda")
-                df_origen_servicios = df_base_dia_estado[df_base_dia_estado[col_provincia] == provincia_sel] if provincia_sel != "Todas" else df_base_dia_estado
-                df_tabla_serv = df_origen_servicios.groupby(col_servicio).size().reset_index(name='Casos Históricos')
+                df_tabla_serv = df_filtrado.groupby(col_servicio).size().reset_index(name='Casos Históricos')
                 df_tabla_serv['Promedio Diario Proyectado'] = (df_tabla_serv['Casos Históricos'] / num_fechas_reales).round(0).astype(int)
                 
                 st.dataframe(
@@ -332,12 +364,4 @@ if df_raw is not None and not df_raw.empty:
                 else:
                     st.info("No se localizó la columna de Bloques Horarios en la fuente de datos.")
         else:
-            st.info("Sin registros para estructurar el análisis analítico derecho.")
-
-    st.markdown("---")
-    
-    # ⏱️ Hilo de espera en segundo plano (300 segundos = 5 minutos)
-    time.sleep(300)
-    st.rerun()
-else:
-    st.warning("⚠️ Esperando conexión con el archivo de Google Drive...")
+            st.info("Sin registros
