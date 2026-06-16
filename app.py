@@ -364,4 +364,12 @@ if df_raw is not None and not df_raw.empty:
                 else:
                     st.info("No se localizó la columna de Bloques Horarios en la fuente de datos.")
         else:
-            st.info("Sin registros
+            st.info("Sin registros para estructurar el análisis analítico derecho.")
+
+    st.markdown("---")
+    
+    # ⏱️ Hilo de espera en segundo plano (300 segundos = 5 minutos)
+    time.sleep(300)
+    st.rerun()
+else:
+    st.warning("⚠️ Esperando conexión con el archivo de Google Drive...")
