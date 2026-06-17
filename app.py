@@ -48,13 +48,15 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # Definimos la zona horaria de Ecuador de forma explícita
+# Al calcularse aquí arriba, la hora quedará congelada en la pantalla hasta que ocurra la próxima recarga total
 zona_ecuador = ZoneInfo("America/Guayaquil")
 hora_ecuador_actual = datetime.now(zona_ecuador)
+hora_estatica_str = hora_ecuador_actual.strftime('%I:%M:%S %p')
 
 st.title("🔮 Monitor de Proyección Horaria y Alerta Temprana de Flota")
 
-# Indicador de sincronización en vivo
-st.caption(f"Centro de Control Geoanalítico con Monitoreo de Clima Online | 🔄 Auto-refresco activo cada 5 min (Último: {hora_ecuador_actual.strftime('%I:%M:%S %p')})")
+# Indicador estático (Solo cambia en el segundo exacto que se vuelve a ejecutar todo el código)
+st.caption(f"Centro de Control Geoanalítico con Monitoreo de Clima Online | 🔄 Auto-refresco activo cada 5 min (Último: {hora_estatica_str})")
 
 coordenadas_provincias = {
     'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
@@ -127,7 +129,7 @@ def obtener_alertas_waze_Ecuador_completo():
             subtipo = al.get("subType", "")
             descripcion = al.get("reportDescription", "")
             
-            # Conversión limpia del timestamp de la alerta (pubMillis) a Hora Ecuador
+            # Conversión del timestamp de la alerta (pubMillis) a Hora Ecuador
             millis = al.get("pubMillis", 0)
             if millis > 0:
                 dt_utc = datetime.fromtimestamp(millis / 1000.0, tz=ZoneInfo("UTC"))
@@ -140,7 +142,6 @@ def obtener_alertas_waze_Ecuador_completo():
             icono = "💥" if "ACCIDENT" in tipo or "COLLISION" in tipo else "⚠️"
             detalles = f" ({descripcion})" if descripcion else ""
             
-            # Texto estructurado con timestamp incluido
             texto_alerta = f"{icono} **[{tiempo_str}]** {calle}: {tipo_legible}{detalles}."
             
             palabras_ejes = ["VIA", "VÍA", "PANAMERICANA", "ALOAG", "ALÓAG", "E35", "E25", "E45", "TRONCAL", "PERIMETRAL"]
@@ -168,7 +169,7 @@ def obtener_alertas_waze_Ecuador_completo():
         incidentes_nacionales = ["⚠️ **[WAZE]** Sincronizando flujo nacional con el servidor..."]
         return incidentes_nacionales, incidentes_provinciales
 
-# 🚀 CÁLCULO CIENTÍFICO DEL MULTIPLICADOR HISTÓRICO DE LLUVIA
+# 🚀 CÁLCULO DEL MULTIPLICADOR HISTÓRICO DE LLUVIA
 @st.cache_data(ttl=3600)
 def calcular_factor_lluvia_en_vivo(df_historico, lat, lon):
     try:
@@ -271,7 +272,7 @@ if df_raw is not None and not df_raw.empty:
     with f5:
         estado_sel = st.selectbox("📌 Filtrar por Estado:", ["Todos"] + list(df_raw[col_estado].dropna().unique())) if col_estado in df_raw.columns else "Todos"
 
-    # Configuración de fecha y cálculo de días dependiendo del filtro de Día Tipo
+    # Configuración de fecha dependiendo del filtro de Día Tipo
     if dia_sel.upper() == "TODOS":
         df_dia_especifico = df_raw.copy()
         if col_fecha in df_dia_especifico.columns:
@@ -324,7 +325,7 @@ if df_raw is not None and not df_raw.empty:
 
     st.markdown("---")
 
-    # 🛠️ DIVISIÓN EN 3 GRANDES COLUMNAS ESTRUCTURALES (Métricas/Tablas Izquierda y Centro | Waze Extremo Derecho)
+    # 🛠️ DIVISIÓN EN 3 GRANDES COLUMNAS ESTRUCTURALES
     col_operacion_izq, col_operacion_cen, col_waze_der = st.columns([4, 5, 3])
     
     # --- COLUMNA 1 (IZQUIERDA): METRICAS Y GEOGRAFIA ---
@@ -497,16 +498,13 @@ if df_raw is not None and not df_raw.empty:
     with col_waze_der:
         st.write("### 🛰️ Panel de Tráfico Waze (En Vivo)")
         
-        # Consumo en tiempo real desde el Bounding Box de Waze
         incidentes_nacionales, incidentes_provinciales_dict = obtener_alertas_waze_Ecuador_completo()
         
-        # Subcontenedor 1: Troncales Nacionales
         st.write("---")
         st.markdown("🔗 **Ejes Troncales Nacionales:**")
         for alerta in incidentes_nacionales[:5]:
             st.warning(alerta)
             
-        # Subcontenedor 2: Canales Locales / Provinciales
         st.write("---")
         if provincia_sel == "Todas":
             st.markdown("📍 **Incidentes en Provincias (Todo el País):**")
@@ -537,13 +535,14 @@ if df_raw is not None and not df_raw.empty:
             else:
                 st.success(f"✅ **[WAZE {prov_upper}]** Flujo libre y estable en la zona.")
 
-    # --- FINAL DEL ARCHIVO: SISTEMA DE AUTO-REFRESCO ACTIVO Y REAL ---
+    # --- FINAL DEL ARCHIVO: AUTO-REFRESCO DE TODO EL PANEL (REINICIO TOTAL SECUENCIAL) ---
     st.markdown("---")
     
-    # Fragmento asíncrono configurado a 300 segundos (5 minutos)
+    # Fragmento asíncrono puro de Streamlit que corre cada 5 minutos
     @st.fragment(run_every=300)
     def ejecutar_autorefresh():
-        # Dispara la recarga de toda la página, limpiando cachés expiradas de Waze y Clima
+        # Al llegar el temporizador a cero, st.rerun() reinicia todo el script desde la línea 1.
+        # Esto destruye la vista anterior y genera una estampa de tiempo 100% nueva arriba.
         st.rerun()
         
     ejecutar_autorefresh()
