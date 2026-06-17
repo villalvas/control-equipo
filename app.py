@@ -218,11 +218,9 @@ if df_raw is not None and not df_raw.empty:
     f1, f2, f3, f4, f5 = st.columns([2, 2, 2, 3, 2])
     
     with f1:
-        dias_en_orden = ["LUNES", "MARTES", "MIÉRCOLES", "MIERCOLES", "JUEVES", "VIERNES", "SÁBADO", "SABADO", "DOMINGO"]
-        dias_existentes = df_raw[col_dia].dropna().unique()
-        dias_disponibles = [d for d in dias_en_orden if d in list(df_raw[col_dia].str.upper().unique())]
-        extras = [d for d in dias_existentes if d.upper() not in dias_en_orden]
-        dia_sel = st.selectbox("📅 Seleccionar Día Tipo:", dias_disponibles + extras)
+        # Modificado para comenzar en "Todos" por defecto
+        dias_disponibles_selectbox = ["Todos", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO", "DOMINGO"]
+        dia_sel = st.selectbox("📅 Seleccionar Día Tipo:", dias_disponibles_selectbox, index=0)
     
     with f2:
         lista_servicios = ["Todos"] + list(df_raw[col_servicio].dropna().unique())
@@ -254,14 +252,20 @@ if df_raw is not None and not df_raw.empty:
     with f5:
         estado_sel = st.selectbox("📌 Filtrar por Estado:", ["Todos"] + list(df_raw[col_estado].dropna().unique())) if col_estado in df_raw.columns else "Todos"
 
-    dia_actual_num = hora_ecuador_actual.weekday() 
-    dia_destino_num = diccionario_dias.get(dia_sel.upper(), dia_actual_num)
-    
-    dias_diferencia = (dia_destino_num - dia_actual_num) % 7
-    fecha_target = hora_ecuador_actual + timedelta(days=dias_diferencia)
-    fecha_target_str = fecha_target.strftime("%Y-%m-%d")
+    # Lógica de cálculo de fecha objetivo adaptada al estado "Todos"
+    if dia_sel != "Todos":
+        dia_actual_num = hora_ecuador_actual.weekday() 
+        dia_destino_num = diccionario_dias.get(dia_sel.upper(), dia_actual_num)
+        dias_diferencia = (dia_destino_num - dia_actual_num) % 7
+        fecha_target = hora_ecuador_actual + timedelta(days=dias_diferencia)
+        fecha_target_str = fecha_target.strftime("%Y-%m-%d")
+        
+        df_dia_especifico = df_raw[df_raw[col_dia].str.upper() == dia_sel.upper()]
+    else:
+        dias_diferencia = 0
+        fecha_target_str = hora_ecuador_actual.strftime("%Y-%m-%d")
+        df_dia_especifico = df_raw.copy()
 
-    df_dia_especifico = df_raw[df_raw[col_dia].str.upper() == dia_sel.upper()]
     num_fechas_reales = df_dia_especifico[col_fecha].nunique() if col_fecha in df_dia_especifico.columns else 1
     if num_fechas_reales == 0: num_fechas_reales = 1
 
@@ -293,7 +297,9 @@ if df_raw is not None and not df_raw.empty:
 
     total_casos_historicos = len(df_filtrado)
     promedio_asistencias_dia = int(round(total_casos_historicos / num_fechas_reales, 0))
-    st.metric(label=f"📊 Casos Promedio Esperados (Día {dia_sel})", value=f"{promedio_asistencias_dia} Asistencias")
+    
+    etiqueta_metric = f"📊 Casos Promedio Esperados (Consolidado General)" if dia_sel == "Todos" else f"📊 Casos Promedio Esperados (Día {dia_sel})"
+    st.metric(label=etiqueta_metric, value=f"{promedio_asistencias_dia} Asistencias")
 
     st.markdown("---")
     col_tabla_izq, col_tabla_der = st.columns([4, 6])
@@ -328,7 +334,7 @@ if df_raw is not None and not df_raw.empty:
                     st.dataframe(
                         df_tabla_ciud.sort_values(by='Casos Históricos', ascending=False), 
                         use_container_width=True, 
-                    	hide_index=True,
+                        hide_index=True,
                         column_config={
                             col_ciudad: st.column_config.TextColumn(alignment="left"),
                             "Casos Históricos": st.column_config.NumberColumn(alignment="center"),
@@ -356,7 +362,8 @@ if df_raw is not None and not df_raw.empty:
                     }
                 )
             else:
-                st.write(f"### ⏰ Matriz Horaria Avanzada y Necesidad de Flota para el {dia_sel.title()}")
+                titulo_tabla_der = f"### ⏰ Matriz Horaria Avanzada y Necesidad de Flota (Consolidado)" if dia_sel == "Todos" else f"### ⏰ Matriz Horaria Avanzada y Necesidad de Flota para el {dia_sel.title()}"
+                st.write(titulo_tabla_der)
                 
                 # 📡 SECCIÓN DE ALERTAS DE WAZE REAL ONLINE OPTIMIZADA
                 if provincia_sel != "Todas":
@@ -365,16 +372,15 @@ if df_raw is not None and not df_raw.empty:
                     es_limpio, alertas_waze = obtener_alertas_waze_real(lat_p, lon_p)
                     
                     if es_limpio:
-                        # Muestra el recuadro verde si la vía está 100% limpia o monitoreada de forma estable
                         st.success(alertas_waze[0])
                     else:
                         for alerta in alertas_waze:
                             if "Accidente" in alerta or "Cerrada" in alerta:
-                                st.error(alerta)      # Caja roja para incidencias críticas
+                                st.error(alerta)      
                             elif "Tráfico" in alerta or "Congestión" in alerta:
-                                st.warning(alerta)    # Caja amarilla para demoras vehiculares
+                                st.warning(alerta)    
                             else:
-                                st.info(alerta)       # Caja azul informativa
+                                st.info(alerta)       
                 
                 if col_hora_agrupada in df_filtrado.columns:
                     df_horas_raw = df_filtrado.copy()
@@ -415,7 +421,7 @@ if df_raw is not None and not df_raw.empty:
                                 foraneo_ajustado = base_foraneo * factor_ajuste
                                 total_proyectado_int = int(round(local_ajustado + foraneo_ajustado, 0))
                                 string_proyeccion = f"🔥 {total_proyectado_int} (Alerta)"
-                                if dias_diferencia == 0 and hr > hora_actual and hr <= (hora_actual + 3):
+                                if dia_sel != "Todos" and dias_diferencia == 0 and hr > hora_actual and hr <= (hora_actual + 3):
                                     alertas_activas.append(f"🚨 **Alerta Meteorológica [{hr}:00]:** Lluvia entrante en {provincia_sel}. Demanda estimada subirá a {total_proyectado_int} casos.")
                             else:
                                 local_ajustado = base_local
@@ -453,12 +459,11 @@ if df_raw is not None and not df_raw.empty:
                         if alertas_activas:
                             for alerta in alertas_activas: st.error(alerta)
                         else:
-                            if dias_diferencia == 0:
+                            if dia_sel != "Todos" and dias_diferencia == 0:
                                 st.success(f"✅ Reporte Online: Clima estable para las próximas horas en {provincia_sel}.")
                     else:
                         st.info("ℹ️ Para activar el análisis meteorológico y de tráfico en vivo, selecciona una Provincia.")
                     
-                    # 📊 Único renderizado de la tabla estructurada
                     if not df_tabla_final.empty:
                         st.dataframe(
                             df_tabla_final, 
