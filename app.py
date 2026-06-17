@@ -62,12 +62,11 @@ diccionario_dias = {
     "JUEVES": 3, "VIERNES": 4, "SÁBADO": 5, "SABADO": 5, "DOMINGO": 6
 }
 
-# 🚀 LECTOR AUTOMÁTICO ONLINE EN TIEMPO REAL DESDE EL FEED DE WAZE (CORREGIDO)
+# 🚀 LECTOR AUTOMÁTICO ONLINE EN TIEMPO REAL DESDE EL FEED DE WAZE
 def obtener_alertas_waze_real(lat, lon):
     """
     Consulta en vivo el Live Map de Waze estructurando un cuadrante geográfico exacto y compatible.
     """
-    # Definimos un radio de afectación limpio en grados decimales
     delta_lat = 0.15
     delta_lon = 0.15
     
@@ -96,7 +95,7 @@ def obtener_alertas_waze_real(lat, lon):
             alertas_raw = datos.get("alerts", [])
             
             if not alertas_raw:
-                return ["✅ **Waze Live:** Flujo vial despejado. Sin alertas de tráfico reportadas en los puntos principales de la provincia."]
+                return [True, ["✅ **Waze Live:** Flujo vial despejado sin siniestros críticos reportados en perímetros urbanos."]]
             
             alertas_procesadas = []
             for alert in alertas_raw:
@@ -121,12 +120,11 @@ def obtener_alertas_waze_real(lat, lon):
                     
                 alertas_procesadas.append(f"{icono} **Waze [{titulo}]:** En {ubicacion_str}.")
             
-            return alertas_procesadas[:5]
+            return [False, alertas_procesadas[:5]]
         else:
-            # Reintento alternativo ensanchando un poco el margen si el servidor se satura
-            return ["✅ **Waze Live:** Monitoreando flujo vial regional de forma estable."]
+            return [True, ["✅ **Waze Live:** Monitoreando flujo vial regional de forma estable."]]
     except Exception as e:
-        return ["✅ **Waze Live:** Sincronizando coordenadas locales con el mapa público..."]
+        return [True, ["✅ **Waze Live:** Sincronizando coordenadas locales con el mapa público..."]]
 
 # 🚀 CONSULTA DE CLIMA EN VIVO DESDE LA API ONLINE
 @st.cache_data(ttl=300)
@@ -330,7 +328,7 @@ if df_raw is not None and not df_raw.empty:
                     st.dataframe(
                         df_tabla_ciud.sort_values(by='Casos Históricos', ascending=False), 
                         use_container_width=True, 
-                        hide_index=True,
+                    	hide_index=True,
                         column_config={
                             col_ciudad: st.column_config.TextColumn(alignment="left"),
                             "Casos Históricos": st.column_config.NumberColumn(alignment="center"),
@@ -364,14 +362,19 @@ if df_raw is not None and not df_raw.empty:
                 if provincia_sel != "Todas":
                     st.write("#### 📡 Reportes de Tráfico Waze (Live Online)")
                     lat_p, lon_p = coordenadas_provincias.get(provincia_sel, [-0.2298, -78.5249])
-                    alertas_waze = obtener_alertas_waze_real(lat_p, lon_p)
-                    for alerta in alertas_waze:
-                        if "Accidente" in alerta or "Cerrada" in alerta:
-                            st.error(alerta)      # Caja roja para incidencias críticas
-                        elif "Tráfico" in alerta or "Congestión" in alerta:
-                            st.warning(alerta)    # Caja amarilla para demoras vehiculares
-                        else:
-                            st.info(alerta)       # Caja azul informativa para flujo normal / actualizaciones
+                    es_limpio, alertas_waze = obtener_alertas_waze_real(lat_p, lon_p)
+                    
+                    if es_limpio:
+                        # Muestra el recuadro verde si la vía está 100% limpia o monitoreada de forma estable
+                        st.success(alertas_waze[0])
+                    else:
+                        for alerta in alertas_waze:
+                            if "Accidente" in alerta or "Cerrada" in alerta:
+                                st.error(alerta)      # Caja roja para incidencias críticas
+                            elif "Tráfico" in alerta or "Congestión" in alerta:
+                                st.warning(alerta)    # Caja amarilla para demoras vehiculares
+                            else:
+                                st.info(alerta)       # Caja azul informativa
                 
                 if col_hora_agrupada in df_filtrado.columns:
                     df_horas_raw = df_filtrado.copy()
