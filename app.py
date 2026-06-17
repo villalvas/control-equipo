@@ -34,10 +34,6 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 🔄 Mecanismo de auto-refresco automático (Cada 5 minutos)
-if "last_refresh" not in st.session_state:
-    st.session_state.last_refresh = time.time()
-
 # Definimos la zona horaria de Ecuador de forma explícita
 zona_ecuador = ZoneInfo("America/Guayaquil")
 hora_ecuador_actual = datetime.now(zona_ecuador)
@@ -142,13 +138,12 @@ if df_raw is not None and not df_raw.empty:
     col_estado = "ESTADO DE ASISTENCIA"
     col_hora_agrupada = "HORA AGRUPADA"
     col_fecha = "FECHA CREACIÓN DE ASISTENCIA" if "FECHA CREACIÓN DE ASISTENCIA" in df_raw.columns else "FECHA CREACION DE ASISTENCIA"
-    col_cobertura = "TIPO COBERTURA"  # Mapeo de la columna en Google Drive
+    col_cobertura = "TIPO COBERTURA"
 
     df_raw[col_provincia] = df_raw[col_provincia].astype(str).str.strip().str.upper()
     if col_ciudad in df_raw.columns:
         df_raw[col_ciudad] = df_raw[col_ciudad].astype(str).str.strip()
 
-    # Estandarización de la columna de cobertura de manera preventiva
     if col_cobertura in df_raw.columns:
         df_raw[col_cobertura] = df_raw[col_cobertura].astype(str).str.strip().str.upper()
     else:
@@ -195,7 +190,6 @@ if df_raw is not None and not df_raw.empty:
     with f5:
         estado_sel = st.selectbox("📌 Filtrar por Estado:", ["Todos"] + list(df_raw[col_estado].dropna().unique())) if col_estado in df_raw.columns else "Todos"
 
-    # Lógica de detección de fecha futura respetando zona horaria local de Ecuador
     dia_actual_num = hora_ecuador_actual.weekday() 
     dia_destino_num = diccionario_dias.get(dia_sel.upper(), dia_actual_num)
     
@@ -203,7 +197,6 @@ if df_raw is not None and not df_raw.empty:
     fecha_target = hora_ecuador_actual + timedelta(days=dias_diferencia)
     fecha_target_str = fecha_target.strftime("%Y-%m-%d")
 
-    # Filtrado de Data Histórica
     df_dia_especifico = df_raw[df_raw[col_dia].str.upper() == dia_sel.upper()]
     num_fechas_reales = df_dia_especifico[col_fecha].nunique() if col_fecha in df_dia_especifico.columns else 1
     if num_fechas_reales == 0: num_fechas_reales = 1
@@ -222,10 +215,8 @@ if df_raw is not None and not df_raw.empty:
         if ciudad_sel:
             df_filtrado = df_filtrado[df_filtrado[col_ciudad].isin(ciudad_sel)]
 
-    # Hora actual calculada en base a Ecuador
     hora_actual = hora_ecuador_actual.hour
 
-    # Lógica de Clima condicionada al Filtro de Provincia y Fecha Objetivo
     if provincia_sel != "Todas":
         lat_c, lon_c = coordenadas_provincias.get(provincia_sel, [-0.2298, -78.5249])
         diccionario_clima = obtener_clima_horario_futuro(lat_c, lon_c, fecha_target_str)
@@ -303,34 +294,29 @@ if df_raw is not None and not df_raw.empty:
             else:
                 st.write(f"### ⏰ Matriz Horaria Avanzada y Necesidad de Flota para el {dia_sel.title()}")
                 if col_hora_agrupada in df_filtrado.columns:
-                    # Preparación de la matriz base horaria
                     df_horas_raw = df_filtrado.copy()
                     df_horas_raw[col_hora_agrupada] = pd.to_numeric(df_horas_raw[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
                     df_horas_raw = df_horas_raw[df_horas_raw[col_hora_agrupada] >= 0]
 
-                    # Vectores para procesar las 24 horas del día tipo por separado
                     casos_locales_por_hora = [0] * 24
                     casos_foraneos_por_hora = [0] * 24
 
-                    # Clasificamos la volumetría histórica real por hora y tipo de cobertura
                     for hr in range(24):
                         df_bloque = df_horas_raw[df_horas_raw[col_hora_agrupada] == hr]
                         if not df_bloque.empty:
                             for _, fila in df_bloque.iterrows():
                                 tipo = str(fila[col_cobertura]).upper()
-                                if "FOR" in tipo:  # Servicio Foráneo
+                                if "FOR" in tipo:
                                     casos_foraneos_por_hora[hr] += 1
-                                else:             # Servicio Local o vacío por defecto
+                                else:
                                     casos_locales_por_hora[hr] += 1
 
-                    # Convertimos los acumulados históricos en promedios diarios reales
                     promedios_locales = [c / num_fechas_reales for c in casos_locales_por_hora]
                     promedios_foraneos = [c / num_fechas_reales for c in casos_foraneos_por_hora]
 
                     registros_tabla = []
                     alertas_activas = []
                     
-                    # Ejecución del Algoritmo Matemático de Arrastre Dinámico (Ecuación Temporal)
                     for hr in range(24):
                         base_local = promedios_locales[hr]
                         base_foraneo = promedios_foraneos[hr]
@@ -341,7 +327,6 @@ if df_raw is not None and not df_raw.empty:
                             detalle_clima = clima_info["Detalle"]
                             estado_c = clima_info["Estado"]
                             
-                            # Ajuste dinámico si el pronóstico detecta lluvia
                             if estado_c == "Lluvia":
                                 local_ajustado = base_local * factor_ajuste
                                 foraneo_ajustado = base_foraneo * factor_ajuste
@@ -359,17 +344,13 @@ if df_raw is not None and not df_raw.empty:
                             foraneo_ajustado = base_foraneo
                             string_proyeccion = f"{base_total_combinado} (Normal)"
 
-                        # ALGORITMO OPERATIVO DE ARRASTRE DE FLOTA LOGÍSTICA
-                        # Grúas_Activas = [Local_Actual + 0.5 * Local_Anterior] + [Foráneo_Actual + Foráneo_Anterior(h-1) + Foráneo_Anterior(h-2)]
                         local_h_ant = local_ajustado if hr == 0 else promedios_locales[hr-1]
                         foraneo_h_ant1 = foraneo_ajustado if hr == 0 else promedios_foraneos[hr-1]
                         foraneo_h_ant2 = foraneo_ajustado if hr <= 1 else promedios_foraneos[hr-2]
 
-                        # Sumatoria de solapamiento de tiempos en calle
                         gruas_netas = (local_ajustado + (0.5 * local_h_ant)) + (foraneo_ajustado + foraneo_h_ant1 + foraneo_h_ant2)
-                        gruas_necesarias_enteras = math.ceil(gruas_netas) # Redondeo entero operativo hacia arriba
+                        gruas_necesarias_enteras = math.ceil(gruas_netas)
 
-                        # Filtro Candado: Columna exclusiva para el servicio de grúas/remolques
                         servicio_str_upper = str(servicio_sel).upper()
                         es_servicio_remolque = "REMOLQUE" in servicio_str_upper or "GRÚA" in servicio_str_upper or "GRUA" in servicio_str_upper
                         string_gruas_celda = f"🚛 {gruas_necesarias_enteras} Unidades" if es_servicio_remolque else "-"
@@ -385,6 +366,7 @@ if df_raw is not None and not df_raw.empty:
                     
                     df_tabla_final = pd.DataFrame(registros_tabla)
                     
+                    # 📢 Despliegue de alertas o éxito meteorológico
                     if provincia_sel != "Todas":
                         if alertas_activas:
                             for alerta in alertas_activas: st.error(alerta)
@@ -394,6 +376,7 @@ if df_raw is not None and not df_raw.empty:
                     else:
                         st.info("ℹ️ Para activar el análisis meteorológico en vivo y las alertas de flota, selecciona una Provincia.")
                     
+                    # 📊 ÚNICO RENDEREADO DE LA TABLA (FUERA DE CONDICIONALES ANIDADOS)
                     if not df_tabla_final.empty:
                         st.dataframe(
                             df_tabla_final, 
@@ -416,8 +399,11 @@ if df_raw is not None and not df_raw.empty:
 
     st.markdown("---")
     
-    # ⏱️ Hilo de espera en segundo plano (300 segundos = 5 minutos)
-    time.sleep(300)
-    st.rerun()
+    # 🔄 Fragmento nativo asíncrono para el autorefresco seguro sin bucles duplicados
+    @st.fragment(run_every=300)
+    def ejecutar_autorefresh():
+        pass
+        
+    ejecutar_autorefresh()
 else:
     st.warning("⚠️ Esperando conexión con el archivo de Google Drive...")
