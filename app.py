@@ -59,6 +59,13 @@ st.markdown("""
         font-size: 13px;
         line-height: 1.4;
     }
+    .waze-timestamp {
+        font-size: 11px;
+        font-weight: bold;
+        display: block;
+        margin-bottom: 2px;
+        opacity: 0.8;
+    }
     .waze-national { background-color: #fff3cd; color: #856404; border-left: 4px solid #ffc107; }
     .waze-danger { background-color: #f8d7da; color: #721c24; border-left: 4px solid #dc3545; }
     .waze-info { background-color: #d1ecf1; color: #0c5460; border-left: 4px solid #17a2b8; }
@@ -464,36 +471,60 @@ if df_raw is not None and not df_raw.empty:
                         else:
                             st.info("No se consolidaron registros horarios.")
 
-    # 🖥️ PANEL LATERIAL DERECHO: CENTRO DE NOTIFICACIONES WAZE (Fijo con scroll vertical)
+    # 🖥️ PANEL LATERAL DERECHO: CENTRO DE ALERTAS VIALES MODIFICADO (Con Scroll e Historial de Tiempo)
     with col_panel_der:
-        st.markdown("<h3 style='margin-top:0px;'>🔔 Centro de Control</h3>", unsafe_allow_html=True)
+        st.markdown("<h3 style='margin-top:0px;'>🚨 Centro de Alertas Viales</h3>", unsafe_allow_html=True)
         
         incidentes_nacionales, incidentes_provinciales_dict = obtener_alertas_waze_Ecuador_completo()
         
+        # Estampado de fecha actual formateado para las marcas de tiempo
+        stamp_fecha = hora_ecuador_actual.strftime("%d/%m/%Y")
+        stamp_hora = hora_ecuador_actual.strftime("%H:%M")
+
         with st.container(height=520, border=True):
-            st.markdown("<p style='font-weight:bold; font-size:13px; color:#555; margin-bottom:5px;'>🌐 ALERTAS NACIONALES</p>", unsafe_allow_html=True)
+            st.markdown("<p style='font-weight:bold; font-size:13px; color:#555; margin-bottom:5px;'>🌍 ALERTAS EJES VIALES</p>", unsafe_allow_html=True)
             for alerta in incidentes_nacionales:
-                st.markdown(f"<div class='waze-line-right waze-national'>⚠️ <b>[Eje Vial]</b> {alerta}</div>", unsafe_allow_html=True)
+                st.markdown(f"""
+                    <div class='waze-line-right waze-national'>
+                        <span class='waze-timestamp'>⏱️ {stamp_fecha} - {stamp_hora}</span>
+                        ⚠️ <b>[Eje Vial]</b> {alerta}
+                    </div>
+                """, unsafe_allow_html=True)
             
             st.markdown("<hr style='margin:10px 0; border-color:#e2e8f0;'>", unsafe_allow_html=True)
             
             if provincia_sel == "Todas":
-                st.markdown("<p style='font-weight:bold; font-size:13px; color:#555; margin-bottom:5px;'>📍 ALERTAS PROVINCIALES</p>", unsafe_allow_html=True)
+                st.markdown("<p style='font-weight:bold; font-size:13px; color:#555; margin-bottom:5px;'>📍 ALERTAS PROVINCIALES ACTIVAS</p>", unsafe_allow_html=True)
                 for prov, alertas in incidentes_provinciales_dict.items():
                     for alerta in alertas:
                         clase = "waze-danger" if "Choque" in alerta or "💥" in alerta else "waze-info"
                         emoji = "💥" if "waze-danger" in clase else "🚗"
-                        st.markdown(f"<div class='waze-line-right {clase}'>{emoji} <b>[{prov}]</b> {alerta}</div>", unsafe_allow_html=True)
+                        st.markdown(f"""
+                            <div class='waze-line-right {clase}'>
+                                <span class='waze-timestamp'>⏱️ {stamp_fecha} - {stamp_hora}</span>
+                                {emoji} <b>[{prov}]</b> {alerta}
+                            </div>
+                        """, unsafe_allow_html=True)
             else:
-                st.markdown(f"<p style='font-weight:bold; font-size:13px; color:#555; margin-bottom:5px;'>📍 ALERTA LOCAL: {provincia_sel.upper()}</p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='font-weight:bold; font-size:13px; color:#555; margin-bottom:5px;'>📍 INCIDENCIAS: {provincia_sel.upper()}</p>", unsafe_allow_html=True)
                 prov_upper = provincia_sel.upper()
                 if prov_upper in incidentes_provinciales_dict:
                     for alerta in incidentes_provinciales_dict[prov_upper]:
                         clase = "waze-danger" if "Choque" in alerta or "💥" in alerta else "waze-info"
                         emoji = "💥" if "waze-danger" in clase else "🚗"
-                        st.markdown(f"<div class='waze-line-right {clase}'>{emoji} {alerta}</div>", unsafe_allow_html=True)
+                        st.markdown(f"""
+                            <div class='waze-line-right {clase}'>
+                                <span class='waze-timestamp'>⏱️ {stamp_fecha} - {stamp_hora}</span>
+                                {emoji} {alerta}
+                            </div>
+                        """, unsafe_allow_html=True)
                 else:
-                    st.markdown(f"<div class='waze-line-right waze-success'>✅ Operación sin novedades críticas en {provincia_sel.title()}.</div>", unsafe_allow_html=True)
+                    st.markdown(f"""
+                        <div class='waze-line-right waze-success'>
+                            <span class='waze-timestamp'>⏱️ {stamp_fecha} - {stamp_hora}</span>
+                            ✅ Operación fluida y sin novedades críticas en {provincia_sel.title()}.
+                        </div>
+                    """, unsafe_allow_html=True)
 
     st.markdown("---")
     
