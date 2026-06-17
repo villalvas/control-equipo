@@ -103,9 +103,7 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
 # 🚀 CONEXIÓN ONLINE EN VIVO CON LA API PÚBLICA DE WAZE (ECUADOR)
 @st.cache_data(ttl=60)
 def obtener_alertas_waze_Ecuador_completo():
-    # Coordenadas que envuelven el área total de Ecuador (Bounding Box) sin caracteres rotos
     url_waze = "https://www.waze.com/row-rtserver/web/getStreetUniqueAlerts?top=1.45&bottom=-5.01&left=-81.11&right=-75.19"
-    
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Referer": "https://www.waze.com/live-map/"
@@ -114,7 +112,7 @@ def obtener_alertas_waze_Ecuador_completo():
     incidentes_nacionales = []
     incidentes_provinciales = {
         "PICHINCHA": [], "GUAYAS": [], "AZUAY": [], "MANABI": [], "MANABÍ": [], "LOS RIOS": [], "LOS RÍOS": [],
-        "TUNGRURAHUA": [], "EL ORO": [], "LOJA": [], "CHIMBORAZO": [], "COTOPAXI": [], "ESMERALDAS": [],
+        "TUNGURAHUA": [], "EL ORO": [], "LOJA": [], "CHIMBORAZO": [], "COTOPAXI": [], "ESMERALDAS": [],
         "SANTO DOMINGO DE LOS TSÁCHILAS": [], "SANTO DOMINGO DE LOS TSACHILAS": [], "SANTA ELENA": [], "IMBABURA": []
     }
     
@@ -128,18 +126,15 @@ def obtener_alertas_waze_Ecuador_completo():
             subtipo = al.get("subType", "")
             descripcion = al.get("reportDescription", "")
             
-            # Formateamos un texto semántico y limpio
             tipo_legible = subtipo.replace("_", " ").title() if subtipo else tipo.title()
             icono = "💥" if "ACCIDENT" in tipo or "COLLISION" in tipo else "⚠️"
             detalles = f" ({descripcion})" if descripcion else ""
             texto_alerta = f"{icono} **[WAZE]** {calle}: {tipo_legible}{detalles}."
             
-            # 1. Clasificación Nacional (Ejes principales interprovinciales)
             palabras_ejes = ["VIA", "VÍA", "PANAMERICANA", "ALOAG", "ALÓAG", "E35", "E25", "E45", "TRONCAL", "PERIMETRAL"]
             if any(pe in calle.upper() for pe in palabras_ejes):
                 incidentes_nacionales.append(texto_alerta)
             
-            # 2. Clasificación Provincial por descarte de palabras clave detectadas en las vías
             calle_up = calle.upper()
             if any(pq in calle_up for pq in ["QUITO", "SIMON BOLIVAR", "SIMÓN BOLÍVAR", "GUAPULO", "CUMBAYA", "MARISCAL"]):
                 incidentes_provinciales["PICHINCHA"].append(texto_alerta)
@@ -151,18 +146,14 @@ def obtener_alertas_waze_Ecuador_completo():
                 incidentes_provinciales["MANABI"].append(texto_alerta)
                 incidentes_provinciales["MANABÍ"].append(texto_alerta)
             else:
-                # Si no se acopla a ninguna de las principales, la dejamos disponible en Guayas por volumen de población
                 incidentes_provinciales["GUAYAS"].append(texto_alerta)
                 
-        # Aseguramos contingencia visual si los servidores están limpios de novedades en el segundo exacto
         if not incidentes_nacionales:
-            incidentes_nacionales = ["✅ **[WAZE NACIONAL]** Ejes principales estables. Sin cierres críticos reportados."]
+            incidentes_nacionales = ["✅ **[WAZE NACIONAL]** Ejes principales estables. Sin cierres críticos."]
             
         return incidentes_nacionales, incidentes_provinciales
-        
     except:
-        # Fallback de seguridad en caso de timeout para evitar romper el renderizado de la UI
-        incidentes_nacionales = ["⚠️ **[WAZE]** Sincronizando flujo nacional con el servidor remoto..."]
+        incidentes_nacionales = ["⚠️ **[WAZE]** Sincronizando flujo nacional con el servidor..."]
         return incidentes_nacionales, incidentes_provinciales
 
 # 🚀 CÁLCULO CIENTÍFICO DEL MULTIPLICADOR HISTÓRICO DE LLUVIA
@@ -321,61 +312,16 @@ if df_raw is not None and not df_raw.empty:
 
     st.markdown("---")
 
-    # 🛠️ SECCIÓN INTEGRADA CON CONEXIÓN ONLINE DIRECTA A WAZE MAP EN VIVO
-    c_metrica, c_waze_nac, c_waze_local = st.columns([4, 4, 4])
+    # 🛠️ DIVISIÓN EN 3 GRANDES COLUMNAS ESTRUCTURALES (Métricas/Tablas Izquierda y Centro | Waze Extremo Derecho)
+    col_operacion_izq, col_operacion_cen, col_waze_der = st.columns([4, 5, 3])
     
-    with c_metrica:
+    # --- COLUMNA 1 (IZQUIERDA): METRICAS Y GEOGRAFIA ---
+    with col_operacion_izq:
         total_casos_historicos = len(df_filtrado)
         promedio_asistencias_dia = int(round(total_casos_historicos / num_fechas_reales, 0))
         label_dinamico = f"📊 Casos Promedio Esperados ({dia_sel.title()})" if dia_sel.upper() == "TODOS" else f"📊 Casos Promedio Esperados (Día {dia_sel})"
         st.metric(label=label_dinamico, value=f"{promedio_asistencias_dia} Asistencias")
         
-    # Obtener flujos reales de Waze desde los servidores geográficos
-    incidentes_nacionales, incidentes_provinciales_dict = obtener_alertas_waze_Ecuador_completo()
-
-    # 🌐 CONTENEDOR 1: Alertas Nacionales Reales. Filtra incidentes críticos en troncales del Ecuador.
-    with c_waze_nac:
-        st.write("🌐 **Alertas Waze Nacionales (Ejes Principales - En Vivo)**")
-        for alerta in incidentes_nacionales[:6]:  # Evitamos desborde controlando renglones máximos
-            st.warning(alerta)
-
-    # 📍 CONTENEDOR 2: Alertas Locales Reales. Sincronizadas dinámicamente con tu selector de Provincia.
-    with c_waze_local:
-        if provincia_sel == "Todas":
-            st.write("📍 **Alertas Waze: Provincias (Todo el País - En Vivo)**")
-            alertas_totales_lista = []
-            for prov, alertas_lista in incidentes_provinciales_dict.items():
-                alertas_totales_lista.extend(alertas_lista)
-            
-            if alertas_totales_lista:
-                for alerta in alertas_totales_lista[:8]:
-                    if "💥" in alerta or "Choque" in alerta:
-                        st.error(alerta)
-                    else:
-                        st.info(alerta)
-            else:
-                st.success("✅ Canales urbanos provinciales fluyendo sin novedades registradas.")
-        else:
-            st.write(f"📍 **Alertas Waze Local: {provincia_sel.title()} (En Vivo)**")
-            prov_upper = provincia_sel.upper()
-            
-            alertas_locales_filtradas = incidentes_provinciales_dict.get(prov_upper, [])
-            
-            if alertas_locales_filtradas:
-                for alerta in alertas_locales_filtradas[:8]:
-                    if "💥" in alerta or "Choque" in alerta:
-                        st.error(alerta)
-                    else:
-                        st.info(alerta)
-            else:
-                st.success(f"✅ **[WAZE {prov_upper}]** Sin novedades críticas ni congestión severa detectada en la zona.")
-
-    st.markdown("---")
-    
-    # Renderizado de Bloques y Tablas Inferiores
-    col_tabla_izq, col_tabla_der = st.columns([4, 6])
-
-    with col_tabla_izq:
         if total_casos_historicos > 0:
             if provincia_sel == "Todas":
                 st.write("### 📋 Demanda General por Provincias")
@@ -415,7 +361,8 @@ if df_raw is not None and not df_raw.empty:
         else:
             st.info("Sin registros para estructurar la tabla geográfica.")
 
-    with col_tabla_der:
+    # --- COLUMNA 2 (CENTRO): MATRIZ HORARIA Y RANKING SERVICIOS ---
+    with col_operacion_cen:
         if total_casos_historicos > 0:
             if servicio_sel == "Todos":
                 st.write("### 📋 Ranking de Servicios con Mayor Demanda")
@@ -433,7 +380,7 @@ if df_raw is not None and not df_raw.empty:
                     }
                 )
             else:
-                st.write(f"### ⏰ Matriz Horaria Avanzada y Necesidad de Flota para el Período: {dia_sel.title()}")
+                st.write(f"### ⏰ Matriz Horaria Avanzada y Flota: {dia_sel.title()}")
                 if col_hora_agrupada in df_filtrado.columns:
                     df_horas_raw = df_filtrado.copy()
                     df_horas_raw[col_hora_agrupada] = pd.to_numeric(df_horas_raw[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
@@ -474,13 +421,13 @@ if df_raw is not None and not df_raw.empty:
                                 total_proyectado_int = int(round(local_ajustado + foraneo_ajustado, 0))
                                 string_proyeccion = f"🔥 {total_proyectado_int} (Alerta)"
                                 if dias_diferencia == 0 and hr > hora_actual and hr <= (hora_actual + 3):
-                                    alertas_activas.append(f"🚨 **Alerta Meteorológica [{hr}:00]:** Lluvia entrante en {provincia_sel}. Demanda estimada subirá a {total_proyectado_int} casos.")
+                                    alertas_activas.append(f"🚨 **Alerta Clima [{hr}:00]:** Lluvia en {provincia_sel}. Sube a {total_proyectado_int} casos.")
                             else:
                                 local_ajustado = base_local
                                 foraneo_ajustado = base_foraneo
                                 string_proyeccion = f"{base_total_combinado} (Normal)"
                         else:
-                            detalle_clima = "🌍 Nacional (Filtre Provincia)"
+                            detalle_clima = "🌍 Seleccione Prov."
                             local_ajustado = base_local
                             foraneo_ajustado = base_foraneo
                             string_proyeccion = f"{base_total_combinado} (Normal)"
@@ -494,7 +441,7 @@ if df_raw is not None and not df_raw.empty:
 
                         servicio_str_upper = str(servicio_sel).upper()
                         es_servicio_remolque = "REMOLQUE" in servicio_str_upper or "GRÚA" in servicio_str_upper or "GRUA" in servicio_str_upper
-                        string_gruas_celda = f"🚛 {gruas_necesarias_enteras} Unidades" if es_servicio_remolque else "-"
+                        string_gruas_celda = f"🚛 {gruas_necesarias_enteras} U." if es_servicio_remolque else "-"
 
                         if base_total_combinado > 0 or es_servicio_remolque:
                             registros_tabla.append({
@@ -512,9 +459,9 @@ if df_raw is not None and not df_raw.empty:
                             for alerta in alertas_activas: st.error(alerta)
                         else:
                             if dias_diferencia == 0:
-                                st.success(f"✅ Reporte Online: Clima estable para las próximas horas en {provincia_sel}.")
+                                st.success(f"✅ Clima estable en {provincia_sel}.")
                     else:
-                        st.info("ℹ️ Para activar el análisis meteorológico en vivo y las alertas de flota, selecciona una Provincia.")
+                        st.info("ℹ️ Filtre una Provincia para ver Clima.")
                     
                     if not df_tabla_final.empty:
                         st.dataframe(
@@ -530,11 +477,53 @@ if df_raw is not None and not df_raw.empty:
                             }
                         )
                     else:
-                        st.info("No se consolidaron registros horarios para el filtro actual.")
-                else:
-                    st.info("No se localizó la columna de Bloques Horarios en la fuente de datos.")
+                        st.info("No se consolidaron registros horarios.")
         else:
-            st.info("Sin registros para estructurar el análisis analítico derecho.")
+            st.info("Sin registros para estructurar el análisis analítico.")
+
+    # --- COLUMNA 3 (DERECHA): PANEL EXCLUSIVO DE ALERTAS WAZE EN VIVO ---
+    with col_waze_der:
+        st.write("### 🛰️ Panel de Tráfico Waze (En Vivo)")
+        
+        # Consumo en tiempo real desde el Bounding Box de Waze
+        incidentes_nacionales, incidentes_provinciales_dict = obtener_alertas_waze_Ecuador_completo()
+        
+        # Subcontenedor 1: Troncales Nacionales
+        st.write("---")
+        st.markdown("🔗 **Ejes Troncales Nacionales:**")
+        for alerta in incidentes_nacionales[:5]:
+            st.warning(alerta)
+            
+        # Subcontenedor 2: Canales Locales / Provinciales
+        st.write("---")
+        if provincia_sel == "Todas":
+            st.markdown("📍 **Incidentes en Provincias (Todo el País):**")
+            alertas_totales_lista = []
+            for prov, alertas_lista in incidentes_provinciales_dict.items():
+                alertas_totales_lista.extend(alertas_lista)
+            
+            if alertas_totales_lista:
+                for alerta in alertas_totales_lista[:8]:
+                    if "💥" in alerta or "Choque" in alerta:
+                        st.error(alerta)
+                    else:
+                        st.info(alerta)
+            else:
+                st.success("✅ Vías urbanas del país sin congestión severa.")
+        else:
+            prov_upper = provincia_sel.upper()
+            st.markdown(f"📍 **Incidentes en {provincia_sel.title()}:**")
+            
+            alertas_locales_filtradas = incidentes_provinciales_dict.get(prov_upper, [])
+            
+            if alertas_locales_filtradas:
+                for alerta in alertas_locales_filtradas[:8]:
+                    if "💥" in alerta or "Choque" in alerta:
+                        st.error(alerta)
+                    else:
+                        st.info(alerta)
+            else:
+                st.success(f"✅ **[WAZE {prov_upper}]** Flujo libre y estable en la zona.")
 
     st.markdown("---")
     
