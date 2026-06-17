@@ -38,11 +38,7 @@ st.markdown("""
 zona_ecuador = ZoneInfo("America/Guayaquil")
 hora_ecuador_actual = datetime.now(zona_ecuador)
 
-st.title("🔮 Monitor de Proyección Horaria y Alerta Temprana de Flota")
-
-# Indicador de sincronización en vivo
-st.caption(f"Centro de Control Geoanalítico con Monitoreo de Clima y Waze Online | 🔄 Auto-refresco activo cada 5 min (Último: {hora_ecuador_actual.strftime('%I:%M:%S %p')})")
-
+# Coordenadas maestras para el radar nacional de Waze
 coordenadas_provincias = {
     'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
     'MANABI': [-1.0543, -80.4544], 'MANABÍ': [-1.0543, -80.4544], 'EL ORO': [-3.2581, -79.9553], 
@@ -57,18 +53,14 @@ coordenadas_provincias = {
     'BOLÍVAR': [-1.5910, -79.0022], 'CAÑAR': [-2.5518, -78.9392]
 }
 
-diccionario_dias = {
-    "LUNES": 0, "MARTES": 1, "MIÉRCOLES": 2, "MIERCOLES": 2, 
-    "JUEVES": 3, "VIERNES": 4, "SÁBADO": 5, "SABADO": 5, "DOMINGO": 6
-}
+# 🧠 INICIALIZACIÓN DEL HISTORIAL EN MEMORIA DE STREAMLIT
+if "historial_alertas" not in st.session_state:
+    st.session_state.historial_alertas = []
 
-# 🚀 LECTOR AUTOMÁTICO ONLINE EN TIEMPO REAL DESDE EL FEED DE WAZE
-def obtener_alertas_waze_real(lat, lon):
-    """
-    Consulta en vivo el Live Map de Waze estructurando un cuadrante geográfico exacto y compatible.
-    """
-    delta_lat = 0.15
-    delta_lon = 0.15
+# 🚀 LECTOR DE WAZE MEJORADO PARA ESCANEO PROVINCIAL O COMPLETO
+def obtener_alertas_waze_real(lat, lon, prov_nombre=""):
+    delta_lat = 0.18
+    delta_lon = 0.18
     
     params = {
         "top": str(lat + delta_lat),
@@ -78,55 +70,109 @@ def obtener_alertas_waze_real(lat, lon):
         "env": "row",
         "types": "alerts,traffic"
     }
-    
     headers = {
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-        "Accept": "*/*",
-        "Accept-Language": "es-ES,es;q=0.9",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Referer": "https://www.waze.com/live-map/"
     }
-    
     url = "https://www.waze.com/live-map/api/georss"
     
     try:
-        respuesta = requests.get(url, params=params, headers=headers, timeout=10)
+        respuesta = requests.get(url, params=params, headers=headers, timeout=5)
         if respuesta.status_code == 200:
             datos = respuesta.json()
             alertas_raw = datos.get("alerts", [])
             
             if not alertas_raw:
-                return [True, ["✅ **Waze Live:** Flujo vial despejado sin siniestros críticos reportados en perímetros urbanos."]]
+                return [True, []]
             
             alertas_procesadas = []
             for alert in alertas_raw:
                 tipo = alert.get("type", "HAZARD")
                 subtipo = alert.get("subtype", "")
                 calle = alert.get("street", "Vía no identificada")
-                ciudad = alert.get("city", "")
+                ciudad = alert.get("city", prov_nombre.title())
+                uuid = alert.get("uuid", "")
                 
                 if tipo == "ACCIDENT":
-                    icono, titulo = "🚨", f"Accidente Vial ({subtipo.replace('_', ' ').title()})"
-                elif tipo == "JAM":
-                    icono, titulo = "🚗", "Tráfico Pesado / Congestión"
+                    icono, titulo, es_critico = "🚨", f"Accidente Vial ({subtipo.replace('_', ' ').title()})", True
                 elif tipo == "ROAD_CLOSED":
-                    icono, titulo = "🚧", "Vía Cerrada / Bloqueo"
+                    icono, titulo, es_critico = "🚧", "Vía Cerrada / Bloqueo", True
+                elif tipo == "JAM":
+                    icono, titulo, es_critico = "🚗", "Tráfico Pesado / Congestión", False
                 else:
-                    icono, titulo = "⚠️", "Obstáculo / Peligro en Calzada"
+                    icono, titulo, es_critico = "⚠️", "Peligro en Calzada", False
                 
-                if ciudad:
-                    ubicacion_str = f"{calle} ({ciudad})"
-                else:
-                    ubicacion_str = f"{calle}"
-                    
-                alertas_procesadas.append(f"{icono} **Waze [{titulo}]:** En {ubicacion_str}.")
-            
-            return [False, alertas_procesadas[:5]]
-        else:
-            return [True, ["✅ **Waze Live:** Monitoreando flujo vial regional de forma estable."]]
-    except Exception as e:
-        return [True, ["✅ **Waze Live:** Sincronizando coordenadas locales con el mapa público..."]]
+                ubicacion_str = f"{calle} ({ciudad if ciudad else prov_nombre.title()})"
+                msg_completo = f"{icono} **[{prov_nombre.upper()}] {titulo}:** En {ubicacion_str}."
+                
+                alertas_procesadas.append({
+                    "mensaje": msg_completo,
+                    "critico": es_critico,
+                    "provincia": prov_nombre.upper(),
+                    "uuid": uuid
+                })
+            return [False, alertas_procesadas]
+        return [True, []]
+    except:
+        return [True, []]
 
-# 🚀 CONSULTA DE CLIMA EN VIVO DESDE LA API ONLINE
+# 🚀 ESCANEO RADAR MULTI-PROVINCIA (Sincroniza y alimenta el Banner + Historial)
+def ejecutar_radar_nacional():
+    provincias_clave = ['PICHINCHA', 'GUAYAS', 'AZUAY', 'MANABI', 'TUNGAURAHUA', 'LOS RIOS', 'SANTO DOMINGO DE LOS TSACHILAS']
+    alertas_totales_criticas = []
+    
+    for prov in provincias_clave:
+        if prov in coordenadas_provincias:
+            lat, lon = coordenadas_provincias[prov]
+            _, alertas = obtener_alertas_waze_real(lat, lon, prov)
+            
+            for a in alertas:
+                if a["critico"]:
+                    alertas_totales_criticas.append(a)
+                    # Insertar en el historial global si no existe previamente por su UUID
+                    existe = any(h["uuid"] == a["uuid"] for h in st.session_state.historial_alertas)
+                    if not existe:
+                        st.session_state.historial_alertas.insert(0, {
+                            "hora": datetime.now(zona_ecuador).strftime("%I:%M:%S %p"),
+                            "mensaje": a["mensaje"],
+                            "uuid": a["uuid"]
+                        })
+    
+    # Mantener el historial acotado a los últimos 40 registros para optimizar memoria
+    if len(st.session_state.historial_alertas) > 40:
+        st.session_state.historial_alertas = st.session_state.historial_alertas[:40]
+        
+    return alertas_totales_criticas
+
+# --- EJECUCIÓN DEL RADAR GENERAL ---
+alertas_nacionales_activas = ejecutar_radar_nacional()
+
+st.title("🔮 Monitor de Proyección Horaria y Alerta Temprana de Flota")
+
+# 📰 BANNER TOP DE NOTICIAS LOGÍSTICAS (ALERTAS CRÍTICAS DE TODO EL PAÍS)
+if alertas_nacionales_activas:
+    texto_banner = "  •  ".join([a["mensaje"] for a in alertas_nacionales_activas[:4]])
+    st.markdown(f"""
+        <div style="background-color: #ffebe6; padding: 12px; border-left: 6px solid #ff4d4d; border-radius: 4px; margin-bottom: 15px;">
+            <span style="color: #cc0000; font-weight: bold; font-size: 15px;">📢 RADAR CRÍTICO NACIONAL EN VIVO:</span> 
+            <marquee style="color: #330000; font-size: 15px; font-weight: 500;" scrollamount="4">{texto_banner}</marquee>
+        </div>
+    """, unsafe_allow_html=True)
+else:
+    st.markdown("""
+        <div style="background-color: #e6f9ff; padding: 10px; border-left: 6px solid #00a3cc; border-radius: 4px; margin-bottom: 15px; color: #004d61; font-weight: 500; font-size: 14px;">
+            ✅ <b>Estatus Nacional Despejado:</b> No se registran cierres de vías de gran magnitud ni colisiones críticas en los ejes principales del país.
+        </div>
+    """, unsafe_allow_html=True)
+
+# Indicador de sincronización en vivo
+st.caption(f"Centro de Control Geoanalítico con Monitoreo de Clima y Waze Online | 🔄 Auto-refresco activo cada 5 min (Último: {hora_ecuador_actual.strftime('%I:%M:%S %p')})")
+
+diccionario_dias = {
+    "LUNES": 0, "MARTES": 1, "MIÉRCOLES": 2, "MIERCOLES": 2, 
+    "JUEVES": 3, "VIERNES": 4, "SÁBADO": 5, "SABADO": 5, "DOMINGO": 6
+}
+
 @st.cache_data(ttl=300)
 def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
     try:
@@ -146,23 +192,17 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
                 elif codigo in [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99]: estado, icono = "Lluvia", "🌧️"
                 else: estado, icono = "Nublado", "☁️"
                 datos_clima[hora_int] = {"Detalle": f"{icono} {estado} ({temp}°C)", "Icono": icono, "Estado": estado}
-        
         return datos_clima if datos_clima else {i: {"Detalle": "⚪ Sin Predicción", "Icono": "⚪", "Estado": "Normal"} for i in range(24)}
     except:
         return {i: {"Detalle": "⚪ Sin Conexión", "Icono": "⚪", "Estado": "Normal"} for i in range(24)}
 
-# 🚀 CÁLCULO CIENTÍFICO DEL MULTIPLICADOR HISTÓRICO DE LLUVIA
 @st.cache_data(ttl=3600)
 def calcular_factor_lluvia_en_vivo(df_historico, lat, lon):
     try:
         df_quick = df_historico.dropna(subset=["FECHA CREACIÓN DE ASISTENCIA", "HORA CREACIÓN DE ASISTENCIA"]).tail(60)
-        if df_quick.empty:
-            return 1.35
-        
+        if df_quick.empty: return 1.35
         fechas_unicas = df_quick["FECHA CREACIÓN DE ASISTENCIA"].astype(str).str.split().str[0].unique()
-        lluvias_detectadas = 0
-        total_evaluado = 0
-        
+        lluvias_detectadas, total_evaluado = 0, 0
         for fecha in fechas_unicas[:4]:
             url_historial = f"https://archive-api.open-meteo.com/v1/archive?latitude={lat}&longitude={lon}&start_date={fecha}&end_date={fecha}&hourly=weathercode&timezone=auto"
             res = requests.get(url_historial).json()
@@ -170,7 +210,6 @@ def calcular_factor_lluvia_en_vivo(df_historico, lat, lon):
                 codigos = res['hourly']['weathercode']
                 lluvias_detectadas += sum(1 for c in codigos if c in [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99])
                 total_evaluado += len(codigos)
-        
         if total_evaluado > 0 and lluvias_detectadas > 0:
             ratio = lluvias_detectadas / total_evaluado
             return round(1.2 + (ratio * 1.5), 2)
@@ -184,10 +223,8 @@ def cargar_datos_vía_gviz():
         url_base = "https://docs.google.com/spreadsheets/d/1UWQy9XJy8UOdef1IcXWDt2Nmn7hTnsQLHby_3BhpJnc/edit"
         pestana = "Consolidado"
         csv_url = url_base.replace('/edit', f'/gviz/tq?tqx=out:csv&sheet={pestana}')
-        df = pd.read_csv(csv_url)
-        return df
-    except Exception as e:
-        st.error(f"❌ Error al conectar con Google Drive: {e}")
+        return pd.read_csv(csv_url)
+    except:
         return None
 
 df_raw = cargar_datos_vía_gviz()
@@ -205,292 +242,142 @@ if df_raw is not None and not df_raw.empty:
     col_cobertura = "TIPO COBERTURA"
 
     df_raw[col_provincia] = df_raw[col_provincia].astype(str).str.strip().str.upper()
-    if col_ciudad in df_raw.columns:
-        df_raw[col_ciudad] = df_raw[col_ciudad].astype(str).str.strip()
+    if col_ciudad in df_raw.columns: df_raw[col_ciudad] = df_raw[col_ciudad].astype(str).str.strip()
+    df_raw[col_cobertura] = df_raw[col_cobertura].astype(str).str.strip().str.upper() if col_cobertura in df_raw.columns else "LOCAL"
 
-    if col_cobertura in df_raw.columns:
-        df_raw[col_cobertura] = df_raw[col_cobertura].astype(str).str.strip().str.upper()
-    else:
-        df_raw[col_cobertura] = "LOCAL"
-
-    # Panel de Filtros de Operación
-    st.write("### 🎛️ Panel de Filtros de Operación")
-    f1, f2, f3, f4, f5 = st.columns([2, 2, 2, 3, 2])
+    # 🎛️ PANEL ESTRUCTURADO CON HISTORIAL INTEGRADO EN LA FILA DE FILTROS
+    st.write("### 🎛️ Panel de Filtros de Operación e Historial de Incidentes")
     
-    with f1:
-        # Modificado para comenzar en "Todos" por defecto
-        dias_disponibles_selectbox = ["Todos", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO", "DOMINGO"]
-        dia_sel = st.selectbox("📅 Seleccionar Día Tipo:", dias_disponibles_selectbox, index=0)
+    col_filtros, col_historial = st.columns([7, 3])
     
-    with f2:
-        lista_servicios = ["Todos"] + list(df_raw[col_servicio].dropna().unique())
-        servicio_sel = st.selectbox("🎯 Seleccionar Servicio:", lista_servicios)
-
-    with f3:
-        lista_provincias = ["Todas"] + df_raw[col_provincia].value_counts().index.tolist()
-        provincia_sel = st.selectbox("📍 Seleccionar Provincia:", lista_provincias)
-
-    with f4:
-        if provincia_sel != "Todas":
-            ciudades_disponibles = df_raw[df_raw[col_provincia] == provincia_sel][col_ciudad].dropna().unique().tolist()
-            ciudades_disponibles = sorted(ciudades_disponibles)
+    with col_filtros:
+        f1, f2, f3 = st.columns(3)
+        with f1:
+            dia_sel = st.selectbox("📅 Seleccionar Día Tipo:", ["Todos", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO", "DOMINGO"], index=0)
+        with f2:
+            lista_servicios = ["Todos"] + list(df_raw[col_servicio].dropna().unique())
+            servicio_sel = st.selectbox("🎯 Seleccionar Servicio:", lista_servicios)
+        with f3:
+            lista_provincias = ["Todas"] + df_raw[col_provincia].value_counts().index.tolist()
+            provincia_sel = st.selectbox("📍 Seleccionar Provincia:", lista_provincias)
             
-            ciudad_sel = st.multiselect(
-                "🏙️ Filtrar Ciudades (Una o Varias):",
-                options=ciudades_disponibles,
-                default=[],
-                placeholder="Todas las ciudades"
-            )
-        else:
-            ciudad_sel = st.multiselect(
-                "🏙️ Filtrar Ciudades (Una o Varias):",
-                options=[],
-                disabled=True,
-                placeholder="Filtre por Provincia primero"
-            )
+        f4, f5 = st.columns([2, 1])
+        with f4:
+            if provincia_sel != "Todas":
+                ciudades_disponibles = sorted(df_raw[df_raw[col_provincia] == provincia_sel][col_ciudad].dropna().unique().tolist())
+                ciudad_sel = st.multiselect("🏙️ Filtrar Ciudades:", options=ciudades_disponibles, default=[], placeholder="Todas las ciudades")
+            else:
+                ciudad_sel = st.multiselect("🏙️ Filtrar Ciudades:", options=[], disabled=True, placeholder="Filtre por Provincia primero")
+        with f5:
+            estado_sel = st.selectbox("📌 Filtrar por Estado:", ["Todos"] + list(df_raw[col_estado].dropna().unique())) if col_estado in df_raw.columns else "Todos"
 
-    with f5:
-        estado_sel = st.selectbox("📌 Filtrar por Estado:", ["Todos"] + list(df_raw[col_estado].dropna().unique())) if col_estado in df_raw.columns else "Todos"
+    with col_historial:
+        # 📜 CAJA EXPANDIBLE DE HISTORIAL ACUMULATIVO
+        with st.expander("📜 Bitácora e Historial de Alertas Waze", expanded=True):
+            if st.session_state.historial_alertas:
+                for hist in st.session_state.historial_alertas[:6]:  # Muestra los últimos 6 incidentes en lista corta
+                    st.markdown(f"<small style='color:#555;'>⏱️ {hist['hora']}</small><br/><span style='font-size:13px;'>{hist['mensaje']}</span><hr style='margin:4px 0;'/>", unsafe_allow_html=True)
+            else:
+                st.write("<span style='color:gray; font-size:13px;'>Historial vacío. Monitoreando canales...</span>", unsafe_allow_html=True)
 
-    # Lógica de cálculo de fecha objetivo adaptada al estado "Todos"
+    # Lógica de Fechas y Filtros
     if dia_sel != "Todos":
         dia_actual_num = hora_ecuador_actual.weekday() 
         dia_destino_num = diccionario_dias.get(dia_sel.upper(), dia_actual_num)
         dias_diferencia = (dia_destino_num - dia_actual_num) % 7
-        fecha_target = hora_ecuador_actual + timedelta(days=dias_diferencia)
-        fecha_target_str = fecha_target.strftime("%Y-%m-%d")
-        
+        fecha_target_str = (hora_ecuador_actual + timedelta(days=dias_diferencia)).strftime("%Y-%m-%d")
         df_dia_especifico = df_raw[df_raw[col_dia].str.upper() == dia_sel.upper()]
     else:
-        dias_diferencia = 0
-        fecha_target_str = hora_ecuador_actual.strftime("%Y-%m-%d")
+        dias_diferencia, fecha_target_str = 0, hora_ecuador_actual.strftime("%Y-%m-%d")
         df_dia_especifico = df_raw.copy()
 
-    num_fechas_reales = df_dia_especifico[col_fecha].nunique() if col_fecha in df_dia_especifico.columns else 1
-    if num_fechas_reales == 0: num_fechas_reales = 1
+    num_fechas_reales = max(df_dia_especifico[col_fecha].nunique() if col_fecha in df_dia_especifico.columns else 1, 1)
 
-    df_base_dia_estado = df_dia_especifico.copy()
-    if estado_sel != "Todos" and col_estado in df_raw.columns:
-        df_base_dia_estado = df_base_dia_estado[df_base_dia_estado[col_estado] == estado_sel]
-
-    df_base_filtros = df_base_dia_estado.copy()
-    if servicio_sel != "Todos":
-        df_base_filtros = df_base_filtros[df_base_filtros[col_servicio] == servicio_sel]
-
-    df_filtrado = df_base_filtros.copy()
+    df_filtrado = df_dia_especifico.copy()
+    if estado_sel != "Todos" and col_estado in df_raw.columns: df_filtrado = df_filtrado[df_filtrado[col_estado] == estado_sel]
+    if servicio_sel != "Todos": df_filtrado = df_filtrado[df_filtrado[col_servicio] == servicio_sel]
     if provincia_sel != "Todas":
         df_filtrado = df_filtrado[df_filtrado[col_provincia] == provincia_sel]
-        if ciudad_sel:
-            df_filtrado = df_filtrado[df_filtrado[col_ciudad].isin(ciudad_sel)]
-
-    hora_actual = hora_ecuador_actual.hour
-
-    if provincia_sel != "Todas":
-        lat_c, lon_c = coordenadas_provincias.get(provincia_sel, [-0.2298, -78.5249])
-        diccionario_clima = obtener_clima_horario_futuro(lat_c, lon_c, fecha_target_str)
-        factor_ajuste = calcular_factor_lluvia_en_vivo(df_filtrado, lat_c, lon_c)
-    else:
-        diccionario_clima = {}
-        factor_ajuste = 1.0
+        if ciudad_sel: df_filtrado = df_filtrado[df_filtrado[col_ciudad].isin(ciudad_sel)]
 
     st.markdown("---")
-
     total_casos_historicos = len(df_filtrado)
     promedio_asistencias_dia = int(round(total_casos_historicos / num_fechas_reales, 0))
-    
-    etiqueta_metric = f"📊 Casos Promedio Esperados (Consolidado General)" if dia_sel == "Todos" else f"📊 Casos Promedio Esperados (Día {dia_sel})"
-    st.metric(label=etiqueta_metric, value=f"{promedio_asistencias_dia} Asistencias")
-
+    st.metric(label="📊 Casos Promedio Esperados (Filtro Actual)", value=f"{promedio_asistencias_dia} Asistencias")
     st.markdown("---")
+
     col_tabla_izq, col_tabla_der = st.columns([4, 6])
 
     with col_tabla_izq:
         if total_casos_historicos > 0:
             if provincia_sel == "Todas":
                 st.write("### 📋 Demanda General por Provincias")
-                df_tabla_prov = df_base_filtros.groupby(col_provincia).size().reset_index(name='Casos Históricos')
+                df_tabla_prov = df_filtrado.groupby(col_provincia).size().reset_index(name='Casos Históricos')
                 df_tabla_prov['Promedio Diario Proyectado'] = (df_tabla_prov['Casos Históricos'] / num_fechas_reales).round(0).astype(int)
-                
-                st.dataframe(
-                    df_tabla_prov.sort_values(by='Casos Históricos', ascending=False), 
-                    use_container_width=True, 
-                    hide_index=True,
-                    column_config={
-                        col_provincia: st.column_config.TextColumn(alignment="left"),
-                        "Casos Históricos": st.column_config.NumberColumn(alignment="center"),
-                        "Promedio Diario Proyectado": st.column_config.NumberColumn(alignment="center", format="%d")
-                    }
-                )
+                st.dataframe(df_tabla_prov.sort_values(by='Casos Históricos', ascending=False), use_container_width=True, hide_index=True)
             else:
-                if ciudad_sel:
-                    st.write(f"### 📋 Demanda: Ciudades Seleccionadas de {provincia_sel}")
-                else:
-                    st.write(f"### 📋 Demanda: Ciudades de {provincia_sel}")
-                    
-                if col_ciudad in df_filtrado.columns:
-                    df_tabla_ciud = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos Históricos')
-                    df_tabla_ciud['Promedio Diario Proyectado'] = (df_tabla_ciud['Casos Históricos'] / num_fechas_reales).round(0).astype(int)
-                    
-                    st.dataframe(
-                        df_tabla_ciud.sort_values(by='Casos Históricos', ascending=False), 
-                        use_container_width=True, 
-                        hide_index=True,
-                        column_config={
-                            col_ciudad: st.column_config.TextColumn(alignment="left"),
-                            "Casos Históricos": st.column_config.NumberColumn(alignment="center"),
-                            "Promedio Diario Proyectado": st.column_config.NumberColumn(alignment="center", format="%d")
-                        }
-                    )
-        else:
-            st.info("Sin registros para estructurar la tabla geográfica.")
+                st.write(f"### 📋 Demanda: Ciudades de {provincia_sel}")
+                df_tabla_ciud = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos Históricos')
+                df_tabla_ciud['Promedio Diario Proyectado'] = (df_tabla_ciud['Casos Históricos'] / num_fechas_reales).round(0).astype(int)
+                st.dataframe(df_tabla_ciud.sort_values(by='Casos Históricos', ascending=False), use_container_width=True, hide_index=True)
 
     with col_tabla_der:
         if total_casos_historicos > 0:
             if servicio_sel == "Todos":
-                st.write("### 📋 Ranking de Servicios con Mayor Demanda")
+                st.write("### 📋 Ranking de Servicios")
                 df_tabla_serv = df_filtrado.groupby(col_servicio).size().reset_index(name='Casos Históricos')
                 df_tabla_serv['Promedio Diario Proyectado'] = (df_tabla_serv['Casos Históricos'] / num_fechas_reales).round(0).astype(int)
-                
-                st.dataframe(
-                    df_tabla_serv.sort_values(by='Casos Históricos', ascending=False), 
-                    use_container_width=True, 
-                    hide_index=True,
-                    column_config={
-                        col_servicio: st.column_config.TextColumn(alignment="left"),
-                        "Casos Históricos": st.column_config.NumberColumn(alignment="center"),
-                        "Promedio Diario Proyectado": st.column_config.NumberColumn(alignment="center", format="%d")
-                    }
-                )
+                st.dataframe(df_tabla_serv.sort_values(by='Casos Históricos', ascending=False), use_container_width=True, hide_index=True)
             else:
-                titulo_tabla_der = f"### ⏰ Matriz Horaria Avanzada y Necesidad de Flota (Consolidado)" if dia_sel == "Todos" else f"### ⏰ Matriz Horaria Avanzada y Necesidad de Flota para el {dia_sel.title()}"
-                st.write(titulo_tabla_der)
+                st.write(f"### ⏰ Matriz Horaria Avanzada y Necesidad de Flota")
                 
-                # 📡 SECCIÓN DE ALERTAS DE WAZE REAL ONLINE OPTIMIZADA
+                # Radar específico enfocado en la sección derecha de la provincia elegida
                 if provincia_sel != "Todas":
-                    st.write("#### 📡 Reportes de Tráfico Waze (Live Online)")
+                    st.write("#### 📡 Reportes de Tráfico Waze Local (Live Online)")
                     lat_p, lon_p = coordenadas_provincias.get(provincia_sel, [-0.2298, -78.5249])
-                    es_limpio, alertas_waze = obtener_alertas_waze_real(lat_p, lon_p)
+                    es_limpio, alertas_locales = obtener_alertas_waze_real(lat_p, lon_p, provincia_sel)
                     
                     if es_limpio:
-                        st.success(alertas_waze[0])
+                        st.success("✅ **Waze Live:** Flujo vial local estable y monitoreado sin novedades en este cuadrante.")
                     else:
-                        for alerta in alertas_waze:
-                            if "Accidente" in alerta or "Cerrada" in alerta:
-                                st.error(alerta)      
-                            elif "Tráfico" in alerta or "Congestión" in alerta:
-                                st.warning(alerta)    
-                            else:
-                                st.info(alerta)       
-                
+                        for al in alertas_locales:
+                            if al["critico"]: st.error(al["mensaje"])
+                            else: st.warning(al["mensaje"])
+
+                # Render de Tabla horaria
                 if col_hora_agrupada in df_filtrado.columns:
                     df_horas_raw = df_filtrado.copy()
                     df_horas_raw[col_hora_agrupada] = pd.to_numeric(df_horas_raw[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
-                    df_horas_raw = df_horas_raw[df_horas_raw[col_hora_agrupada] >= 0]
-
-                    casos_locales_por_hora = [0] * 24
-                    casos_foraneos_por_hora = [0] * 24
+                    
+                    registros_tabla = []
+                    factor_ajuste = calcular_factor_lluvia_en_vivo(df_filtrado, lat_c, lon_c) if provincia_sel != "Todas" else 1.0
+                    diccionario_clima = obtener_clima_horario_futuro(lat_c, lon_c, fecha_target_str) if provincia_sel != "Todas" else {}
 
                     for hr in range(24):
                         df_bloque = df_horas_raw[df_horas_raw[col_hora_agrupada] == hr]
-                        if not df_bloque.empty:
-                            for _, fila in df_bloque.iterrows():
-                                tipo = str(fila[col_cobertura]).upper()
-                                if "FOR" in tipo:
-                                    casos_foraneos_por_hora[hr] += 1
-                                else:
-                                    casos_locales_por_hora[hr] += 1
-
-                    promedios_locales = [c / num_fechas_reales for c in casos_locales_por_hora]
-                    promedios_foraneos = [c / num_fechas_reales for c in casos_foraneos_por_hora]
-
-                    registros_tabla = []
-                    alertas_activas = []
-                    
-                    for hr in range(24):
-                        base_local = promedios_locales[hr]
-                        base_foraneo = promedios_foraneos[hr]
-                        base_total_combinado = int(round(base_local + base_foraneo, 0))
+                        base_total = int(round(len(df_bloque) / num_fechas_reales, 0))
                         
-                        if provincia_sel != "Todas":
-                            clima_info = diccionario_clima.get(hr, {"Detalle": "⚪ N/A", "Estado": "Normal"})
-                            detalle_clima = clima_info["Detalle"]
-                            estado_c = clima_info["Estado"]
-                            
-                            if estado_c == "Lluvia":
-                                local_ajustado = base_local * factor_ajuste
-                                foraneo_ajustado = base_foraneo * factor_ajuste
-                                total_proyectado_int = int(round(local_ajustado + foraneo_ajustado, 0))
-                                string_proyeccion = f"🔥 {total_proyectado_int} (Alerta)"
-                                if dia_sel != "Todos" and dias_diferencia == 0 and hr > hora_actual and hr <= (hora_actual + 3):
-                                    alertas_activas.append(f"🚨 **Alerta Meteorológica [{hr}:00]:** Lluvia entrante en {provincia_sel}. Demanda estimada subirá a {total_proyectado_int} casos.")
-                            else:
-                                local_ajustado = base_local
-                                foraneo_ajustado = base_foraneo
-                                string_proyeccion = f"{base_total_combinado} (Normal)"
-                        else:
-                            detalle_clima = "🌍 Nacional (Filtre Provincia)"
-                            local_ajustado = base_local
-                            foraneo_ajustado = base_foraneo
-                            string_proyeccion = f"{base_total_combinado} (Normal)"
-
-                        local_h_ant = local_ajustado if hr == 0 else promedios_locales[hr-1]
-                        foraneo_h_ant1 = foraneo_ajustado if hr == 0 else promedios_foraneos[hr-1]
-                        foraneo_h_ant2 = foraneo_ajustado if hr <= 1 else promedios_foraneos[hr-2]
-
-                        gruas_netas = (local_ajustado + (0.5 * local_h_ant)) + (foraneo_ajustado + foraneo_h_ant1 + foraneo_h_ant2)
-                        gruas_necesarias_enteras = math.ceil(gruas_netas)
-
-                        servicio_str_upper = str(servicio_sel).upper()
-                        es_servicio_remolque = "REMOLQUE" in servicio_str_upper or "GRÚA" in servicio_str_upper or "GRUA" in servicio_str_upper
-                        string_gruas_celda = f"🚛 {gruas_necesarias_enteras} Unidades" if es_servicio_remolque else "-"
-
-                        if base_total_combinado > 0 or es_servicio_remolque:
+                        clima_info = diccionario_clima.get(hr, {"Detalle": "🌍 Nacional (Filtre Prov.)", "Estado": "Normal"})
+                        
+                        string_proyeccion = f"{base_total} (Normal)"
+                        if clima_info["Estado"] == "Lluvia":
+                            string_proyeccion = f"🔥 {int(round(base_total * factor_ajuste, 0))} (Alerta)"
+                        
+                        gruas_necesarias = math.ceil(base_total * 1.2)
+                        string_gruas = f"🚛 {gruas_necesarias} Unidades" if "REMOLQUE" in str(servicio_sel).upper() else "-"
+                        
+                        if base_total > 0 or "REMOLQUE" in str(servicio_sel).upper():
                             registros_tabla.append({
                                 "BLOQUE HORARIO": hr,
-                                "🌤️ Clima Online": detalle_clima,
-                                "Promedio Base": base_total_combinado,
+                                "🌤️ Clima Online": clima_info["Detalle"],
+                                "Promedio Base": base_total,
                                 "Proyección Ajustada": string_proyeccion,
-                                "Grúas Necesarias (Arrastre)": string_gruas_celda
+                                "Grúas Necesarias (Arrastre)": string_gruas
                             })
-                    
-                    df_tabla_final = pd.DataFrame(registros_tabla)
-                    
-                    if provincia_sel != "Todas":
-                        if alertas_activas:
-                            for alerta in alertas_activas: st.error(alerta)
-                        else:
-                            if dia_sel != "Todos" and dias_diferencia == 0:
-                                st.success(f"✅ Reporte Online: Clima estable para las próximas horas en {provincia_sel}.")
-                    else:
-                        st.info("ℹ️ Para activar el análisis meteorológico y de tráfico en vivo, selecciona una Provincia.")
-                    
-                    if not df_tabla_final.empty:
-                        st.dataframe(
-                            df_tabla_final, 
-                            use_container_width=True, 
-                            hide_index=True,
-                            column_config={
-                                "BLOQUE HORARIO": st.column_config.NumberColumn(alignment="center", format="%02d:00"),
-                                "🌤️ Clima Online": st.column_config.TextColumn(alignment="left"),
-                                "Promedio Base": st.column_config.NumberColumn(alignment="center"),
-                                "Proyección Ajustada": st.column_config.TextColumn(alignment="center"),
-                                "Grúas Necesarias (Arrastre)": st.column_config.TextColumn(alignment="center")
-                            }
-                        )
-                    else:
-                        st.info("No se consolidaron registros horarios para el filtro actual.")
-                else:
-                    st.info("No se localizó la columna de Bloques Horarios en la fuente de datos.")
-        else:
-            st.info("Sin registros para estructurar el análisis analítico derecho.")
+                            
+                    st.dataframe(pd.DataFrame(registros_tabla), use_container_width=True, hide_index=True)
 
     st.markdown("---")
-    
-    # 🔄 Fragmento asíncrono para el temporizador de refresco automático cada 5 min
     @st.fragment(run_every=300)
-    def ejecutar_autorefresh():
-        pass
-        
+    def ejecutar_autorefresh(): pass
     ejecutar_autorefresh()
-else:
-    st.warning("⚠️ Esperando conexión con el archivo de Google Drive...")
