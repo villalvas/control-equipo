@@ -37,6 +37,7 @@ st.markdown("""
 # Definimos la zona horaria de Ecuador de forma explícita
 zona_ecuador = ZoneInfo("America/Guayaquil")
 hora_ecuador_actual = datetime.now(zona_ecuador)
+fecha_hoy_str = hora_ecuador_actual.strftime("%Y-%m-%d")
 
 # Coordenadas maestras para el radar nacional de Waze
 coordenadas_provincias = {
@@ -53,9 +54,17 @@ coordenadas_provincias = {
     'BOLÍVAR': [-1.5910, -79.0022], 'CAÑAR': [-2.5518, -78.9392]
 }
 
-# 🧠 INICIALIZACIÓN DEL HISTORIAL EN MEMORIA DE STREAMLIT
+# 🧠 CONTROL DE ESTADOS DE MEMORIA CON RESET DIARIO AUTOMÁTICO
+if "fecha_ultimo_control" not in st.session_state:
+    st.session_state.fecha_ultimo_control = fecha_hoy_str
+
 if "historial_alertas" not in st.session_state:
     st.session_state.historial_alertas = []
+
+# 🚨 PURGA AL CAMBIO DE DÍA: Si cambió la fecha del servidor, reseteamos el historial a cero
+if st.session_state.fecha_ultimo_control != fecha_hoy_str:
+    st.session_state.historial_alertas = []
+    st.session_state.fecha_ultimo_control = fecha_hoy_str
 
 # 🚀 LECTOR DE WAZE MEJORADO PARA ESCANEO PROVINCIAL O COMPLETO
 def obtener_alertas_waze_real(lat, lon, prov_nombre=""):
@@ -116,10 +125,11 @@ def obtener_alertas_waze_real(lat, lon, prov_nombre=""):
     except:
         return [True, []]
 
-# 🚀 ESCANEO RADAR MULTI-PROVINCIA (Sincroniza y alimenta el Banner + Historial)
+# 🚀 ESCANEO RADAR MULTI-PROVINCIA (Alimenta el Banner + Historial con límite de 6 horas)
 def ejecutar_radar_nacional():
-    provincias_clave = ['PICHINCHA', 'GUAYAS', 'AZUAY', 'MANABI', 'TUNGAURAHUA', 'LOS RIOS', 'SANTO DOMINGO DE LOS TSACHILAS']
+    provincias_clave = ['PICHINCHA', 'GUAYAS', 'AZUAY', 'MANABI', 'TUNGURAHUA', 'LOS RIOS', 'SANTO DOMINGO DE LOS TSACHILAS']
     alertas_totales_criticas = []
+    ahora_dt = datetime.now(zona_ecuador)
     
     for prov in provincias_clave:
         if prov in coordenadas_provincias:
@@ -133,14 +143,18 @@ def ejecutar_radar_nacional():
                     existe = any(h["uuid"] == a["uuid"] for h in st.session_state.historial_alertas)
                     if not existe:
                         st.session_state.historial_alertas.insert(0, {
-                            "hora": datetime.now(zona_ecuador).strftime("%I:%M:%S %p"),
+                            "timestamp_captura": ahora_dt,
+                            "hora_str": ahora_dt.strftime("%I:%M:%S %p"),
                             "mensaje": a["mensaje"],
                             "uuid": a["uuid"]
                         })
     
-    # Mantener el historial acotado a los últimos 40 registros para optimizar memoria
-    if len(st.session_state.historial_alertas) > 40:
-        st.session_state.historial_alertas = st.session_state.historial_alertas[:40]
+    # ⏱️ FILTRO DE SEGURIDAD MÓVIL: Remover registros cuya captura exceda las 6 horas de antigüedad
+    limite_tiempo = ahora_dt - timedelta(hours=6)
+    st.session_state.historial_alertas = [
+        h for h in st.session_state.historial_alertas 
+        if h["timestamp_captura"] >= limite_tiempo
+    ]
         
     return alertas_totales_criticas
 
@@ -272,13 +286,13 @@ if df_raw is not None and not df_raw.empty:
             estado_sel = st.selectbox("📌 Filtrar por Estado:", ["Todos"] + list(df_raw[col_estado].dropna().unique())) if col_estado in df_raw.columns else "Todos"
 
     with col_historial:
-        # 📜 CAJA EXPANDIBLE DE HISTORIAL ACUMULATIVO
-        with st.expander("📜 Bitácora e Historial de Alertas Waze", expanded=True):
+        # 📜 CAJA EXPANDIBLE DE HISTORIAL CON LÍMITE TEMPORAL DE TURNO (6 HORAS MÁX)
+        with st.expander("📜 Bitácora de Alertas Nacionales (Últimas 6h)", expanded=True):
             if st.session_state.historial_alertas:
-                for hist in st.session_state.historial_alertas[:6]:  # Muestra los últimos 6 incidentes en lista corta
-                    st.markdown(f"<small style='color:#555;'>⏱️ {hist['hora']}</small><br/><span style='font-size:13px;'>{hist['mensaje']}</span><hr style='margin:4px 0;'/>", unsafe_allow_html=True)
+                for hist in st.session_state.historial_alertas[:6]:  
+                    st.markdown(f"<small style='color:#666;'>⏱️ {hist['hora_str']} (Hoy)</small><br/><span style='font-size:13px; font-weight:500;'>{hist['mensaje']}</span><hr style='margin:4px 0;'/>", unsafe_allow_html=True)
             else:
-                st.write("<span style='color:gray; font-size:13px;'>Historial vacío. Monitoreando canales...</span>", unsafe_allow_html=True)
+                st.write("<span style='color:gray; font-size:13px;'>Sin incidencias críticas en las últimas 6 horas. Monitoreo limpio.</span>", unsafe_allow_html=True)
 
     # Lógica de Fechas y Filtros
     if dia_sel != "Todos":
@@ -331,7 +345,7 @@ if df_raw is not None and not df_raw.empty:
             else:
                 st.write(f"### ⏰ Matriz Horaria Avanzada y Necesidad de Flota")
                 
-                # Radar específico enfocado en la sección derecha de la provincia elegida
+                # Radar de tráfico local en la sección derecha
                 if provincia_sel != "Todas":
                     st.write("#### 📡 Reportes de Tráfico Waze Local (Live Online)")
                     lat_p, lon_p = coordenadas_provincias.get(provincia_sel, [-0.2298, -78.5249])
@@ -344,12 +358,13 @@ if df_raw is not None and not df_raw.empty:
                             if al["critico"]: st.error(al["mensaje"])
                             else: st.warning(al["mensaje"])
 
-                # Render de Tabla horaria
+                # Render de la Tabla Horaria Integrada
                 if col_hora_agrupada in df_filtrado.columns:
                     df_horas_raw = df_filtrado.copy()
                     df_horas_raw[col_hora_agrupada] = pd.to_numeric(df_horas_raw[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
                     
                     registros_tabla = []
+                    lat_c, lon_c = coordenadas_provincias.get(provincia_sel if provincia_sel != "Todas" else 'PICHINCHA', [-0.2298, -78.5249])
                     factor_ajuste = calcular_factor_lluvia_en_vivo(df_filtrado, lat_c, lon_c) if provincia_sel != "Todas" else 1.0
                     diccionario_clima = obtener_clima_horario_futuro(lat_c, lon_c, fecha_target_str) if provincia_sel != "Todas" else {}
 
@@ -381,3 +396,5 @@ if df_raw is not None and not df_raw.empty:
     @st.fragment(run_every=300)
     def ejecutar_autorefresh(): pass
     ejecutar_autorefresh()
+else:
+    st.warning("⚠️ Esperando conexión con el archivo de Google Drive...")
