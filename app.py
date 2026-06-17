@@ -370,7 +370,8 @@ if df_raw is not None and not df_raw.empty:
                         gruas_necesarias_enteras = math.ceil(gruas_netas) # Redondeo entero operativo hacia arriba
 
                         # Filtro Candado: Columna exclusiva para el servicio de grúas/remolques
-                        es_servicio_remolque = "REMOLQUE" in str(servicio_sel).upper() or "GRÚA" in str(servicio_sel).upper() or "GRUA" in str(servicio_sel).upper()
+                        servicio_str_upper = str(servicio_sel).upper()
+                        es_servicio_remolque = "REMOLQUE" in servicio_str_upper or "GRÚA" in servicio_str_upper or "GRUA" in servicio_str_upper
                         string_gruas_celda = f"🚛 {gruas_necesarias_enteras} Unidades" if es_servicio_remolque else "-"
 
                         if base_total_combinado > 0 or es_servicio_remolque:
@@ -404,7 +405,7 @@ if df_raw is not None and not df_raw.empty:
                                 "Promedio Base": st.column_config.NumberColumn(alignment="center"),
                                 "Proyección Ajustada": st.column_config.TextColumn(alignment="center"),
                                 "Grúas Necesarias (Arrastre)": st.column_config.TextColumn(alignment="center")
-                                                        }
+                            }
                         )
                     else:
                         st.info("No se consolidaron registros horarios para el filtro actual.")
