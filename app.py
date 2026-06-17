@@ -100,7 +100,7 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
     except:
         return {i: {"Detalle": "⚪ Sin Conexión", "Icono": "⚪", "Estado": "Normal"} for i in range(24)}
 
-# 🚀 CONEXIÓN ONLINE EN VIVO CON LA API PÚBLICA DE WAZE (ECUADOR) - MODIFICADA CON HORA DE REPORTE
+# 🚀 CONEXIÓN ONLINE EN VIVO CON LA API PÚBLICA DE WAZE (CON HORA LOCAL DE REPORTE)
 @st.cache_data(ttl=60)
 def obtener_alertas_waze_Ecuador_completo():
     url_waze = "https://www.waze.com/row-rtserver/web/getStreetUniqueAlerts?top=1.45&bottom=-5.01&left=-81.11&right=-75.19"
@@ -127,7 +127,7 @@ def obtener_alertas_waze_Ecuador_completo():
             subtipo = al.get("subType", "")
             descripcion = al.get("reportDescription", "")
             
-            # Procesar marca de tiempo de la alerta (pubMillis)
+            # Conversión limpia del timestamp de la alerta (pubMillis) a Hora Ecuador
             millis = al.get("pubMillis", 0)
             if millis > 0:
                 dt_utc = datetime.fromtimestamp(millis / 1000.0, tz=ZoneInfo("UTC"))
@@ -140,7 +140,7 @@ def obtener_alertas_waze_Ecuador_completo():
             icono = "💥" if "ACCIDENT" in tipo or "COLLISION" in tipo else "⚠️"
             detalles = f" ({descripcion})" if descripcion else ""
             
-            # Estructura del texto incluyendo el factor tiempo al inicio
+            # Texto estructurado con timestamp incluido
             texto_alerta = f"{icono} **[{tiempo_str}]** {calle}: {tipo_legible}{detalles}."
             
             palabras_ejes = ["VIA", "VÍA", "PANAMERICANA", "ALOAG", "ALÓAG", "E35", "E25", "E45", "TRONCAL", "PERIMETRAL"]
@@ -324,7 +324,7 @@ if df_raw is not None and not df_raw.empty:
 
     st.markdown("---")
 
-    # 🛠️ DIVISIÓN EN 3 GRANDES COLUMNAS ESTRUCTURALES
+    # 🛠️ DIVISIÓN EN 3 GRANDES COLUMNAS ESTRUCTURALES (Métricas/Tablas Izquierda y Centro | Waze Extremo Derecho)
     col_operacion_izq, col_operacion_cen, col_waze_der = st.columns([4, 5, 3])
     
     # --- COLUMNA 1 (IZQUIERDA): METRICAS Y GEOGRAFIA ---
@@ -497,7 +497,7 @@ if df_raw is not None and not df_raw.empty:
     with col_waze_der:
         st.write("### 🛰️ Panel de Tráfico Waze (En Vivo)")
         
-        # Consumo en tiempo real
+        # Consumo en tiempo real desde el Bounding Box de Waze
         incidentes_nacionales, incidentes_provinciales_dict = obtener_alertas_waze_Ecuador_completo()
         
         # Subcontenedor 1: Troncales Nacionales
@@ -537,12 +537,14 @@ if df_raw is not None and not df_raw.empty:
             else:
                 st.success(f"✅ **[WAZE {prov_upper}]** Flujo libre y estable en la zona.")
 
+    # --- FINAL DEL ARCHIVO: SISTEMA DE AUTO-REFRESCO ACTIVO Y REAL ---
     st.markdown("---")
     
-    # Fragmento nativo asíncrono para el autorefresco seguro
+    # Fragmento asíncrono configurado a 300 segundos (5 minutos)
     @st.fragment(run_every=300)
     def ejecutar_autorefresh():
-        pass
+        # Dispara la recarga de toda la página, limpiando cachés expiradas de Waze y Clima
+        st.rerun()
         
     ejecutar_autorefresh()
 else:
