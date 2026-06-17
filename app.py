@@ -124,7 +124,7 @@ def calcular_factor_lluvia_en_vivo(df_historico, lat, lon):
         if total_evaluado > 0 and lluvias_detectadas > 0:
             ratio = lluvias_detectadas / total_evaluado
             return round(1.2 + (ratio * 1.5), 2)
-            return 1.35
+        return 1.35
     except:
         return 1.35
 
@@ -168,11 +168,11 @@ if df_raw is not None and not df_raw.empty:
     f1, f2, f3, f4, f5 = st.columns([2, 2, 2, 3, 2])
     
     with f1:
-        dias_en_orden = ["LUNES", "MARTES", "MIÉRCOLES", "MIERCOLES", "JUEVES", "VIERNES", "SÁBADO", "SABADO", "DOMINGO"]
+        dias_en_orden = ["TODOS", "LUNES", "MARTES", "MIÉRCOLES", "MIERCOLES", "JUEVES", "VIERNES", "SÁBADO", "SABADO", "DOMINGO"]
         dias_existentes = df_raw[col_dia].dropna().unique()
-        dias_disponibles = [d for d in dias_en_orden if d in list(df_raw[col_dia].str.upper().unique())]
+        dias_disponibles = [d for d in dias_en_orden if d == "TODOS" or d in list(df_raw[col_dia].str.upper().unique())]
         extras = [d for d in dias_existentes if d.upper() not in dias_en_orden]
-        dia_sel = st.selectbox("📅 Seleccionar Día Tipo:", dias_disponibles + extras)
+        dia_sel = st.selectbox("📅 Seleccionar Día Tipo:", dias_disponibles + extras, index=0) # Index=0 fuerza "TODOS" al iniciar
     
     with f2:
         lista_servicios = ["Todos"] + list(df_raw[col_servicio].dropna().unique())
@@ -204,16 +204,32 @@ if df_raw is not None and not df_raw.empty:
     with f5:
         estado_sel = st.selectbox("📌 Filtrar por Estado:", ["Todos"] + list(df_raw[col_estado].dropna().unique())) if col_estado in df_raw.columns else "Todos"
 
-    dia_actual_num = hora_ecuador_actual.weekday() 
-    dia_destino_num = diccionario_dias.get(dia_sel.upper(), dia_actual_num)
-    
-    dias_diferencia = (dia_destino_num - dia_actual_num) % 7
-    fecha_target = hora_ecuador_actual + timedelta(days=dias_diferencia)
-    fecha_target_str = fecha_target.strftime("%Y-%m-%d")
+    # Configuración de fecha y cálculo de días dependiendo del filtro de Día Tipo
+    if dia_sel.upper() == "TODOS":
+        df_dia_especifico = df_raw.copy()
+        if col_fecha in df_dia_especifico.columns:
+            df_dia_especifico[col_fecha] = pd.to_datetime(df_dia_especifico[col_fecha], errors='coerce')
+            fecha_min = df_dia_especifico[col_fecha].min()
+            fecha_max = df_dia_especifico[col_fecha].max()
+            if pd.notnull(fecha_min) and pd.notnull(fecha_max):
+                num_fechas_reales = (fecha_max - fecha_min).days + 1
+            else:
+                num_fechas_reales = df_dia_especifico[col_fecha].nunique()
+        else:
+            num_fechas_reales = 1
+        if num_fechas_reales <= 0: num_fechas_reales = 1
+        fecha_target_str = hora_ecuador_actual.strftime("%Y-%m-%d")
+        dias_diferencia = 0
+    else:
+        dia_actual_num = hora_ecuador_actual.weekday() 
+        dia_destino_num = diccionario_dias.get(dia_sel.upper(), dia_actual_num)
+        dias_diferencia = (dia_destino_num - dia_actual_num) % 7
+        fecha_target = hora_ecuador_actual + timedelta(days=dias_diferencia)
+        fecha_target_str = fecha_target.strftime("%Y-%m-%d")
 
-    df_dia_especifico = df_raw[df_raw[col_dia].str.upper() == dia_sel.upper()]
-    num_fechas_reales = df_dia_especifico[col_fecha].nunique() if col_fecha in df_dia_especifico.columns else 1
-    if num_fechas_reales == 0: num_fechas_reales = 1
+        df_dia_especifico = df_raw[df_raw[col_dia].str.upper() == dia_sel.upper()]
+        num_fechas_reales = df_dia_especifico[col_fecha].nunique() if col_fecha in df_dia_especifico.columns else 1
+        if num_fechas_reales == 0: num_fechas_reales = 1
 
     df_base_dia_estado = df_dia_especifico.copy()
     if estado_sel != "Todos" and col_estado in df_raw.columns:
@@ -243,7 +259,8 @@ if df_raw is not None and not df_raw.empty:
 
     total_casos_historicos = len(df_filtrado)
     promedio_asistencias_dia = int(round(total_casos_historicos / num_fechas_reales, 0))
-    st.metric(label=f"📊 Casos Promedio Esperados (Día {dia_sel})", value=f"{promedio_asistencias_dia} Asistencias")
+    label_dinamico = f"📊 Casos Promedio Esperados ({dia_sel.title()})" if dia_sel.upper() == "TODOS" else f"📊 Casos Promedio Esperados (Día {dia_sel})"
+    st.metric(label=label_dinamico, value=f"{promedio_asistencias_dia} Asistencias")
 
     st.markdown("---")
     col_tabla_izq, col_tabla_der = st.columns([4, 6])
@@ -306,7 +323,7 @@ if df_raw is not None and not df_raw.empty:
                     }
                 )
             else:
-                st.write(f"### ⏰ Matriz Horaria Avanzada y Necesidad de Flota para el {dia_sel.title()}")
+                st.write(f"### ⏰ Matriz Horaria Avanzada y Necesidad de Flota para el Período: {dia_sel.title()}")
                 if col_hora_agrupada in df_filtrado.columns:
                     df_horas_raw = df_filtrado.copy()
                     df_horas_raw[col_hora_agrupada] = pd.to_numeric(df_horas_raw[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
