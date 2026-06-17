@@ -105,7 +105,11 @@ def obtener_alertas_waze_real(lat, lon, delta=0.12):
                 else:
                     icono, titulo = "⚠️", "Obstáculo / Peligro en Calzada"
                 
-                ubicacion_str = f"{calle}" + (f" ({ciudad})" if city := ciudad else "")
+                if ciudad:
+                    ubicacion_str = f"{calle} ({ciudad})"
+                else:
+                    ubicacion_str = f"{calle}"
+                    
                 alertas_procesadas.append(f"{icono} **Waze [{titulo}]:** En {ubicacion_str}.")
             
             return alertas_procesadas[:5]  # Retorna el TOP 5 de reportes en vivo
@@ -346,7 +350,7 @@ if df_raw is not None and not df_raw.empty:
             else:
                 st.write(f"### ⏰ Matriz Horaria Avanzada y Necesidad de Flota para el {dia_sel.title()}")
                 
-                # 📡 SECCIÓN DE ALERTAS DE WAZE REAL ONLINE
+                # 📡 SECCIÓN DE ALERTAS DE WAZE REAL ONLINE SANEADA
                 if provincia_sel != "Todas":
                     st.write("#### 📡 Reportes de Tráfico Waze (Live Online)")
                     lat_p, lon_p = coordenadas_provincias.get(provincia_sel, [-0.2298, -78.5249])
