@@ -22,10 +22,10 @@ st.markdown("""
     .stDataFrame [data-testid="stDataFrameDownloadButton"] {display: none;}
     button[title="View fullscreen"] {display: none;}
     
-    /* 🛠️ AJUSTE SOLICITADO: Eliminación drástica del espacio muerto arriba del título */
+    /* 🛠️ AJUSTE: Margen corregido para que el título no se corte arriba */
     .block-container {
-        padding-top: 0rem !important;
-        margin-top: -30px !important;
+        padding-top: 1rem !important;
+        margin-top: 0px !important;
     }
     .stApp {
         margin-top: 0px !important;
