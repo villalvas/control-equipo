@@ -44,6 +44,20 @@ st.markdown("""
         font-size: 17px !important;
         font-weight: bold !important;
     }
+    
+    /* Estilos personalizados para logs de alertas compactos */
+    .waze-line {
+        padding: 4px 8px;
+        margin-bottom: 4px;
+        border-radius: 4px;
+        font-size: 13px;
+        font-family: monospace;
+        line-height: 1.4;
+    }
+    .waze-national { background-color: #fff3cd; color: #856404; border-left: 4px solid #ffc107; }
+    .waze-danger { background-color: #f8d7da; color: #721c24; border-left: 4px solid #dc3545; }
+    .waze-info { background-color: #d1ecf1; color: #0c5460; border-left: 4px solid #17a2b8; }
+    .waze-success { background-color: #d4edda; color: #155724; border-left: 4px solid #28a745; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -103,27 +117,24 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
 # 🚀 ESTRUCTURA COMPLETA DE ALERTA DE TRÁFICO/WAZE EN TIEMPO REAL
 def obtener_alertas_waze_Ecuador_completo():
     incidentes_nacionales = [
-        "⚠️ **[WAZE NACIONAL]** Aloag - Santo Domingo: Tránsito lento reportado en el Km 34 por neblina pesada.",
-        "🚧 **[WAZE NACIONAL]** Vía Baños - Puyo: Paso controlado y congestión moderada por trabajos en calzada."
+        "Aloag - Santo Domingo: Tránsito lento reportado en el Km 34 por neblina pesada.",
+        "Vía Baños - Puyo: Paso controlado y congestión moderada por trabajos en calzada."
     ]
     
     incidentes_provinciales = {
         "PICHINCHA": [
-            "💥 **[WAZE PICHINCHA]** Av. Simón Bolívar (Sector Guápulo): Choque múltiple carril izquierdo obstruido. Retraso +25 min.",
-            "🚗 **[WAZE PICHINCHA]** Túnel Guayasamín: Flujo vehicular crítico sentido Cumbayá."
+            "Av. Simón Bolívar (Sector Guápulo): Choque múltiple carril izquierdo obstruido. Retraso +25 min.",
+            "Túnel Guayasamín: Flujo vehicular crítico sentido Cumbayá."
         ],
         "GUAYAS": [
-            "💥 **[WAZE GUAYAS]** Av. Juan Tanca Marengo: Colisión leve genera cuello de botella antes del paso elevado.",
-            "🛑 **[WAZE GUAYAS]** Puente de la Unidad Nacional: Tráfico pesado reportado ingresando a Guayaquil."
+            "Av. Juan Tanca Marengo: Colisión leve genera cuello de botella antes del paso elevado.",
+            "Puente de la Unidad Nacional: Tráfico pesado reportado ingresando a Guayaquil."
         ],
         "AZUAY": [
-            "⚠️ **[WAZE AZUAY]** Av. Ordóñez Lasso: Reporte de semáforos fuera de servicio con congestión alta."
+            "Av. Ordóñez Lasso: Reporte de semáforos fuera de servicio con congestión alta."
         ],
         "MANABI": [
-            "🚧 **[WAZE MANABÍ]** Vía Manta - Rocafuerte: Retrasos por desvío operativo temporal."
-        ],
-        "MANABÍ": [
-            "🚧 **[WAZE MANABÍ]** Vía Manta - Rocafuerte: Retrasos por desvío operativo temporal."
+            "Vía Manta - Rocafuerte: Retrasos por desvío operativo temporal."
         ]
     }
     return incidentes_nacionales, incidentes_provinciales
@@ -284,8 +295,8 @@ if df_raw is not None and not df_raw.empty:
 
     st.markdown("---")
 
-    # 🛠️ SECCIÓN CORREGIDA INTERACTIVA: FEED DINÁMICO (NACIONAL SIEMPRE VISIBLE + LOCAL CONFIGURABLE)
-    c_metrica, c_waze_nac, c_waze_local = st.columns([4, 4, 4])
+    # 🛠️ NUEVA SECCIÓN MINIMALISTA: BITÁCORAS DE CONTROL CON HEIGHT Y SCROLL INTERNO (NO INVASIVO)
+    c_metrica, c_waze_nac, c_waze_local = st.columns([3, 4, 5])
     
     with c_metrica:
         total_casos_historicos = len(df_filtrado)
@@ -293,45 +304,36 @@ if df_raw is not None and not df_raw.empty:
         label_dinamico = f"📊 Casos Promedio Esperados ({dia_sel.title()})" if dia_sel.upper() == "TODOS" else f"📊 Casos Promedio Esperados (Día {dia_sel})"
         st.metric(label=label_dinamico, value=f"{promedio_asistencias_dia} Asistencias")
         
-    # Obtener flujos de Waze desde el diccionario estructurado
     incidentes_nacionales, incidentes_provinciales_dict = obtener_alertas_waze_Ecuador_completo()
 
-    # 🌐 CONTENEDOR 1: Alertas Nacionales. Se mantienen FIJAS sin importar el filtro geográfico.
+    # 🌐 LOG NACIONAL COMPACTO
     with c_waze_nac:
-        st.write("🌐 **Alertas Waze Nacionales (Ejes Principales)**")
-        for alerta in incidentes_nacionales:
-            st.warning(alerta)
+        st.markdown("<p style='font-weight: bold; font-size:14px; margin-bottom:5px;'>🌐 Bitácora Waze Nacional (Ejes Viales)</p>", unsafe_allow_html=True)
+        with st.container(height=160, border=True):
+            for alerta in incidentes_nacionales:
+                st.markdown(f"<div class='waze-line waze-national'>⚠️ <b>[NACIONAL]</b> {alerta}</div>", unsafe_allow_html=True)
 
-    # 📍 CONTENEDOR 2: Alertas Locales. Dinámicas y adaptativas según tu filtro.
+    # 📍 LOG PROVINCIAL / CONSOLIDADO COMPACTO
     with c_waze_local:
         if provincia_sel == "Todas":
-            st.write("📍 **Alertas Waze: Provincias (Todo el País)**")
-            
-            # Consolidamos todas las alertas locales en una sola lista para el estado general
-            alertas_totales_lista = []
-            for prov, alertas in incidentes_provinciales_dict.items():
-                alertas_totales_lista.extend(alertas)
-            
-            for alerta in alertas_totales_lista:
-                if "Choque" in alerta or "💥" in alerta:
-                    st.error(alerta)
-                else:
-                    st.info(alerta)
+            st.markdown("<p style='font-weight: bold; font-size:14px; margin-bottom:5px;'>📍 Historial de Alertas: Provincias (Todo el País)</p>", unsafe_allow_html=True)
+            with st.container(height=160, border=True):
+                for prov, alertas in incidentes_provinciales_dict.items():
+                    for alerta in alertas:
+                        clase = "waze-danger" if "Choque" in alerta or "💥" in alerta else "waze-info"
+                        emoji = "💥" if "waze-danger" in clase else "🚗"
+                        st.markdown(f"<div class='waze-line {clase}'>{emoji} <b>[{prov}]</b> {alerta}</div>", unsafe_allow_html=True)
         else:
-            st.write(f"📍 **Alertas Waze Local: {provincia_sel.title()}**")
+            st.markdown(f"<p style='font-weight: bold; font-size:14px; margin-bottom:5px;'>📍 Alertas en Vivo: {provincia_sel.title()}</p>", unsafe_allow_html=True)
             prov_upper = provincia_sel.upper()
-            
-            # Filtramos en tiempo real para extraer solo la provincia seleccionada
-            alertas_locales_filtradas = incidentes_provinciales_dict.get(
-                prov_upper, 
-                [f"✅ **[WAZE {prov_upper}]** Sin choques ni alertas críticas registradas en este momento."]
-            )
-            
-            for alerta in alertas_locales_filtradas:
-                if "Choque" in alerta or "💥" in alerta:
-                    st.error(alerta)
+            with st.container(height=160, border=True):
+                if prov_upper in incidentes_provinciales_dict:
+                    for alerta in incidentes_provinciales_dict[prov_upper]:
+                        clase = "waze-danger" if "Choque" in alerta or "💥" in alerta else "waze-info"
+                        emoji = "💥" if "waze-danger" in clase else "🚗"
+                        st.markdown(f"<div class='waze-line {clase}'>{emoji} <b>[{prov_upper}]</b> {alerta}</div>", unsafe_allow_html=True)
                 else:
-                    st.info(alerta)
+                    st.markdown(f"<div class='waze-line waze-success'>✅ Sin alertas críticas reportadas en {provincia_sel.title()}</div>", unsafe_allow_html=True)
 
     st.markdown("---")
     
