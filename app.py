@@ -100,7 +100,7 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
     except:
         return {i: {"Detalle": "⚪ Sin Conexión", "Icono": "⚪", "Estado": "Normal"} for i in range(24)}
 
-# 🚀 CONEXIÓN ONLINE EN VIVO CON LA API PÚBLICA DE WAZE (ECUADOR)
+# 🚀 CONEXIÓN ONLINE EN VIVO CON LA API PÚBLICA DE WAZE (ECUADOR) - MODIFICADA CON HORA DE REPORTE
 @st.cache_data(ttl=60)
 def obtener_alertas_waze_Ecuador_completo():
     url_waze = "https://www.waze.com/row-rtserver/web/getStreetUniqueAlerts?top=1.45&bottom=-5.01&left=-81.11&right=-75.19"
@@ -119,6 +119,7 @@ def obtener_alertas_waze_Ecuador_completo():
     try:
         respuesta = requests.get(url_waze, headers=headers, timeout=10).json()
         alertas = respuesta.get("alerts", [])
+        zona_ec = ZoneInfo("America/Guayaquil")
         
         for al in alertas:
             calle = al.get("street", "Vía no identificada")
@@ -126,10 +127,21 @@ def obtener_alertas_waze_Ecuador_completo():
             subtipo = al.get("subType", "")
             descripcion = al.get("reportDescription", "")
             
+            # Procesar marca de tiempo de la alerta (pubMillis)
+            millis = al.get("pubMillis", 0)
+            if millis > 0:
+                dt_utc = datetime.fromtimestamp(millis / 1000.0, tz=ZoneInfo("UTC"))
+                dt_ec = dt_utc.astimezone(zona_ec)
+                tiempo_str = dt_ec.strftime("%d/%m %I:%M %p")
+            else:
+                tiempo_str = "Hora no disp."
+
             tipo_legible = subtipo.replace("_", " ").title() if subtipo else tipo.title()
             icono = "💥" if "ACCIDENT" in tipo or "COLLISION" in tipo else "⚠️"
             detalles = f" ({descripcion})" if descripcion else ""
-            texto_alerta = f"{icono} **[WAZE]** {calle}: {tipo_legible}{detalles}."
+            
+            # Estructura del texto incluyendo el factor tiempo al inicio
+            texto_alerta = f"{icono} **[{tiempo_str}]** {calle}: {tipo_legible}{detalles}."
             
             palabras_ejes = ["VIA", "VÍA", "PANAMERICANA", "ALOAG", "ALÓAG", "E35", "E25", "E45", "TRONCAL", "PERIMETRAL"]
             if any(pe in calle.upper() for pe in palabras_ejes):
@@ -312,7 +324,7 @@ if df_raw is not None and not df_raw.empty:
 
     st.markdown("---")
 
-    # 🛠️ DIVISIÓN EN 3 GRANDES COLUMNAS ESTRUCTURALES (Métricas/Tablas Izquierda y Centro | Waze Extremo Derecho)
+    # 🛠️ DIVISIÓN EN 3 GRANDES COLUMNAS ESTRUCTURALES
     col_operacion_izq, col_operacion_cen, col_waze_der = st.columns([4, 5, 3])
     
     # --- COLUMNA 1 (IZQUIERDA): METRICAS Y GEOGRAFIA ---
@@ -485,7 +497,7 @@ if df_raw is not None and not df_raw.empty:
     with col_waze_der:
         st.write("### 🛰️ Panel de Tráfico Waze (En Vivo)")
         
-        # Consumo en tiempo real desde el Bounding Box de Waze
+        # Consumo en tiempo real
         incidentes_nacionales, incidentes_provinciales_dict = obtener_alertas_waze_Ecuador_completo()
         
         # Subcontenedor 1: Troncales Nacionales
@@ -527,7 +539,7 @@ if df_raw is not None and not df_raw.empty:
 
     st.markdown("---")
     
-    # Fragmento nativo asíncrono para el autorefresco seguro sin bucles duplicados
+    # Fragmento nativo asíncrono para el autorefresco seguro
     @st.fragment(run_every=300)
     def ejecutar_autorefresh():
         pass
