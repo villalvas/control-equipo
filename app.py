@@ -76,7 +76,7 @@ diccionario_dias = {
     "JUEVES": 3, "VIERNES": 4, "SÁBADO": 5, "SABADO": 5, "DOMINGO": 6
 }
 
-# 🚀 CONSULTA DE CLIMA EN VIVO DESDE LA API ONLINE
+# 🚗 CONSULTA DE CLIMA EN VIVO DESDE LA API ONLINE
 @st.cache_data(ttl=300)
 def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
     try:
@@ -100,6 +100,39 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
         return datos_clima if datos_clima else {i: {"Detalle": "⚪ Sin Predicción", "Icono": "⚪", "Estado": "Normal"} for i in range(24)}
     except:
         return {i: {"Detalle": "⚪ Sin Conexión", "Icono": "⚪", "Estado": "Normal"} for i in range(24)}
+
+# 🚀 CONSULTA SIMULADA DE ALERTAS DE TRÁFICO/WAZE EN TIEMPO REAL
+def obtener_alertas_waze_Ecuador(provincia_seleccionada):
+    # Base de incidentes nacionales simulados actualizables
+    incidentes_nacionales = [
+        "⚠️ **[WAZE NACIONAL]** Aloag - Santo Domingo: Tránsito lento reportado en el Km 34 por neblina pesada.",
+        "🚧 **[WAZE NACIONAL]** Vía Baños - Puyo: Paso controlado y congestión moderada por trabajos en calzada."
+    ]
+    
+    incidentes_provinciales = {
+        "PICHINCHA": [
+            "💥 **[WAZE PICHINCHA]** Av. Simón Bolívar (Sector Guápulo): Choque múltiple carril izquierdo obstruido. Retraso +25 min.",
+            "🚗 **[WAZE PICHINCHA]** Túnel Guayasamín: Flujo vehicular crítico sentido Cumbayá."
+        ],
+        "GUAYAS": [
+            "💥 **[WAZE GUAYAS]** Av. Juan Tanca Marengo: Colisión leve genera cuello de botella antes del paso elevado.",
+            "🛑 **[WAZE GUAYAS]** Puente de la Unidad Nacional: Tráfico pesado reportado ingresando a Guayaquil."
+        ],
+        "AZUAY": [
+            "⚠️ **[WAZE AZUAY]** Av. Ordóñez Lasso: Reporte de semáforos fuera de servicio con congestión alta."
+        ],
+        "MANABI": [
+            "🚧 **[WAZE MANABÍ]** Vía Manta - Rocafuerte: Retrasos por desvío operativo temporal."
+        ],
+        "MANABÍ": [
+            "🚧 **[WAZE MANABÍ]** Vía Manta - Rocafuerte: Retrasos por desvío operativo temporal."
+        ]
+    }
+    
+    prov_upper = provincia_seleccionada.upper()
+    alertas_locales = incidentes_provinciales.get(prov_upper, [f"✅ **[WAZE {prov_upper}]** Sin choques ni alertas críticas registradas en este momento."])
+    
+    return incidentes_nacionales, alertas_locales
 
 # 🚀 CÁLCULO CIENTÍFICO DEL MULTIPLICADOR HISTÓRICO DE LLUVIA
 @st.cache_data(ttl=3600)
@@ -257,10 +290,34 @@ if df_raw is not None and not df_raw.empty:
 
     st.markdown("---")
 
-    total_casos_historicos = len(df_filtrado)
-    promedio_asistencias_dia = int(round(total_casos_historicos / num_fechas_reales, 0))
-    label_dinamico = f"📊 Casos Promedio Esperados ({dia_sel.title()})" if dia_sel.upper() == "TODOS" else f"📊 Casos Promedio Esperados (Día {dia_sel})"
-    st.metric(label=label_dinamico, value=f"{promedio_asistencias_dia} Asistencias")
+    # 🛠️ SECCIÓN CORREGIDA: MÉTRICAS Y BANNERS DE TRÁFICO DE WAZE JUNTOS LADO A LADO
+    c_metrica, c_waze_nac, c_waze_prov = st.columns([4, 4, 4])
+    
+    with c_metrica:
+        total_casos_historicos = len(df_filtrado)
+        promedio_asistencias_dia = int(round(total_casos_historicos / num_fechas_reales, 0))
+        label_dinamico = f"📊 Casos Promedio Esperados ({dia_sel.title()})" if dia_sel.upper() == "TODOS" else f"📊 Casos Promedio Esperados (Día {dia_sel})"
+        st.metric(label=label_dinamico, value=f"{promedio_asistencias_dia} Asistencias")
+        
+    # Obtener flujos de Waze según interacción
+    alertas_nac, alertas_prov = obtener_alertas_waze_Ecuador(provincia_sel)
+
+    with c_waze_nac:
+        st.write("🌐 **Alertas Waze Nacionales (Ejes Principales)**")
+        for alerta in alertas_nac:
+            st.warning(alerta)
+
+    with c_waze_prov:
+        if provincia_sel != "Todas":
+            st.write(f"📍 **Alertas Waze Local: {provincia_sel.title()}**")
+            for alerta in alertas_prov:
+                if "Choque" in alerta or "💥" in alerta:
+                    st.error(alerta)
+                else:
+                    st.info(alerta)
+        else:
+            st.write("📍 **Alertas Waze Local**")
+            st.info("ℹ️ Seleccione una provincia en los filtros superiores para auditar incidentes de tráfico locales.")
 
     st.markdown("---")
     col_tabla_izq, col_tabla_der = st.columns([4, 6])
