@@ -4,6 +4,7 @@ import requests
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import math
+import time
 
 # 1. Configuración de pantalla ultra ancha para el monitor de control
 st.set_page_config(
@@ -47,15 +48,27 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# Definimos la zona horaria de Ecuador de forma explícita
-# Al calcularse aquí arriba, la hora quedará congelada en la pantalla hasta que ocurra la próxima recarga total
+# --- CONTROL DEL TEMPORIZADOR Y HORA ESTÁTICA PROFESIONAL ---
 zona_ecuador = ZoneInfo("America/Guayaquil")
-hora_ecuador_actual = datetime.now(zona_ecuador)
-hora_estatica_str = hora_ecuador_actual.strftime('%I:%M:%S %p')
+ahora_actual = datetime.now(zona_ecuador)
+
+# Inicializamos las variables de control en el session_state si no existen
+if "ultima_actualizacion" not in st.session_state:
+    st.session_state.ultima_actualizacion = ahora_actual
+if "proxima_actualizacion" not in st.session_state:
+    st.session_state.proxima_actualizacion = ahora_actual + timedelta(minutes=5)
+
+# Si el tiempo actual superó la fecha límite de actualización, actualizamos marcas e inicializamos recarga total
+if ahora_actual >= st.session_state.proxima_actualizacion:
+    st.session_state.ultima_actualizacion = ahora_actual
+    st.session_state.proxima_actualizacion = ahora_actual + timedelta(minutes=5)
+
+# Fijamos la hora estática basada en el último ciclo completado
+hora_estatica_str = st.session_state.ultima_actualizacion.strftime('%I:%M:%S %p')
 
 st.title("🔮 Monitor de Proyección Horaria y Alerta Temprana de Flota")
 
-# Indicador estático (Solo cambia en el segundo exacto que se vuelve a ejecutar todo el código)
+# El indicador se mantiene congelado mostrando la hora exacta de la última actualización real
 st.caption(f"Centro de Control Geoanalítico con Monitoreo de Clima Online | 🔄 Auto-refresco activo cada 5 min (Último: {hora_estatica_str})")
 
 coordenadas_provincias = {
@@ -102,7 +115,7 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
     except:
         return {i: {"Detalle": "⚪ Sin Conexión", "Icono": "⚪", "Estado": "Normal"} for i in range(24)}
 
-# 🚀 CONEXIÓN ONLINE EN VIVO CON LA API PÚBLICA DE WAZE (CON HORA LOCAL DE REPORTE)
+# 🚀 CONEXIÓN ONLINE EN VIVO CON LA API PÚBLICA DE WAZE
 @st.cache_data(ttl=60)
 def obtener_alertas_waze_Ecuador_completo():
     url_waze = "https://www.waze.com/row-rtserver/web/getStreetUniqueAlerts?top=1.45&bottom=-5.01&left=-81.11&right=-75.19"
@@ -129,7 +142,6 @@ def obtener_alertas_waze_Ecuador_completo():
             subtipo = al.get("subType", "")
             descripcion = al.get("reportDescription", "")
             
-            # Conversión del timestamp de la alerta (pubMillis) a Hora Ecuador
             millis = al.get("pubMillis", 0)
             if millis > 0:
                 dt_utc = datetime.fromtimestamp(millis / 1000.0, tz=ZoneInfo("UTC"))
@@ -286,13 +298,13 @@ if df_raw is not None and not df_raw.empty:
         else:
             num_fechas_reales = 1
         if num_fechas_reales <= 0: num_fechas_reales = 1
-        fecha_target_str = hora_ecuador_actual.strftime("%Y-%m-%d")
+        fecha_target_str = st.session_state.ultima_actualizacion.strftime("%Y-%m-%d")
         dias_diferencia = 0
     else:
-        dia_actual_num = hora_ecuador_actual.weekday() 
+        dia_actual_num = st.session_state.ultima_actualizacion.weekday() 
         dia_destino_num = diccionario_dias.get(dia_sel.upper(), dia_actual_num)
         dias_diferencia = (dia_destino_num - dia_actual_num) % 7
-        fecha_target = hora_ecuador_actual + timedelta(days=dias_diferencia)
+        fecha_target = st.session_state.ultima_actualizacion + timedelta(days=dias_diferencia)
         fecha_target_str = fecha_target.strftime("%Y-%m-%d")
 
         df_dia_especifico = df_raw[df_raw[col_dia].str.upper() == dia_sel.upper()]
@@ -313,7 +325,7 @@ if df_raw is not None and not df_raw.empty:
         if ciudad_sel:
             df_filtrado = df_filtrado[df_filtrado[col_ciudad].isin(ciudad_sel)]
 
-    hora_actual = hora_ecuador_actual.hour
+    hora_actual = st.session_state.ultima_actualizacion.hour
 
     if provincia_sel != "Todas":
         lat_c, lon_c = coordenadas_provincias.get(provincia_sel, [-0.2298, -78.5249])
@@ -325,7 +337,7 @@ if df_raw is not None and not df_raw.empty:
 
     st.markdown("---")
 
-    # 🛠️ DIVISIÓN EN 3 GRANDES COLUMNAS ESTRUCTURALES
+    # 🛠️ DIVISIÓN LIMPIA EN 3 COLUMNAS SIN ELEMENTOS QUE ROMPAN EL DOM
     col_operacion_izq, col_operacion_cen, col_waze_der = st.columns([4, 5, 3])
     
     # --- COLUMNA 1 (IZQUIERDA): METRICAS Y GEOGRAFIA ---
@@ -472,7 +484,7 @@ if df_raw is not None and not df_raw.empty:
                             for alerta in alertas_activas: st.error(alerta)
                         else:
                             if dias_diferencia == 0:
-                                st.success(f"✅ Clima estable en {provincia_sel}.")
+                                st.success(f"✅ Clima stable en {provincia_sel}.")
                     else:
                         st.info("ℹ️ Filtre una Provincia para ver Clima.")
                     
@@ -535,16 +547,12 @@ if df_raw is not None and not df_raw.empty:
             else:
                 st.success(f"✅ **[WAZE {prov_upper}]** Flujo libre y estable en la zona.")
 
-    # --- FINAL DEL ARCHIVO: AUTO-REFRESCO DE TODO EL PANEL (REINICIO TOTAL SECUENCIAL) ---
+    # --- TIMER DE AUTO-REFRESCO NATIVO DE ALTO RENDIMIENTO (SIN JS QUE DAÑE EL DOM) ---
     st.markdown("---")
     
-    # Fragmento asíncrono puro de Streamlit que corre cada 5 minutos
-    @st.fragment(run_every=300)
-    def ejecutar_autorefresh():
-        # Al llegar el temporizador a cero, st.rerun() reinicia todo el script desde la línea 1.
-        # Esto destruye la vista anterior y genera una estampa de tiempo 100% nueva arriba.
+    # Hacemos una pausa muy pequeña para evitar bucles infinitos y forzamos recarga cada 5 min (300s)
+    time.sleep(1)
+    if datetime.now(zona_ecuador) >= st.session_state.proxima_actualizacion:
         st.rerun()
-        
-    ejecutar_autorefresh()
 else:
     st.warning("⚠️ Esperando conexión con el archivo de Google Drive...")
