@@ -41,7 +41,7 @@ hora_ecuador_actual = datetime.now(zona_ecuador)
 st.title("🔮 Monitor de Proyección Horaria y Alerta Temprana de Flota")
 
 # Indicador de sincronización en vivo
-st.caption(f"Centro de Control Geoanalítico con Monitoreo de Clima Online | 🔄 Auto-refresco activo cada 5 min (Último: {hora_ecuador_actual.strftime('%I:%M:%S %p')})")
+st.caption(f"Centro de Control Geoanalítico con Monitoreo de Clima y Waze Online | 🔄 Auto-refresco activo cada 5 min (Último: {hora_ecuador_actual.strftime('%I:%M:%S %p')})")
 
 coordenadas_provincias = {
     'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
@@ -61,6 +61,58 @@ diccionario_dias = {
     "LUNES": 0, "MARTES": 1, "MIÉRCOLES": 2, "MIERCOLES": 2, 
     "JUEVES": 3, "VIERNES": 4, "SÁBADO": 5, "SABADO": 5, "DOMINGO": 6
 }
+
+# 🚀 LECTOR AUTOMÁTICO ONLINE EN TIEMPO REAL DESDE EL FEED DE WAZE
+def obtener_alertas_waze_real(lat, lon, delta=0.12):
+    """
+    Consulta en vivo el Live Map de Waze en un radio aproximado de 12-15km.
+    """
+    params = {
+        "top": lat + delta,
+        "bottom": lat - delta,
+        "left": lon - delta,
+        "right": lon + delta,
+        "env": "row",                # Servidor Región Latinoamérica / Rest of World
+        "types": "alerts,traffic"
+    }
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    url = "https://www.waze.com/live-map/api/georss"
+    
+    try:
+        respuesta = requests.get(url, params=params, headers=headers, timeout=8)
+        if respuesta.status_code == 200:
+            datos = respuesta.json()
+            alertas_raw = datos.get("alerts", [])
+            
+            if not alertas_raw:
+                return ["✅ **Waze Live:** Flujo vial despejado. Sin alertas de tráfico reportadas en los puntos principales de la provincia."]
+            
+            alertas_procesadas = []
+            for alert in alertas_raw:
+                tipo = alert.get("type", "HAZARD")
+                subtipo = alert.get("subtype", "")
+                calle = alert.get("street", "Vía no identificada")
+                ciudad = alert.get("city", "")
+                
+                if tipo == "ACCIDENT":
+                    icono, titulo = "🚨", f"Accidente Vial ({subtipo.replace('_', ' ').title()})"
+                elif tipo == "JAM":
+                    icono, titulo = "🚗", "Tráfico Pesado / Congestión"
+                elif tipo == "ROAD_CLOSED":
+                    icono, titulo = "🚧", "Vía Cerrada / Bloqueo"
+                else:
+                    icono, titulo = "⚠️", "Obstáculo / Peligro en Calzada"
+                
+                ubicacion_str = f"{calle}" + (f" ({ciudad})" if city := ciudad else "")
+                alertas_procesadas.append(f"{icono} **Waze [{titulo}]:** En {ubicacion_str}.")
+            
+            return alertas_procesadas[:5]  # Retorna el TOP 5 de reportes en vivo
+        else:
+            return ["⚪ **Waze Status:** Incapaz de leer el servidor de reportes geográficos."]
+    except:
+        return ["⚪ **Waze Status:** Feed de tráfico temporalmente fuera de línea por latencia de red."]
 
 # 🚀 CONSULTA DE CLIMA EN VIVO DESDE LA API ONLINE
 @st.cache_data(ttl=300)
@@ -293,6 +345,20 @@ if df_raw is not None and not df_raw.empty:
                 )
             else:
                 st.write(f"### ⏰ Matriz Horaria Avanzada y Necesidad de Flota para el {dia_sel.title()}")
+                
+                # 📡 SECCIÓN DE ALERTAS DE WAZE REAL ONLINE
+                if provincia_sel != "Todas":
+                    st.write("#### 📡 Reportes de Tráfico Waze (Live Online)")
+                    lat_p, lon_p = coordenadas_provincias.get(provincia_sel, [-0.2298, -78.5249])
+                    alertas_waze = obtener_alertas_waze_real(lat_p, lon_p)
+                    for alerta in alertas_waze:
+                        if "Accidente" in alerta or "Cerrada" in alerta:
+                            st.error(alerta)      # Caja roja para incidencias críticas
+                        elif "Tráfico" in alerta:
+                            st.warning(alerta)    # Caja amarilla para demoras vehiculares
+                        else:
+                            st.info(alerta)       # Caja azul informativa
+                
                 if col_hora_agrupada in df_filtrado.columns:
                     df_horas_raw = df_filtrado.copy()
                     df_horas_raw[col_hora_agrupada] = pd.to_numeric(df_horas_raw[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
@@ -366,7 +432,6 @@ if df_raw is not None and not df_raw.empty:
                     
                     df_tabla_final = pd.DataFrame(registros_tabla)
                     
-                    # 📢 Despliegue de alertas o éxito meteorológico
                     if provincia_sel != "Todas":
                         if alertas_activas:
                             for alerta in alertas_activas: st.error(alerta)
@@ -374,9 +439,9 @@ if df_raw is not None and not df_raw.empty:
                             if dias_diferencia == 0:
                                 st.success(f"✅ Reporte Online: Clima estable para las próximas horas en {provincia_sel}.")
                     else:
-                        st.info("ℹ️ Para activar el análisis meteorológico en vivo y las alertas de flota, selecciona una Provincia.")
+                        st.info("ℹ️ Para activar el análisis meteorológico y de tráfico en vivo, selecciona una Provincia.")
                     
-                    # 📊 ÚNICO RENDEREADO DE LA TABLA (FUERA DE CONDICIONALES ANIDADOS)
+                    # 📊 Único renderizado de la tabla estructurada
                     if not df_tabla_final.empty:
                         st.dataframe(
                             df_tabla_final, 
@@ -399,7 +464,7 @@ if df_raw is not None and not df_raw.empty:
 
     st.markdown("---")
     
-    # 🔄 Fragmento nativo asíncrono para el autorefresco seguro sin bucles duplicados
+    # 🔄 Fragmento asíncrono para el temporizador de refresco automático cada 5 min
     @st.fragment(run_every=300)
     def ejecutar_autorefresh():
         pass
