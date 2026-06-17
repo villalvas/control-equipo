@@ -45,13 +45,18 @@ st.markdown("""
         font-weight: bold !important;
     }
     
-    /* Estilos personalizados para logs de alertas compactos */
-    .waze-line {
-        padding: 4px 8px;
-        margin-bottom: 4px;
+    /* Panel lateral derecho estilizado como Centro de Notificaciones */
+    .notification-box {
+        background-color: #f8f9fa;
+        border-left: 2px solid #dee2e6;
+        padding: 15px;
+        border-radius: 8px;
+    }
+    .waze-line-right {
+        padding: 6px 10px;
+        margin-bottom: 6px;
         border-radius: 4px;
         font-size: 13px;
-        font-family: monospace;
         line-height: 1.4;
     }
     .waze-national { background-color: #fff3cd; color: #856404; border-left: 4px solid #ffc107; }
@@ -295,211 +300,200 @@ if df_raw is not None and not df_raw.empty:
 
     st.markdown("---")
 
-    # 🛠️ NUEVA SECCIÓN MINIMALISTA: BITÁCORAS DE CONTROL CON HEIGHT Y SCROLL INTERNO (NO INVASIVO)
-    c_metrica, c_waze_nac, c_waze_local = st.columns([3, 4, 5])
-    
-    with c_metrica:
+    # 📌 ESTRUCTURACIÓN PRINCIPAL: CUERPO ANALÍTICO (IZQUIERDA) vs PANEL DE ALERTAS (DERECHA)
+    col_cuerpo_izq, col_panel_der = st.columns([9, 3])
+
+    with col_cuerpo_izq:
+        # Métrica Principal integrada arriba de las tablas
         total_casos_historicos = len(df_filtrado)
         promedio_asistencias_dia = int(round(total_casos_historicos / num_fechas_reales, 0))
         label_dinamico = f"📊 Casos Promedio Esperados ({dia_sel.title()})" if dia_sel.upper() == "TODOS" else f"📊 Casos Promedio Esperados (Día {dia_sel})"
         st.metric(label=label_dinamico, value=f"{promedio_asistencias_dia} Asistencias")
         
-    incidentes_nacionales, incidentes_provinciales_dict = obtener_alertas_waze_Ecuador_completo()
+        # Sub-columnas internas para la visualización paralela de tablas de datos
+        col_tabla_izq, col_tabla_der = st.columns([4, 6])
 
-    # 🌐 LOG NACIONAL COMPACTO
-    with c_waze_nac:
-        st.markdown("<p style='font-weight: bold; font-size:14px; margin-bottom:5px;'>🌐 Bitácora Waze Nacional (Ejes Viales)</p>", unsafe_allow_html=True)
-        with st.container(height=160, border=True):
-            for alerta in incidentes_nacionales:
-                st.markdown(f"<div class='waze-line waze-national'>⚠️ <b>[NACIONAL]</b> {alerta}</div>", unsafe_allow_html=True)
-
-    # 📍 LOG PROVINCIAL / CONSOLIDADO COMPACTO
-    with c_waze_local:
-        if provincia_sel == "Todas":
-            st.markdown("<p style='font-weight: bold; font-size:14px; margin-bottom:5px;'>📍 Historial de Alertas: Provincias (Todo el País)</p>", unsafe_allow_html=True)
-            with st.container(height=160, border=True):
-                for prov, alertas in incidentes_provinciales_dict.items():
-                    for alerta in alertas:
-                        clase = "waze-danger" if "Choque" in alerta or "💥" in alerta else "waze-info"
-                        emoji = "💥" if "waze-danger" in clase else "🚗"
-                        st.markdown(f"<div class='waze-line {clase}'>{emoji} <b>[{prov}]</b> {alerta}</div>", unsafe_allow_html=True)
-        else:
-            st.markdown(f"<p style='font-weight: bold; font-size:14px; margin-bottom:5px;'>📍 Alertas en Vivo: {provincia_sel.title()}</p>", unsafe_allow_html=True)
-            prov_upper = provincia_sel.upper()
-            with st.container(height=160, border=True):
-                if prov_upper in incidentes_provinciales_dict:
-                    for alerta in incidentes_provinciales_dict[prov_upper]:
-                        clase = "waze-danger" if "Choque" in alerta or "💥" in alerta else "waze-info"
-                        emoji = "💥" if "waze-danger" in clase else "🚗"
-                        st.markdown(f"<div class='waze-line {clase}'>{emoji} <b>[{prov_upper}]</b> {alerta}</div>", unsafe_allow_html=True)
-                else:
-                    st.markdown(f"<div class='waze-line waze-success'>✅ Sin alertas críticas reportadas en {provincia_sel.title()}</div>", unsafe_allow_html=True)
-
-    st.markdown("---")
-    
-    # Renderizado de Bloques y Tablas Inferiores
-    col_tabla_izq, col_tabla_der = st.columns([4, 6])
-
-    with col_tabla_izq:
-        if total_casos_historicos > 0:
-            if provincia_sel == "Todas":
-                st.write("### 📋 Demanda General por Provincias")
-                df_tabla_prov = df_base_filtros.groupby(col_provincia).size().reset_index(name='Casos Históricos')
-                df_tabla_prov['Promedio Diario Proyectado'] = (df_tabla_prov['Casos Históricos'] / num_fechas_reales).round(0).astype(int)
-                
-                st.dataframe(
-                    df_tabla_prov.sort_values(by='Casos Históricos', ascending=False), 
-                    use_container_width=True, 
-                    hide_index=True,
-                    column_config={
-                        col_provincia: st.column_config.TextColumn(alignment="left"),
-                        "Casos Históricos": st.column_config.NumberColumn(alignment="center"),
-                        "Promedio Diario Proyectado": st.column_config.NumberColumn(alignment="center", format="%d")
-                    }
-                )
-            else:
-                if ciudad_sel:
-                    st.write(f"### 📋 Demanda: Ciudades Seleccionadas de {provincia_sel}")
-                else:
-                    st.write(f"### 📋 Demanda: Ciudades de {provincia_sel}")
-                    
-                if col_ciudad in df_filtrado.columns:
-                    df_tabla_ciud = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos Históricos')
-                    df_tabla_ciud['Promedio Diario Proyectado'] = (df_tabla_ciud['Casos Históricos'] / num_fechas_reales).round(0).astype(int)
+        with col_tabla_izq:
+            if total_casos_historicos > 0:
+                if provincia_sel == "Todas":
+                    st.write("### 📋 Demanda General por Provincias")
+                    df_tabla_prov = df_base_filtros.groupby(col_provincia).size().reset_index(name='Casos Históricos')
+                    df_tabla_prov['Promedio Diario Proyectado'] = (df_tabla_prov['Casos Históricos'] / num_fechas_reales).round(0).astype(int)
                     
                     st.dataframe(
-                        df_tabla_ciud.sort_values(by='Casos Históricos', ascending=False), 
+                        df_tabla_prov.sort_values(by='Casos Históricos', ascending=False), 
                         use_container_width=True, 
                         hide_index=True,
                         column_config={
-                            col_ciudad: st.column_config.TextColumn(alignment="left"),
+                            col_provincia: st.column_config.TextColumn(alignment="left"),
                             "Casos Históricos": st.column_config.NumberColumn(alignment="center"),
                             "Promedio Diario Proyectado": st.column_config.NumberColumn(alignment="center", format="%d")
                         }
                     )
-        else:
-            st.info("Sin registros para estructurar la tabla geográfica.")
-
-    with col_tabla_der:
-        if total_casos_historicos > 0:
-            if servicio_sel == "Todos":
-                st.write("### 📋 Ranking de Servicios con Mayor Demanda")
-                df_tabla_serv = df_filtrado.groupby(col_servicio).size().reset_index(name='Casos Históricos')
-                df_tabla_serv['Promedio Diario Proyectado'] = (df_tabla_serv['Casos Históricos'] / num_fechas_reales).round(0).astype(int)
-                
-                st.dataframe(
-                    df_tabla_serv.sort_values(by='Casos Históricos', ascending=False), 
-                    use_container_width=True, 
-                    hide_index=True,
-                    column_config={
-                        col_servicio: st.column_config.TextColumn(alignment="left"),
-                        "Casos Históricos": st.column_config.NumberColumn(alignment="center"),
-                        "Promedio Diario Proyectado": st.column_config.NumberColumn(alignment="center", format="%d")
-                    }
-                )
-            else:
-                st.write(f"### ⏰ Matriz Horaria Avanzada y Necesidad de Flota para el Período: {dia_sel.title()}")
-                if col_hora_agrupada in df_filtrado.columns:
-                    df_horas_raw = df_filtrado.copy()
-                    df_horas_raw[col_hora_agrupada] = pd.to_numeric(df_horas_raw[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
-                    df_horas_raw = df_horas_raw[df_horas_raw[col_hora_agrupada] >= 0]
-
-                    casos_locales_por_hora = [0] * 24
-                    casos_foraneos_por_hora = [0] * 24
-
-                    for hr in range(24):
-                        df_bloque = df_horas_raw[df_horas_raw[col_hora_agrupada] == hr]
-                        if not df_bloque.empty:
-                            for _, fila in df_bloque.iterrows():
-                                tipo = str(fila[col_cobertura]).upper()
-                                if "FOR" in tipo:
-                                    casos_foraneos_por_hora[hr] += 1
-                                else:
-                                    casos_locales_por_hora[hr] += 1
-
-                    promedios_locales = [c / num_fechas_reales for c in casos_locales_por_hora]
-                    promedios_foraneos = [c / num_fechas_reales for c in casos_foraneos_por_hora]
-
-                    registros_tabla = []
-                    alertas_activas = []
-                    
-                    for hr in range(24):
-                        base_local = promedios_locales[hr]
-                        base_foraneo = promedios_foraneos[hr]
-                        base_total_combinado = int(round(base_local + base_foraneo, 0))
-                        
-                        if provincia_sel != "Todas":
-                            clima_info = diccionario_clima.get(hr, {"Detalle": "⚪ N/A", "Estado": "Normal"})
-                            detalle_clima = clima_info["Detalle"]
-                            estado_c = clima_info["Estado"]
-                            
-                            if estado_c == "Lluvia":
-                                local_ajustado = base_local * factor_ajuste
-                                foraneo_ajustado = base_foraneo * factor_ajuste
-                                total_proyectado_int = int(round(local_ajustado + foraneo_ajustado, 0))
-                                string_proyeccion = f"🔥 {total_proyectado_int} (Alerta)"
-                                if dias_diferencia == 0 and hr > hora_actual and hr <= (hora_actual + 3):
-                                    alertas_activas.append(f"🚨 **Alerta Meteorológica [{hr}:00]:** Lluvia entrante en {provincia_sel}. Demanda estimada subirá a {total_proyectado_int} casos.")
-                            else:
-                                local_ajustado = base_local
-                                foraneo_ajustado = base_foraneo
-                                string_proyeccion = f"{base_total_combinado} (Normal)"
-                        else:
-                            detalle_clima = "🌍 Nacional (Filtre Provincia)"
-                            local_ajustado = base_local
-                            foraneo_ajustado = base_foraneo
-                            string_proyeccion = f"{base_total_combinado} (Normal)"
-
-                        local_h_ant = local_ajustado if hr == 0 else promedios_locales[hr-1]
-                        foraneo_h_ant1 = foraneo_ajustado if hr == 0 else promedios_foraneos[hr-1]
-                        foraneo_h_ant2 = foraneo_ajustado if hr <= 1 else promedios_foraneos[hr-2]
-
-                        gruas_netas = (local_ajustado + (0.5 * local_h_ant)) + (foraneo_ajustado + foraneo_h_ant1 + foraneo_h_ant2)
-                        gruas_necesarias_enteras = math.ceil(gruas_netas)
-
-                        servicio_str_upper = str(servicio_sel).upper()
-                        es_servicio_remolque = "REMOLQUE" in servicio_str_upper or "GRÚA" in servicio_str_upper or "GRUA" in servicio_str_upper
-                        string_gruas_celda = f"🚛 {gruas_necesarias_enteras} Unidades" if es_servicio_remolque else "-"
-
-                        if base_total_combinado > 0 or es_servicio_remolque:
-                            registros_tabla.append({
-                                "BLOQUE HORARIO": hr,
-                                "🌤️ Clima Online": detalle_clima,
-                                "Promedio Base": base_total_combinado,
-                                "Proyección Ajustada": string_proyeccion,
-                                "Grúas Necesarias (Arrastre)": string_gruas_celda
-                            })
-                    
-                    df_tabla_final = pd.DataFrame(registros_tabla)
-                    
-                    if provincia_sel != "Todas":
-                        if alertas_activas:
-                            for alerta in alertas_activas: st.error(alerta)
-                        else:
-                            if dias_diferencia == 0:
-                                st.success(f"✅ Reporte Online: Clima estable para las próximas horas en {provincia_sel}.")
+                else:
+                    if ciudad_sel:
+                        st.write(f"### 📋 Demanda: Ciudades Seleccionadas")
                     else:
-                        st.info("ℹ️ Para activar el análisis meteorológico en vivo y las alertas de flota, selecciona una Provincia.")
-                    
-                    if not df_tabla_final.empty:
+                        st.write(f"### 📋 Demanda: Ciudades de {provincia_sel}")
+                        
+                    if col_ciudad in df_filtrado.columns:
+                        df_tabla_ciud = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos Históricos')
+                        df_tabla_ciud['Promedio Diario Proyectado'] = (df_tabla_ciud['Casos Históricos'] / num_fechas_reales).round(0).astype(int)
+                        
                         st.dataframe(
-                            df_tabla_final, 
+                            df_tabla_ciud.sort_values(by='Casos Históricos', ascending=False), 
                             use_container_width=True, 
                             hide_index=True,
                             column_config={
-                                "BLOQUE HORARIO": st.column_config.NumberColumn(alignment="center", format="%02d:00"),
-                                "🌤️ Clima Online": st.column_config.TextColumn(alignment="left"),
-                                "Promedio Base": st.column_config.NumberColumn(alignment="center"),
-                                "Proyección Ajustada": st.column_config.TextColumn(alignment="center"),
-                                "Grúas Necesarias (Arrastre)": st.column_config.TextColumn(alignment="center")
+                                col_ciudad: st.column_config.TextColumn(alignment="left"),
+                                "Casos Históricos": st.column_config.NumberColumn(alignment="center"),
+                                "Promedio Diario Proyectado": st.column_config.NumberColumn(alignment="center", format="%d")
                             }
                         )
-                    else:
-                        st.info("No se consolidaron registros horarios para el filtro actual.")
+            else:
+                st.info("Sin registros para estructurar la tabla geográfica.")
+
+        with col_tabla_der:
+            if total_casos_historicos > 0:
+                if servicio_sel == "Todos":
+                    st.write("### 📋 Ranking de Servicios")
+                    df_tabla_serv = df_filtrado.groupby(col_servicio).size().reset_index(name='Casos Históricos')
+                    df_tabla_serv['Promedio Diario Proyectado'] = (df_tabla_serv['Casos Históricos'] / num_fechas_reales).round(0).astype(int)
+                    
+                    st.dataframe(
+                        df_tabla_serv.sort_values(by='Casos Históricos', ascending=False), 
+                        use_container_width=True, 
+                        hide_index=True,
+                        column_config={
+                            col_servicio: st.column_config.TextColumn(alignment="left"),
+                            "Casos Históricos": st.column_config.NumberColumn(alignment="center"),
+                            "Promedio Diario Proyectado": st.column_config.NumberColumn(alignment="center", format="%d")
+                        }
+                    )
                 else:
-                    st.info("No se localizó la columna de Bloques Horarios en la fuente de datos.")
-        else:
-            st.info("Sin registros para estructurar el análisis analítico derecho.")
+                    st.write(f"### ⏰ Matriz Horaria Avanzada y Necesidad de Flota")
+                    if col_hora_agrupada in df_filtrado.columns:
+                        df_horas_raw = df_filtrado.copy()
+                        df_horas_raw[col_hora_agrupada] = pd.to_numeric(df_horas_raw[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
+                        df_horas_raw = df_horas_raw[df_horas_raw[col_hora_agrupada] >= 0]
+
+                        casos_locales_por_hora = [0] * 24
+                        casos_foraneos_por_hora = [0] * 24
+
+                        for hr in range(24):
+                            df_bloque = df_horas_raw[df_horas_raw[col_hora_agrupada] == hr]
+                            if not df_bloque.empty:
+                                for _, fila in df_bloque.iterrows():
+                                    tipo = str(fila[col_cobertura]).upper()
+                                    if "FOR" in tipo:
+                                        casos_foraneos_por_hora[hr] += 1
+                                    else:
+                                        casos_locales_por_hora[hr] += 1
+
+                        promedios_locales = [c / num_fechas_reales for c in casos_locales_por_hora]
+                        promedios_foraneos = [c / num_fechas_reales for c in casos_foraneos_por_hora]
+
+                        registros_tabla = []
+                        alertas_activas = []
+                        
+                        for hr in range(24):
+                            base_local = promedios_locales[hr]
+                            base_foraneo = promedios_foraneos[hr]
+                            base_total_combinado = int(round(base_local + base_foraneo, 0))
+                            
+                            if provincia_sel != "Todas":
+                                clima_info = diccionario_clima.get(hr, {"Detalle": "⚪ N/A", "Estado": "Normal"})
+                                detalle_clima = clima_info["Detalle"]
+                                estado_c = clima_info["Estado"]
+                                
+                                if estado_c == "Lluvia":
+                                    local_ajustado = base_local * factor_ajuste
+                                    foraneo_ajustado = base_foraneo * factor_ajuste
+                                    total_proyectado_int = int(round(local_ajustado + foraneo_ajustado, 0))
+                                    string_proyeccion = f"🔥 {total_proyectado_int} (Alerta)"
+                                    if dias_diferencia == 0 and hr > hora_actual and hr <= (hora_actual + 3):
+                                        alertas_activas.append(f"🚨 **Alerta Meteorológica [{hr}:00]:** Lluvia entrante en {provincia_sel}. Demanda estimada subirá a {total_proyectado_int} casos.")
+                                else:
+                                    local_ajustado = base_local
+                                    foraneo_ajustado = base_foraneo
+                                    string_proyeccion = f"{base_total_combinado} (Normal)"
+                            else:
+                                detalle_clima = "🌍 Nacional"
+                                local_ajustado = base_local
+                                foraneo_ajustado = base_foraneo
+                                string_proyeccion = f"{base_total_combinado} (Normal)"
+
+                            local_h_ant = local_ajustado if hr == 0 else promedios_locales[hr-1]
+                            foraneo_h_ant1 = foraneo_ajustado if hr == 0 else promedios_foraneos[hr-1]
+                            foraneo_h_ant2 = foraneo_ajustado if hr <= 1 else promedios_foraneos[hr-2]
+
+                            gruas_netas = (local_ajustado + (0.5 * local_h_ant)) + (foraneo_ajustado + foraneo_h_ant1 + foraneo_h_ant2)
+                            gruas_necesarias_enteras = math.ceil(gruas_netas)
+
+                            servicio_str_upper = str(servicio_sel).upper()
+                            es_servicio_remolque = "REMOLQUE" in servicio_str_upper or "GRÚA" in servicio_str_upper or "GRUA" in servicio_str_upper
+                            string_gruas_celda = f"🚛 {gruas_necesarias_enteras} Unidades" if es_servicio_remolque else "-"
+
+                            if base_total_combinado > 0 or es_servicio_remolque:
+                                registros_tabla.append({
+                                    "BLOQUE HORARIO": hr,
+                                    "🌤️ Clima Online": detalle_clima,
+                                    "Promedio Base": base_total_combinado,
+                                    "Proyección Ajustada": string_proyeccion,
+                                    "Grúas Necesarias": string_gruas_celda
+                                })
+                        
+                        df_tabla_final = pd.DataFrame(registros_tabla)
+                        
+                        if provincia_sel != "Todas" and alertas_activas:
+                            for alerta in alertas_activas: st.error(alerta)
+                        
+                        if not df_tabla_final.empty:
+                            st.dataframe(
+                                df_tabla_final, 
+                                use_container_width=True, 
+                                hide_index=True,
+                                column_config={
+                                    "BLOQUE HORARIO": st.column_config.NumberColumn(alignment="center", format="%02d:00"),
+                                    "🌤️ Clima Online": st.column_config.TextColumn(alignment="left"),
+                                    "Promedio Base": st.column_config.NumberColumn(alignment="center"),
+                                    "Proyección Ajustada": st.column_config.TextColumn(alignment="center"),
+                                    "Grúas Necesarias": st.column_config.TextColumn(alignment="center")
+                                }
+                            )
+                        else:
+                            st.info("No se consolidaron registros horarios.")
+
+    # 🖥️ PANEL LATERIAL DERECHO: CENTRO DE NOTIFICACIONES WAZE (Fijo con scroll vertical)
+    with col_panel_der:
+        st.markdown("<h3 style='margin-top:0px;'>🔔 Centro de Control</h3>", unsafe_allow_html=True)
+        
+        incidentes_nacionales, incidentes_provinciales_dict = obtener_alertas_waze_Ecuador_completo()
+        
+        with st.container(height=520, border=True):
+            st.markdown("<p style='font-weight:bold; font-size:13px; color:#555; margin-bottom:5px;'>🌐 ALERTAS NACIONALES</p>", unsafe_allow_html=True)
+            for alerta in incidentes_nacionales:
+                st.markdown(f"<div class='waze-line-right waze-national'>⚠️ <b>[Eje Vial]</b> {alerta}</div>", unsafe_allow_html=True)
+            
+            st.markdown("<hr style='margin:10px 0; border-color:#e2e8f0;'>", unsafe_allow_html=True)
+            
+            if provincia_sel == "Todas":
+                st.markdown("<p style='font-weight:bold; font-size:13px; color:#555; margin-bottom:5px;'>📍 ALERTAS PROVINCIALES</p>", unsafe_allow_html=True)
+                for prov, alertas in incidentes_provinciales_dict.items():
+                    for alerta in alertas:
+                        clase = "waze-danger" if "Choque" in alerta or "💥" in alerta else "waze-info"
+                        emoji = "💥" if "waze-danger" in clase else "🚗"
+                        st.markdown(f"<div class='waze-line-right {clase}'>{emoji} <b>[{prov}]</b> {alerta}</div>", unsafe_allow_html=True)
+            else:
+                st.markdown(f"<p style='font-weight:bold; font-size:13px; color:#555; margin-bottom:5px;'>📍 ALERTA LOCAL: {provincia_sel.upper()}</p>", unsafe_allow_html=True)
+                prov_upper = provincia_sel.upper()
+                if prov_upper in incidentes_provinciales_dict:
+                    for alerta in incidentes_provinciales_dict[prov_upper]:
+                        clase = "waze-danger" if "Choque" in alerta or "💥" in alerta else "waze-info"
+                        emoji = "💥" if "waze-danger" in clase else "🚗"
+                        st.markdown(f"<div class='waze-line-right {clase}'>{emoji} {alerta}</div>", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"<div class='waze-line-right waze-success'>✅ Operación sin novedades críticas en {provincia_sel.title()}.</div>", unsafe_allow_html=True)
 
     st.markdown("---")
     
