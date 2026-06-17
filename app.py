@@ -22,6 +22,20 @@ st.markdown("""
     .stDataFrame [data-testid="stDataFrameDownloadButton"] {display: none;}
     button[title="View fullscreen"] {display: none;}
     
+    /* 🛠️ AJUSTE SOLICITADO: Eliminación drástica del espacio muerto arriba del título */
+    .block-container {
+        padding-top: 0rem !important;
+        margin-top: -30px !important;
+    }
+    .stApp {
+        margin-top: 0px !important;
+        padding-top: 0px !important;
+    }
+    h1 {
+        margin-top: 0px !important;
+        padding-top: 0px !important;
+    }
+    
     /* 🚀 Tamaño de texto optimizado en celdas y encabezados */
     [data-testid="stTable"] td, [data-testid="stDataFrame"] td, div[data-testid="stDataFrame"] [role="gridcell"] {
         font-size: 16px !important;
@@ -110,7 +124,7 @@ def calcular_factor_lluvia_en_vivo(df_historico, lat, lon):
         if total_evaluado > 0 and lluvias_detectadas > 0:
             ratio = lluvias_detectadas / total_evaluado
             return round(1.2 + (ratio * 1.5), 2)
-        return 1.35
+            return 1.35
     except:
         return 1.35
 
