@@ -85,7 +85,7 @@ st.markdown(f"**Centro de Control Geoanalítico** | 🔄 Próximo refresco autom
 @st.cache_resource
 def inicializar_memoria_compartida():
     return {
-        "creditos": 48,  # Sincronizado con tus 2 consultas consumidas reales
+        "creditos": 48,  # Sincronizado con tus consultas reales consumed
         "alertas_waze": [],
         "ultima_hora_waze": "Nunca",
         "filtros_persistentes": {
@@ -98,7 +98,7 @@ def inicializar_memoria_compartida():
 
 estado_global = inicializar_memoria_compartida()
 
-# Cargar estados persistentes en la sesión actual antes de renderizar los elementos
+# Cargar estados persistentes en la sesión actual
 if "dia_sel_key" not in st.session_state:
     st.session_state["dia_sel_key"] = estado_global["filtros_persistentes"]["dia_sel"]
 if "servicio_sel_key" not in st.session_state:
@@ -180,7 +180,7 @@ def obtener_clima_actual_rapido(lat, lon):
         code, temp = res['current_weather']['weathercode'], res['current_weather']['temperature']
         return f"🌧️ Lluvia ({temp}°C)" if code in [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99] else (f"☀️ Despejado ({temp}°C)" if code == 0 else f"☁️ Nublado ({temp}°C)")
     except:
-        return "⚪ N/A"
+        return "🌍 N/A"
 
 @st.cache_data(ttl=3600)
 def calcular_factor_lluvia_en_vivo(df_historico, lat, lon):
@@ -228,14 +228,13 @@ if df_raw is not None and not df_raw.empty:
     st.write("### 🎛️ Panel de Filtros de Operación")
     f1, f2, f3, f4, f5 = st.columns([2, 2, 2, 3, 3])
     
-    # FUNCIONES CALLBACK PARA ASIGNAR EN TIEMPO REAL LAS SELECCIONES A LA MEMORIA CENTRAL GLOBAL
     def actualizar_dia():
         estado_global["filtros_persistentes"]["dia_sel"] = st.session_state["dia_sel_key"]
     def actualizar_servicio():
         estado_global["filtros_persistentes"]["servicio_sel"] = st.session_state["servicio_sel_key"]
     def actualizar_provincia():
         estado_global["filtros_persistentes"]["provincia_sel"] = st.session_state["provincia_sel_key"]
-        estado_global["filtros_persistentes"]["ciudad_sel"] = [] # Limpiar ciudades si cambia de provincia
+        estado_global["filtros_persistentes"]["ciudad_sel"] = []
         st.session_state["ciudad_sel_key"] = []
     def actualizar_ciudad():
         estado_global["filtros_persistentes"]["ciudad_sel"] = st.session_state["ciudad_sel_key"]
@@ -267,7 +266,6 @@ if df_raw is not None and not df_raw.empty:
         else:
             estado_sel = []
 
-    # Cálculos y filtrado del dataframe basado en las selecciones estables
     if dia_sel.upper() == "TODOS":
         df_dia_especifico = df_raw.copy()
         num_fechas_reales = df_dia_especifico[col_fecha].nunique() if col_fecha in df_dia_especifico.columns else 1
@@ -311,7 +309,13 @@ if df_raw is not None and not df_raw.empty:
                 st.write("##### 📋 Demanda Provincias")
                 df_tp = df_filtrado.groupby(col_provincia).size().reset_index(name='Casos')
                 df_tp['Prom.'] = (df_tp['Casos'] / num_fechas_reales).round(0).astype(int)
-                df_tp['Clima Online'] = [obtener_clima_actual_rapido(coordenadas_provincias[p], coordenadas_provincias[p]) if p in coordenadas_provincias else "🌍 N/A" for p in df_tp[col_provincia]]
+                
+                # CORRECCIÓN AQUÍ: Extracción correcta de [0] para Latitud y [1] para Longitud
+                df_tp['Clima Online'] = [
+                    obtener_clima_actual_rapido(coordenadas_provincias[p][0], coordenadas_provincias[p][1]) 
+                    if p in coordenadas_provincias else "🌍 N/A" 
+                    for p in df_tp[col_provincia]
+                ]
                 st.dataframe(df_tp.sort_values(by='Casos', ascending=False), use_container_width=True, hide_index=True)
             else:
                 st.write(f"##### 📋 Ciudades: {provincia_sel.title()}")
