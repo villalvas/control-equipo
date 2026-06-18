@@ -165,7 +165,7 @@ if df_raw is not None and not df_raw.empty:
     df_raw[col_cobertura] = df_raw[col_cobertura].astype(str).str.strip().str.upper() if col_cobertura in df_raw.columns else "LOCAL"
 
     st.write("### 🎛️ Panel de Filtros de Operación")
-    f1, f2, f3, f4, f5 = st.columns([2, 2, 2, 3, 2])
+    f1, f2, f3, f4, f5 = st.columns([2, 2, 2, 3, 3])
     
     with f1:
         dias_en_orden = ["TODOS", "LUNES", "MARTES", "MIÉRCOLES", "MIERCOLES", "JUEVES", "VIERNES", "SÁBADO", "SABADO", "DOMINGO"]
@@ -182,7 +182,12 @@ if df_raw is not None and not df_raw.empty:
         else:
             ciudad_sel = st.multiselect("🏙️ Filtrar Ciudades:", options=[], disabled=True, placeholder="Filtre por Provincia primero")
     with f5:
-        estado_sel = st.selectbox("📌 Filtrar por Estado:", ["Todos"] + list(df_raw[col_estado].dropna().unique())) if col_estado in df_raw.columns else "Todos"
+        # MODIFICACIÓN A OPCIÓN MÚLTIPLE (MULTISELECT) COMO CIUDADES
+        if col_estado in df_raw.columns:
+            estados_disponibles = sorted(list(df_raw[col_estado].dropna().unique()))
+            estado_sel = st.multiselect("📌 Filtrar por Estado:", options=estados_disponibles, default=[], placeholder="Todos los estados")
+        else:
+            estado_sel = []
 
     if dia_sel.upper() == "TODOS":
         df_dia_especifico = df_raw.copy()
@@ -196,10 +201,14 @@ if df_raw is not None and not df_raw.empty:
         df_dia_especifico = df_raw[df_raw[col_dia].str.upper() == dia_sel.upper()]
         num_fechas_reales = df_dia_especifico[col_fecha].nunique() if col_fecha in df_dia_especifico.columns else 1
 
-    if num_fechas_reales <= 0: num_fechas_reales = 1
+if num_fechas_reales <= 0: num_fechas_reales = 1
 
     df_filtrado = df_dia_especifico.copy()
-    if estado_sel != "Todos" and col_estado in df_raw.columns: df_filtrado = df_filtrado[df_filtrado[col_estado] == estado_sel]
+    
+    # Aplicar filtro multiselect de estados si hay selección
+    if estado_sel and col_estado in df_raw.columns: 
+        df_filtrado = df_filtrado[df_filtrado[col_estado].isin(estado_sel)]
+        
     if servicio_sel != "Todos": df_filtrado = df_filtrado[df_filtrado[col_servicio] == servicio_sel]
     if provincia_sel != "Todas":
         df_filtrado = df_filtrado[df_filtrado[col_provincia] == provincia_sel]
@@ -215,7 +224,6 @@ if df_raw is not None and not df_raw.empty:
 
     st.markdown("---")
     
-    # Anchos equilibrados tras remover Waze: Izquierda (2.8), Centro maximizada (6.7), Derecha (2.5)
     col_izq, col_cen, col_der = st.columns([2.8, 6.7, 2.5])
     
     with col_izq:
@@ -237,7 +245,6 @@ if df_raw is not None and not df_raw.empty:
     with col_cen:
         st.write(f"### ⏰ Matriz Horaria y Flota Simplificada: {dia_sel.title()}")
         
-        # --- SECCIÓN DE ALERTAS ULTRA COMPACTAS ---
         if len(df_filtrado) > 0 and col_hora_agrupada in df_filtrado.columns:
             df_horas_raw = df_filtrado.copy()
             df_horas_raw[col_hora_agrupada] = pd.to_numeric(df_horas_raw[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
@@ -257,7 +264,6 @@ if df_raw is not None and not df_raw.empty:
                 p_local = casos_locales[hr] / num_fechas_reales
                 p_foraneo = casos_foraneos[hr] / num_fechas_reales
                 
-                # Cálculo de promedio base sin alteraciones
                 promedio_base_calculado = int(round(p_local + p_foraneo, 0))
                 
                 clima_info = diccionario_clima.get(hr, {"Detalle": "☁️ Nublado (N/A)", "Estado": "Normal"})
@@ -275,7 +281,6 @@ if df_raw is not None and not df_raw.empty:
                     proyeccion_final_int = promedio_base_calculado
                     texto_proyeccion = f"{proyeccion_final_int} (Normal)"
 
-                # FÓRMULA DE OPERACIÓN CON ARRASTRE
                 l_ant = p_local if hr == 0 else (casos_locales[hr-1] / num_fechas_reales)
                 f_ant1 = p_foraneo if hr == 0 else (casos_foraneos[hr-1] / num_fechas_reales)
                 f_ant2 = p_foraneo if hr <= 1 else (casos_foraneos[hr-2] / num_fechas_reales)
@@ -313,7 +318,6 @@ if df_raw is not None and not df_raw.empty:
                         "📋 ¿Por qué se necesitan estas grúas?": motivo_asesor
                     })
 
-            # Render de alertas meteorológicas activas en formato ultra compacto
             if alertas_clima_acumuladas:
                 html_alertas = "".join([f'<div class="alerta-clima-mini">{a}</div>' for a in alertas_clima_acumuladas[:3]])
                 st.markdown(html_alertas, unsafe_allow_html=True)
@@ -338,7 +342,6 @@ if df_raw is not None and not df_raw.empty:
         st.info("💡 Esperando aprobación del feed oficial de **Waze for Cities** para reactivar el canal automatizado de tráfico.")
         st.success("🟢 Monitor meteorológico y matriz analítica de arrastre operando al 100% en tiempo real.")
 
-    # AUTOMATIZACIÓN DE AUTO-REFRESCO NATIVO
     time.sleep(1)
     if datetime.now(zona_ecuador) >= st.session_state.proxima_actualizacion:
         st.rerun()
