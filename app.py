@@ -182,7 +182,6 @@ if df_raw is not None and not df_raw.empty:
         else:
             ciudad_sel = st.multiselect("🏙️ Filtrar Ciudades:", options=[], disabled=True, placeholder="Filtre por Provincia primero")
     with f5:
-        # MODIFICACIÓN A OPCIÓN MÚLTIPLE (MULTISELECT) COMO CIUDADES
         if col_estado in df_raw.columns:
             estados_disponibles = sorted(list(df_raw[col_estado].dropna().unique()))
             estado_sel = st.multiselect("📌 Filtrar por Estado:", options=estados_disponibles, default=[], placeholder="Todos los estados")
@@ -201,11 +200,10 @@ if df_raw is not None and not df_raw.empty:
         df_dia_especifico = df_raw[df_raw[col_dia].str.upper() == dia_sel.upper()]
         num_fechas_reales = df_dia_especifico[col_fecha].nunique() if col_fecha in df_dia_especifico.columns else 1
 
-if num_fechas_reales <= 0: num_fechas_reales = 1
+    if num_fechas_reales <= 0: num_fechas_reales = 1
 
     df_filtrado = df_dia_especifico.copy()
     
-    # Aplicar filtro multiselect de estados si hay selección
     if estado_sel and col_estado in df_raw.columns: 
         df_filtrado = df_filtrado[df_filtrado[col_estado].isin(estado_sel)]
         
