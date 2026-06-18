@@ -81,12 +81,24 @@ hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
 st.title("🔮 Monitor de Proyección Horaria y Alerta Temprana de Flota")
 st.markdown(f"**Centro de Control Geoanalítico** | 🔄 Próximo refresco automático en 5 min. **(Última Actualización del Tablero: {hora_estatica_str})**")
 
+# --- MEMORIA COMPARTIDA GLOBAL (PERSISTENTE ENTRE NAVEGADORES) ---
+@st.cache_resource
+def inicializar_memoria_compartida():
+    # Mantiene el estado unificado sin importar quién acceda al enlace
+    return {
+        "creditos": 49, # Iniciado en 49 según tu estado actual
+        "alertas_waze": [],
+        "ultima_hora_waze": "Nunca"
+    }
+
+estado_global = inicializar_memoria_compartida()
+
 # Cuadrantes BBox autorizados para las 4 regiones clave solicitadas
 coordenadas_bbox_provincias = {
-    'PICHINCHA': {"bottom_left": "-0.3700,-78.6500", "top_right": "-0.0500,-78.3500"}, # Quito y valles
-    'GUAYAS': {"bottom_left": "-2.3000,-80.0500", "top_right": "-2.0000,-79.7500"},    # Guayaquil y enlaces
-    'AZUAY': {"bottom_left": "-2.9500,-79.1000", "top_right": "-2.8500,-78.9500"},     # Cuenca
-    'MANABI': {"bottom_left": "-1.1000,-80.8000", "top_right": "-0.9000,-80.4000"},    # Manta / Portoviejo
+    'PICHINCHA': {"bottom_left": "-0.3700,-78.6500", "top_right": "-0.0500,-78.3500"}, 
+    'GUAYAS': {"bottom_left": "-2.3000,-80.0500", "top_right": "-2.0000,-79.7500"},    
+    'AZUAY': {"bottom_left": "-2.9500,-79.1000", "top_right": "-2.8500,-78.9500"},     
+    'MANABI': {"bottom_left": "-1.1000,-80.8000", "top_right": "-0.9000,-80.4000"},    
     'MANABÍ': {"bottom_left": "-1.1000,-80.8000", "top_right": "-0.9000,-80.4000"}
 }
 
@@ -109,7 +121,7 @@ diccionario_dias = {
     "JUEVES": 3, "VIERNES": 4, "SÁBADO": 5, "SABADO": 5, "DOMINGO": 6
 }
 
-# 🛣️ CONSULTA ADAPTADA A TU ENDPOINT DE OPENWEBNINJA (ALERTS-AND-JAMS)
+# 🛣️ CONSULTA ADAPTADA A TU ENDPOINT DE OPENWEBNINJA
 def consultar_alertas_waze_real(bbox_dict):
     api_key = "ak_823f13app2zd9qkia4z6vdi27ttb31z9a7v7pvlhnn878w3"
     try:
@@ -410,24 +422,13 @@ if df_raw is not None and not df_raw.empty:
     with col_der:
         st.write("##### 🚛 Alertas e Incidentes")
         
-        # --- CONTROL DE ESTADO E INICIALIZACIÓN DE CRÉDITOS ---
-        if 'waze_data' not in st.session_state:
-            st.session_state['waze_data'] = []
-            st.session_state['waze_time'] = "Nunca"
-            
-        # Fijado en 49 para preservar la consulta que hiciste antes del último cambio
-        if 'creditos_waze' not in st.session_state:
-            st.session_state['creditos_waze'] = 49 
-            
         # --- NUEVA REGLA DE VALIDACIÓN PARA EL BOTÓN DE WAZE (PROVINCIA + SERVICIO) ---
         provincia_limpia = provincia_sel.upper().strip()
         es_provincia_valida = provincia_limpia in coordenadas_bbox_provincias and provincia_sel != "Todas"
         
-        # Validar que el servicio contenga REMOLQUE, GRÚA o GRUA (excluyendo "Todos")
         servicio_limpio = str(servicio_sel).upper().strip()
         es_servicio_valido = any(x in servicio_limpio for x in ["REMOLQUE", "GRÚA", "GRUA"]) and servicio_limpio != "TODOS"
 
-        # El botón solo se activa si cumple AMBOS criterios de forma simultánea
         if es_provincia_valida and es_servicio_valido:
             btn_text = "🔍 Consultar Tráfico en Vivo (Waze)"
             is_disabled = False
@@ -443,36 +444,39 @@ if df_raw is not None and not df_raw.empty:
         btn_consultar = st.button(btn_text, use_container_width=True, disabled=is_disabled)
         
         if btn_consultar and es_provincia_valida and es_servicio_valido:
-            if st.session_state['creditos_waze'] > 0:
+            # Validación basada en el estado global unificado
+            if estado_global["creditos"] > 0:
                 bbox_zona = coordenadas_bbox_provincias[provincia_limpia]
                 
                 with st.spinner(f"Conectando Waze ({provincia_sel.title()})..."):
                     resultado_waze = consultar_alertas_waze_real(bbox_zona)
-                    st.session_state['waze_data'] = resultado_waze
-                    st.session_state['waze_time'] = ahora_actual.strftime('%I:%M:%S %p')
-                    st.session_state['creditos_waze'] -= 1 
+                    
+                    # Mutación directa del diccionario compartido por todos los navegadores
+                    estado_global["alertas_waze"] = resultado_waze
+                    estado_global["ultima_hora_waze"] = ahora_actual.strftime('%I:%M:%S %p')
+                    estado_global["creditos"] -= 1 
             else:
-                st.error("❌ Has alcanzado el límite de 50 consultas de tu plan gratuito mensual.")
+                st.error("❌ Se ha alcanzado el límite global de 50 consultas del plan gratuito.")
         
-        st.caption(f"⏱️ Último reporte Waze: **{st.session_state['waze_time']}**")
+        st.caption(f"⏱️ Último reporte Waze: **{estado_global['ultima_hora_waze']}**")
         
-        # Bloques informativos de ayuda dinámica en la barra lateral
+        # Bloques informativos basados en la memoria sincronizada
         if not es_provincia_valida or not es_servicio_valido:
             st.warning("⚠️ El botón requiere seleccionar una Provincia autorizada (Pichincha, Guayas, Azuay, Manabí) Y especificar el Servicio de Remolque.")
-        elif not st.session_state['waze_data']:
+        elif not estado_global["alertas_waze"]:
             st.info("💡 Parámetros correctos. Presiona el botón de arriba para consultar el tráfico en vivo.")
         else:
-            for incidente in st.session_state['waze_data']:
+            for incidente in estado_global["alertas_waze"]:
                 if "✅" in incidente:
                     st.success(incidente)
                 else:
                     st.error(incidente)
                 
-        # Contador visual de saldo
+        # Contador visual sincronizado en tiempo real para todos los operadores
         st.markdown(f"""
             <div class="card-saldo">
-                <span style="font-size: 12px; color: #555555; font-weight: bold; display:block;">🔑 CRÉDITOS OPENWEBNINJA</span>
-                <span style="font-size: 26px; color: #2e7d32; font-weight: 800;">{st.session_state['creditos_waze']}</span>
+                <span style="font-size: 12px; color: #555555; font-weight: bold; display:block;">🔑 CRÉDITOS OPENWEBNINJA (COMPARTIDO)</span>
+                <span style="font-size: 26px; color: #2e7d32; font-weight: 800;">{estado_global['creditos']}</span>
                 <span style="font-size: 14px; color: #777777;"> / 50 Restantes</span>
             </div>
         """, unsafe_allow_html=True)
