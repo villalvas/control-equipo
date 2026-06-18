@@ -81,11 +81,11 @@ hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
 st.title("🔮 Monitor de Proyección Horaria y Alerta Temprana de Flota")
 st.markdown(f"**Centro de Control Geoanalítico** | 🔄 Próximo refresco automático en 5 min. **(Última Actualización del Tablero: {hora_estatica_str})**")
 
-# --- MEMORIA COMPARTIDA GLOBAL (PERSISTENTE ENTRE TODOS LOS OPERADORES Y REFRESCOS) ---
+# --- MEMORIA COMPARTIDA GLOBAL ---
 @st.cache_resource
 def inicializar_memoria_compartida():
     return {
-        "creditos": 48,  # Sincronizado con tus consultas reales consumed
+        "creditos": 48,  # Sincronizado con tus consultas reales
         "alertas_waze": [],
         "ultima_hora_waze": "Nunca",
         "filtros_persistentes": {
@@ -113,22 +113,35 @@ coordenadas_bbox_provincias = {
     'PICHINCHA': {"bottom_left": "-0.3700,-78.6500", "top_right": "-0.0500,-78.3500"}, 
     'GUAYAS': {"bottom_left": "-2.3000,-80.0500", "top_right": "-2.0000,-79.7500"},    
     'AZUAY': {"bottom_left": "-2.9500,-79.1000", "top_right": "-2.8500,-78.9500"},     
-    'MANABI': {"bottom_left": "-1.1000,-80.8000", "top_right": "-0.9000,-80.4000"},    
-    'MANABÍ': {"bottom_left": "-1.1000,-80.8000", "top_right": "-0.9000,-80.4000"}
+    'MANABI': {"bottom_left": "-1.1000,-80.8000", "top_right": "-0.9000,-80.4000"}
 }
 
+# Diccionario expandido y normalizado para evitar quiebres de N/A
 coordenadas_provincias = {
-    'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
-    'MANABI': [-1.0543, -80.4544], 'MANABÍ': [-1.0543, -80.4544], 'EL ORO': [-3.2581, -79.9553], 
-    'LOJA': [-3.9931, -79.2042], 'TUNGURAHUA': [-1.2491, -78.6168], 'CHIMBORAZO': [-1.6743, -78.6483], 
-    'ESMERALDAS': [0.9682, -79.6517], 'LOS RIOS': [-1.4558, -79.4622], 'LOS RÍOS': [-1.4558, -79.4622],
-    'SANTO DOMINGO DE LOS TSÁCHILAS': [-0.2530, -79.1754], 'SANTO DOMINGO DE LOS TSACHILAS': [-0.2530, -79.1754], 
-    'SANTA ELENA': [-2.2262, -80.8584], 'IMBABURA': [0.3517, -78.1223], 'COTOPAXI': [-0.9352, -78.6155], 
-    'CARCHI': [0.7384, -77.7289], 'SUCUMBIOS': [0.0847, -76.8828], 'SUCUMBÍOS': [0.0847, -76.8828],
-    'ORELLANA': [-0.5665, -76.9872], 'NAPO': [-0.9902, -77.8129], 'PASTAZA': [-1.4870, -77.9954], 
-    'MORONA SANTIAGO': [-2.3087, -78.1114], 'ZAMORA CHINCHIPE': [-4.0692, -78.9566],
-    'GALAPAGOS': [-0.7402, -90.3119], 'GALÁPAGOS': [-0.7402, -90.3119], 'BOLIVAR': [-1.5910, -79.0022], 
-    'BOLÍVAR': [-1.5910, -79.0022], 'CAÑAR': [-2.5518, -78.9392]
+    'PICHINCHA': [-0.2298, -78.5249], 
+    'GUAYAS': [-2.1894, -79.8890], 
+    'AZUAY': [-2.9001, -79.0059],
+    'MANABI': [-1.0543, -80.4544],
+    'EL ORO': [-3.2581, -79.9553], 
+    'LOJA': [-3.9931, -79.2042], 
+    'TUNGURAHUA': [-1.2491, -78.6168], 
+    'CHIMBORAZO': [-1.6743, -78.6483], 
+    'ESMERALDAS': [0.9682, -79.6517], 
+    'LOS RIOS': [-1.4558, -79.4622], 
+    'SANTO DOMINGO DE LOS TSACHILAS': [-0.2530, -79.1754], 
+    'SANTA ELENA': [-2.2262, -80.8584], 
+    'IMBABURA': [0.3517, -78.1223], 
+    'COTOPAXI': [-0.9352, -78.6155], 
+    'CARCHI': [0.7384, -77.7289], 
+    'SUCUMBIOS': [0.0847, -76.8828], 
+    'ORELLANA': [-0.5665, -76.9872], 
+    'NAPO': [-0.9902, -77.8129], 
+    'PASTAZA': [-1.4870, -77.9954], 
+    'MORONA SANTIAGO': [-2.3087, -78.1114], 
+    'ZAMORA CHINCHIPE': [-4.0692, -78.9566],
+    'GALAPAGOS': [-0.7402, -90.3119], 
+    'BOLIVAR': [-1.5910, -79.0022], 
+    'CANAR': [-2.5518, -78.9392]
 }
 
 diccionario_dias = {
@@ -153,13 +166,13 @@ def consultar_alertas_waze_real(bbox_dict):
                 alertas.append(f"⚠️ {tipo} ({subtipo}) en {calle}")
         return alertas if alertas else ["✅ Sin incidentes graves reportados por Waze en este cuadrante."]
     except:
-        return ["⚠️ No se encontraron reportes activos o el formato de zona requiere mayor precisión."]
+        return ["⚠️ No se encontraron reportes activos."]
 
 @st.cache_data(ttl=300)
 def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
     try:
         url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,weathercode&timezone=auto&forecast_days=7"
-        respuesta = requests.get(url).json()
+        respuesta = requests.get(url, timeout=5).json()
         horas_raw, temperaturas, codigos_clima = respuesta['hourly']['time'], respuesta['hourly']['temperature_2m'], respuesta['hourly']['weathercode']
         datos_clima = {}
         for h, temp, codigo in zip(horas_raw, temperaturas, codigos_clima):
@@ -176,7 +189,7 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
 def obtener_clima_actual_rapido(lat, lon):
     try:
         url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true&timezone=auto"
-        res = requests.get(url).json()
+        res = requests.get(url, timeout=3).json()
         code, temp = res['current_weather']['weathercode'], res['current_weather']['temperature']
         return f"🌧️ Lluvia ({temp}°C)" if code in [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99] else (f"☀️ Despejado ({temp}°C)" if code == 0 else f"☁️ Nublado ({temp}°C)")
     except:
@@ -189,8 +202,8 @@ def calcular_factor_lluvia_en_vivo(df_historico, lat, lon):
         if df_quick.empty: return 1.35
         fechas_unicas = df_quick["FECHA CREACIÓN DE ASISTENCIA"].astype(str).str.split().str[0].unique()
         lluvias_detectadas, total_evaluado = 0, 0
-        for fecha in fechas_unicas[:4]:
-            res = requests.get(f"https://archive-api.open-meteo.com/v1/archive?latitude={lat}&longitude={lon}&start_date={fecha}&end_date={fecha}&hourly=weathercode&timezone=auto").json()
+        for fecha in fechas_unicas[:3]:
+            res = requests.get(f"https://archive-api.open-meteo.com/v1/archive?latitude={lat}&longitude={lon}&start_date={fecha}&end_date={fecha}&hourly=weathercode&timezone=auto", timeout=4).json()
             if 'hourly' in res:
                 lluvias_detectadas += sum(1 for c in res['hourly']['weathercode'] if c in [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99])
                 total_evaluado += len(res['hourly']['weathercode'])
@@ -221,7 +234,10 @@ if df_raw is not None and not df_raw.empty:
     col_fecha = "FECHA CREACIÓN DE ASISTENCIA" if "FECHA CREACIÓN DE ASISTENCIA" in df_raw.columns else "FECHA CREACION DE ASISTENCIA"
     col_cobertura = "TIPO COBERTURA"
 
+    # Normalización estricta de cadenas de texto de Provincias
     df_raw[col_provincia] = df_raw[col_provincia].astype(str).str.strip().str.upper()
+    df_raw[col_provincia] = df_raw[col_provincia].str.normalize('NFKD').str.encode('ascii', errors='ignore').str.decode('utf-8')
+
     if col_ciudad in df_raw.columns: df_raw[col_ciudad] = df_raw[col_ciudad].astype(str).str.strip()
     df_raw[col_cobertura] = df_raw[col_cobertura].astype(str).str.strip().str.upper() if col_cobertura in df_raw.columns else "LOCAL"
 
@@ -290,12 +306,16 @@ if df_raw is not None and not df_raw.empty:
             df_filtrado = df_filtrado[df_filtrado[col_ciudad].isin(ciudad_sel)]
 
     hora_actual = ahora_actual.hour
-    if provincia_sel != "Todas":
-        lat_c, lon_c = coordenadas_provincias.get(provincia_sel, [-0.2298, -78.5249])
+    
+    # Búsqueda segura de coordenadas para provincia individualizada
+    provincia_key_busqueda = provincia_sel.upper().strip()
+    if provincia_sel != "Todas" and provincia_key_busqueda in coordenadas_provincias:
+        lat_c, lon_c = coordenadas_provincias[provincia_key_busqueda]
         diccionario_clima = obtener_clima_horario_futuro(lat_c, lon_c, fecha_target_str)
         factor_ajuste = calcular_factor_lluvia_en_vivo(df_filtrado, lat_c, lon_c)
     else:
         diccionario_clima, factor_ajuste = {}, 1.0
+        lat_c, lon_c = -0.2298, -78.5249
 
     st.markdown("---")
     col_izq, col_cen, col_der = st.columns([3.4, 6.1, 2.5])
@@ -310,12 +330,17 @@ if df_raw is not None and not df_raw.empty:
                 df_tp = df_filtrado.groupby(col_provincia).size().reset_index(name='Casos')
                 df_tp['Prom.'] = (df_tp['Casos'] / num_fechas_reales).round(0).astype(int)
                 
-                # CORRECCIÓN AQUÍ: Extracción correcta de [0] para Latitud y [1] para Longitud
-                df_tp['Clima Online'] = [
-                    obtener_clima_actual_rapido(coordenadas_provincias[p][0], coordenadas_provincias[p][1]) 
-                    if p in coordenadas_provincias else "🌍 N/A" 
-                    for p in df_tp[col_provincia]
-                ]
+                # BLINDAJE DE SEGURIDAD TOTAL AQUÍ: Evita romper la app si la provincia no está en el diccionario
+                climinas = []
+                for p in df_tp[col_provincia]:
+                    p_limpia = str(p).upper().strip()
+                    if p_limpia in coordenadas_provincias:
+                        coords = coordenadas_provincias[p_limpia]
+                        climinas.append(obtener_clima_actual_rapido(coords[0], coords[1]))
+                    else:
+                        climinas.append("🌍 N/A")
+                df_tp['Clima Online'] = climinas
+                
                 st.dataframe(df_tp.sort_values(by='Casos', ascending=False), use_container_width=True, hide_index=True)
             else:
                 st.write(f"##### 📋 Ciudades: {provincia_sel.title()}")
