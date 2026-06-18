@@ -85,7 +85,7 @@ st.markdown(f"**Centro de Control Geoanalítico** | 🔄 Próximo refresco autom
 @st.cache_resource
 def inicializar_memoria_compartida():
     return {
-        "creditos": 48,  # Sincronizado con tus consultas reales
+        "creditos": 49,  # Sincronizado con tus consultas reales
         "alertas_waze": [],
         "ultima_hora_waze": "Nunca",
         "filtros_persistentes": {
@@ -108,7 +108,7 @@ if "provincia_sel_key" not in st.session_state:
 if "ciudad_sel_key" not in st.session_state:
     st.session_state["ciudad_sel_key"] = estado_global["filtros_persistentes"]["ciudad_sel"]
 
-# Cuadrantes BBox autorizados
+# Cuadrantes BBox autorizados para Waze
 coordenadas_bbox_provincias = {
     'PICHINCHA': {"bottom_left": "-0.3700,-78.6500", "top_right": "-0.0500,-78.3500"}, 
     'GUAYAS': {"bottom_left": "-2.3000,-80.0500", "top_right": "-2.0000,-79.7500"},    
@@ -116,7 +116,7 @@ coordenadas_bbox_provincias = {
     'MANABI': {"bottom_left": "-1.1000,-80.8000", "top_right": "-0.9000,-80.4000"}
 }
 
-# Diccionario expandido y normalizado para evitar quiebres de N/A
+# Diccionario expandido y normalizado para evitar quiebres de N/A en clima
 coordenadas_provincias = {
     'PICHINCHA': [-0.2298, -78.5249], 
     'GUAYAS': [-2.1894, -79.8890], 
@@ -166,7 +166,7 @@ def consultar_alertas_waze_real(bbox_dict):
                 alertas.append(f"⚠️ {tipo} ({subtipo}) en {calle}")
         return alertas if alertas else ["✅ Sin incidentes graves reportados por Waze en este cuadrante."]
     except:
-        return ["⚠️ No se encontraron reportes activos."]
+        return ["⚠️ No se encontraron reportes activos o error de conexión."]
 
 @st.cache_data(ttl=300)
 def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
@@ -234,7 +234,7 @@ if df_raw is not None and not df_raw.empty:
     col_fecha = "FECHA CREACIÓN DE ASISTENCIA" if "FECHA CREACIÓN DE ASISTENCIA" in df_raw.columns else "FECHA CREACION DE ASISTENCIA"
     col_cobertura = "TIPO COBERTURA"
 
-    # Normalización estricta de cadenas de texto de Provincias
+    # Normalización de textos
     df_raw[col_provincia] = df_raw[col_provincia].astype(str).str.strip().str.upper()
     df_raw[col_provincia] = df_raw[col_provincia].str.normalize('NFKD').str.encode('ascii', errors='ignore').str.decode('utf-8')
 
@@ -305,9 +305,8 @@ if df_raw is not None and not df_raw.empty:
         if ciudad_sel: 
             df_filtrado = df_filtrado[df_filtrado[col_ciudad].isin(ciudad_sel)]
 
-    hora_actual = ahora_actual.hour
+    hora_actual_num = ahora_actual.hour
     
-    # Búsqueda segura de coordenadas para provincia individualizada
     provincia_key_busqueda = provincia_sel.upper().strip()
     if provincia_sel != "Todas" and provincia_key_busqueda in coordenadas_provincias:
         lat_c, lon_c = coordenadas_provincias[provincia_key_busqueda]
@@ -322,7 +321,8 @@ if df_raw is not None and not df_raw.empty:
     
     with col_izq:
         promedio_asistencias_dia = int(round(len(df_filtrado) / num_fechas_reales, 0))
-        st.metric(label=f"📊 Promedio Demanda ({dia_sel.title()})", value=f"{promedio_asistencias_dia} Asist.")
+        st.write(f"##### 📋 Promedio Demanda ({dia_sel.title()})")
+        st.metric(label="", value=f"{promedio_asistencias_dia} Asist.")
         
         if len(df_filtrado) > 0:
             if provincia_sel == "Todas":
@@ -330,7 +330,6 @@ if df_raw is not None and not df_raw.empty:
                 df_tp = df_filtrado.groupby(col_provincia).size().reset_index(name='Casos')
                 df_tp['Prom.'] = (df_tp['Casos'] / num_fechas_reales).round(0).astype(int)
                 
-                # BLINDAJE DE SEGURIDAD TOTAL AQUÍ: Evita romper la app si la provincia no está en el diccionario
                 climinas = []
                 for p in df_tp[col_provincia]:
                     p_limpia = str(p).upper().strip()
@@ -376,7 +375,7 @@ if df_raw is not None and not df_raw.empty:
                     p_foraneo *= factor_ajuste
                     proyeccion_final_int = int(round(p_local + p_foraneo, 0))
                     texto_proyeccion = f"{proyeccion_final_int} (Lluvia 🌧️)"
-                    if hr >= hora_actual and hr <= (hora_actual + 4):
+                    if hr >= hora_actual_num and hr <= (hora_actual_num + 4):
                         alertas_clima_acumuladas.append(f"🚨 [{hr:02d}:00] Lluvia en {provincia_sel}. Sube de {promedio_base_calculado} a {proyeccion_final_int} casos.")
                 else:
                     proyeccion_final_int = promedio_base_calculado
@@ -407,23 +406,30 @@ if df_raw is not None and not df_raw.empty:
         st.write("##### 🚛 Alertas e Incidentes")
         provincia_limpia = provincia_sel.upper().strip()
         es_provincia_valida = provincia_limpia in coordenadas_bbox_provincias and provincia_sel != "Todas"
+        
+        # Filtro estricto de servicio remolque
         servicio_limpio = str(servicio_sel).upper().strip()
-        es_servicio_valido = any(x in servicio_limpio for x in ["REMOLQUE", "GRÚA", "GRUA"]) and servicio_limpio != "TODOS"
+        es_servicio_valido = any(x in servicio_limpio for x in ["REMOLQUE", "GRÚA", "GRUA"])
 
+        # Control dinámico de deshabilitación del botón
         if es_provincia_valida and es_servicio_valido:
             btn_text, is_disabled = "🔍 Consultar Tráfico en Vivo (Waze)", False
         else:
             btn_text = "🔒 Filtre Servicio Remolque y Región Válida" if (not es_servicio_valido and not es_provincia_valida) else ("🔒 Waze solo para servicio de Remolque" if not es_servicio_valido else "🔒 Waze disponible solo en UIO/GYE/CUE/MNT")
             is_disabled = True
 
-        if st.button(btn_text, use_container_width=True, disabled=is_disabled) and es_provincia_valida and es_servicio_valido:
-            if estado_global["creditos"] > 0:
-                with st.spinner(f"Conectando Waze..."):
-                    estado_global["alertas_waze"] = consultar_alertas_waze_real(coordenadas_bbox_provincias[provincia_limpia])
-                    estado_global["ultima_hora_waze"] = ahora_actual.strftime('%I:%M:%S %p')
-                    estado_global["creditos"] -= 1 
-            else:
-                st.error("❌ Se ha alcanzado el límite global de 50 consultas del plan gratuito.")
+        # Renderizado aislado sin encadenar condicionales lógicos lógicos directos (Solución al DeltaGenerator)
+        ejecutar_consulta = st.button(btn_text, use_container_width=True, disabled=is_disabled)
+        
+        if ejecutar_consulta:
+            if es_provincia_valida and es_servicio_valido:
+                if estado_global["creditos"] > 0:
+                    with st.spinner("Conectando Waze..."):
+                        estado_global["alertas_waze"] = consultar_alertas_waze_real(coordenadas_bbox_provincias[provincia_limpia])
+                        estado_global["ultima_hora_waze"] = ahora_actual.strftime('%I:%M:%S %p')
+                        estado_global["creditos"] -= 1 
+                else:
+                    st.error("❌ Se ha alcanzado el límite global de 50 consultas del plan gratuito.")
         
         st.caption(f"⏱️ Último reporte Waze: **{estado_global['ultima_hora_waze']}**")
         
@@ -433,7 +439,10 @@ if df_raw is not None and not df_raw.empty:
             st.info("💡 Parámetros correctos. Presiona el botón de arriba para consultar el tráfico en vivo.")
         else:
             for incidente in estado_global["alertas_waze"]:
-                st.success(incidente) if "✅" in incidente else st.error(incidente)
+                if "✅" in incidente:
+                    st.success(incidente)
+                else:
+                    st.error(incidente)
                 
         st.markdown(f"""
             <div class="card-saldo">
