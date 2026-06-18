@@ -24,23 +24,38 @@ st.markdown("""
     
     /* Margen corregido para optimizar espacio */
     .block-container {
-        padding-top: 1rem !important;
+        padding-top: 0.5rem !important;
+        padding-bottom: 0.5rem !important;
         margin-top: 0px !important;
     }
     
-    /* Tamaño de texto optimizado para lectura rápida del asesor */
+    /* Reducción de márgenes internos de tablas para máxima compactación */
     [data-testid="stTable"] td, [data-testid="stDataFrame"] td, div[data-testid="stDataFrame"] [role="gridcell"] {
-        font-size: 15px !important;
+        font-size: 14px !important;
         font-weight: 500 !important;
+        padding: 4px 6px !important;
     }
     [data-testid="stTable"] th, [data-testid="stDataFrame"] th, div[data-testid="stDataFrame"] [role="columnheader"] {
-        font-size: 16px !important;
+        font-size: 14px !important;
         font-weight: bold !important;
+        padding: 6px 6px !important;
+    }
+    
+    /* Alertas de clima ultra compactas para evitar que empujen la tabla */
+    .alerta-clima-mini {
+        padding: 4px 10px !important;
+        margin-bottom: 4px !important;
+        border-left: 4px solid #ff4b4b;
+        background-color: #ffebeb;
+        color: #ff4b4b;
+        font-size: 13px !important;
+        font-weight: bold;
+        border-radius: 4px;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- CONTROL DEL TEMPORIZADOR Y HORA ESTÁTICA ---
+# --- CONTROL DEL TEMPORIZADOR Y HORA ESTÁT ---
 zona_ecuador = ZoneInfo("America/Guayaquil")
 ahora_actual = datetime.now(zona_ecuador)
 
@@ -148,10 +163,10 @@ def obtener_alertas_waze_Ecuador_completo():
             elif any(pm in calle_up for pm in ["MANTA", "PORTOVIEJO"]):
                 incidentes_provinciales["MANABI"].append(texto_alerta)
         if not incidentes_nacionales:
-            incidentes_nacionales = ["✅ **[WAZE]** Ejes principales estables. Sin cierres críticos."]
+            incidentes_nacionales = ["✅ **[WAZE]** Ejes principales estables."]
         return incidentes_nacionales, incidentes_provinciales
     except:
-        return ["⚠️ **[WAZE]** Sincronizando flujo nacional..."], incidentes_provinciales
+        return ["⚠️ **[WAZE]** Sincronizando flujo..."], incidentes_provinciales
 
 # 📊 FACTOR LLUVIA
 @st.cache_data(ttl=3600)
@@ -250,26 +265,30 @@ if df_raw is not None and not df_raw.empty:
         diccionario_clima, factor_ajuste = {}, 1.0
 
     st.markdown("---")
-    col_izq, col_cen, col_der = st.columns([4, 5, 3])
+    
+    # 🌟 NUEVA ASIGNACIÓN DE COLUMNAS: Izquierda pequeña (2.8), Centro ancha (6.7), Derecha pequeña (2.5)
+    col_izq, col_cen, col_der = st.columns([2.8, 6.7, 2.5])
     
     with col_izq:
         promedio_asistencias_dia = int(round(len(df_filtrado) / num_fechas_reales, 0))
-        st.metric(label=f"📊 Casos Promedio Esperados ({dia_sel.title()})", value=f"{promedio_asistencias_dia} Asistencias")
+        st.metric(label=f"📊 Promedio ({dia_sel.title()})", value=f"{promedio_asistencias_dia} Asist.")
         
         if len(df_filtrado) > 0:
             if provincia_sel == "Todas":
-                st.write("### 📋 Demanda General por Provincias")
+                st.write("##### 📋 Demanda Provincias")
                 df_tp = df_filtrado.groupby(col_provincia).size().reset_index(name='Casos')
-                df_tp['Promedio'] = (df_tp['Casos'] / num_fechas_reales).round(0).astype(int)
+                df_tp['Prom.'] = (df_tp['Casos'] / num_fechas_reales).round(0).astype(int)
                 st.dataframe(df_tp.sort_values(by='Casos', ascending=False), use_container_width=True, hide_index=True)
             else:
-                st.write(f"### 📋 Demanda: Ciudades de {provincia_sel}")
+                st.write(f"##### 📋 Ciudades: {provincia_sel.title()}")
                 df_tc = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos')
-                df_tc['Promedio'] = (df_tc['Casos'] / num_fechas_reales).round(0).astype(int)
+                df_tc['Prom.'] = (df_tc['Casos'] / num_fechas_reales).round(0).astype(int)
                 st.dataframe(df_tc.sort_values(by='Casos', ascending=False), use_container_width=True, hide_index=True)
 
     with col_cen:
         st.write(f"### ⏰ Matriz Horaria y Flota Simplificada: {dia_sel.title()}")
+        
+        # --- SECCIÓN DE ALERTAS ULTRA COMPACTAS ---
         if len(df_filtrado) > 0 and col_hora_agrupada in df_filtrado.columns:
             df_horas_raw = df_filtrado.copy()
             df_horas_raw[col_hora_agrupada] = pd.to_numeric(df_horas_raw[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
@@ -283,6 +302,8 @@ if df_raw is not None and not df_raw.empty:
                     else: casos_locales[hr] += 1
 
             registros_tabla = []
+            alertas_clima_acumuladas = []
+
             for hr in range(24):
                 p_local = casos_locales[hr] / num_fechas_reales
                 p_foraneo = casos_foraneos[hr] / num_fechas_reales
@@ -295,7 +316,11 @@ if df_raw is not None and not df_raw.empty:
                 if es_lluvia:
                     p_local *= factor_ajuste
                     p_foraneo *= factor_ajuste
-                    base_total_combinado = int(round(p_local + p_foraneo, 0))
+                    total_ajustado_int = int(round(p_local + p_foraneo, 0))
+                    # Guardamos la alerta compacta si es del bloque operativo relevante
+                    if hr >= hora_actual and hr <= (hora_actual + 4):
+                        alertas_clima_acumuladas.append(f"🚨 [{hr:02d}:00] Lluvia en {provincia_sel}. Sube a {total_ajustado_int} casos.")
+                    base_total_combinado = total_ajustado_int
 
                 # FÓRMULA DE OPERACIÓN CON ARRASTRE
                 l_ant = p_local if hr == 0 else (casos_locales[hr-1] / num_fechas_reales)
@@ -305,18 +330,16 @@ if df_raw is not None and not df_raw.empty:
                 gruas_netas = (p_local + (0.5 * l_ant)) + (p_foraneo + f_ant1 + f_ant2)
                 gruas_necesarias = math.ceil(gruas_netas)
 
-                # DEDUCCIÓN EXCLUSIVA DE MOTIVOS EN PALABRAS SENCILLAS
                 es_remolque = any(x in str(servicio_sel).upper() for x in ["REMOLQUE", "GRÚA", "GRUA", "TODOS"])
                 
                 if es_remolque and (base_total_combinado > 0 or gruas_necesarias > 0):
-                    # Definición de por qué se necesitan estas grúas
                     if es_lluvia:
                         motivo_asesor = f"🔥 ALERTA DE LLUVIA: El clima aumentará los servicios."
                     elif base_total_combinado > 0 and gruas_necesarias == base_total_combinado:
                         motivo_asesor = f"🟢 Para los {base_total_combinado} casos nuevos de esta hora."
                     elif base_total_combinado > 0 and gruas_necesarias > base_total_combinado:
                         arrastre = gruas_necesarias - base_total_combinado
-                        motivo_asesor = f"⏳ {base_total_combinado} para casos nuevos + {arrastre} que sigue ocupada del viaje anterior."
+                        motivo_asesor = f"⏳ {base_total_combinado} para casos nuevos + {arrastre} de arrastre del viaje anterior."
                     elif base_total_combinado == 0 and gruas_necesarias > 0:
                         motivo_asesor = f"🔄 No hay casos nuevos, pero se siguen terminando viajes anteriores."
                     else:
@@ -336,36 +359,40 @@ if df_raw is not None and not df_raw.empty:
                         "📋 ¿Por qué se necesitan estas grúas?": motivo_asesor
                     })
 
+            # Render de alertas en formato ultra compacto (HTML nativo liviano)
+            if alertas_clima_acumuladas:
+                html_alertas = "".join([f'<div class="alerta-clima-mini">{a}</div>' for a in alertas_clima_acumuladas[:3]])
+                st.markdown(html_alertas, unsafe_allow_html=True)
+
             if registros_tabla:
                 st.dataframe(
                     pd.DataFrame(registros_tabla), 
                     use_container_width=True, 
                     hide_index=True,
                     column_config={
-                        "HORA": st.column_config.TextColumn(alignment="center"),
-                        "🌤️ Clima Online": st.column_config.TextColumn(alignment="left"),
-                        "🚗 Casos Nuevos": st.column_config.NumberColumn(alignment="center"),
-                        "🚛 Grúas Necesarias": st.column_config.TextColumn(alignment="center"),
-                        "📋 ¿Por qué se necesitan estas grúas?": st.column_config.TextColumn(alignment="left")
+                        "HORA": st.column_config.TextColumn(alignment="center", width="small"),
+                        "🌤️ Clima Online": st.column_config.TextColumn(alignment="left", width="medium"),
+                        "🚗 Casos Nuevos": st.column_config.NumberColumn(alignment="center", width="small"),
+                        "🚛 Grúas Necesarias": st.column_config.TextColumn(alignment="center", width="small"),
+                        "📋 ¿Por qué se necesitan estas grúas?": st.column_config.TextColumn(alignment="left", width="large")
                     }
                 )
 
     with col_der:
-        st.write("### 🛰️ Panel de Tráfico Waze (En Vivo)")
+        st.write("##### 🛰️ Tráfico Waze")
         inc_nac, inc_prov = obtener_alertas_waze_Ecuador_completo()
         
-        st.markdown("🔗 **Ejes Troncales Nacionales:**")
-        for al in inc_nac[:3]: st.warning(al)
+        st.markdown("🔗 **Troncales:**")
+        for al in inc_nac[:2]: st.warning(al)
             
-        st.write("---")
         prov_up = provincia_sel.upper()
-        st.markdown(f"📍 **Incidentes en {provincia_sel.title()}:**")
+        st.markdown(f"📍 **{provincia_sel.title()}:**")
         alertas_locales = inc_prov.get(prov_up, []) if provincia_sel != "Todas" else [al for l in inc_prov.values() for al in l]
         
         if alertas_locales:
-            for al in alertas_locales[:5]: st.error(al) if "💥" in al else st.info(al)
+            for al in alertas_locales[:3]: st.error(al) if "💥" in al else st.info(al)
         else:
-            st.success("✅ Flujo libre y estable en la zona.")
+            st.success("✅ Flujo estable.")
 
     # AUTOMATIZACIÓN DE AUTO-REFRESCO NATIVO
     time.sleep(1)
