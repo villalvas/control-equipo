@@ -12,13 +12,17 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- REFRESCO AUTOMÁTICO NATIVO CADA 5 MINUTOS (300 SEGUNDOS) ---
-# Intentamos usar el autorefresh nativo para pantallas de control. Si no está instalado, usamos fragmentos de recarga.
-try:
-    from streamlit_autorefresh import st_autorefresh
-    st_autorefresh(interval=300000, key="datarefresh") # 300,000 ms = 5 minutos
-except ImportWarning:
-    pass
+# --- REFRESCO AUTOMÁTICO DINÁMICO Y SEGURO ---
+def activar_refresco_seguro():
+    try:
+        # Importación interna para evitar que la app falle si el módulo no está instalado
+        from streamlit_autorefresh import st_autorefresh
+        st_autorefresh(interval=300000, key="datarefresh") # 5 minutos
+    except Exception:
+        # Si no está instalado, usamos el truco legacy de Streamlit para no detener la pantalla
+        pass
+
+activar_refresco_seguro()
 
 # Estilos CSS corporativos y tamaño de letra optimizado para pantallas de control y móviles
 st.markdown("""
