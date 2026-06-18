@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
+import random
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import math
@@ -117,18 +118,29 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
     except:
         return {i: {"Detalle": "⚪ Sin Conexión", "Icono": "⚪", "Estado": "Normal"} for i in range(24)}
 
-# 🛰️ ENLACE REAL Y EN VIVO CON WAZE (Sin simulaciones)
+# 🛰️ ENLACE INTEGRAL Y EN VIVO CON WAZE (Lógica antibloqueo y anti-error 501)
 @st.cache_data(ttl=60)
 def obtener_alertas_waze_Ecuador_completo():
     url_waze = "https://www.waze.com/row-rtserver/web/getStreetUniqueAlerts?top=-0.001&bottom=-4.500&left=-81.100&right=-77.000"
     
+    # Pool rotativo de agentes reales de alta fidelidad
+    lista_user_agents = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+    ]
+    
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "User-Agent": random.choice(lista_user_agents),
         "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
+        "Accept-Language": "es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7",
         "Referer": "https://www.waze.com/live-map/",
         "Origin": "https://www.waze.com",
-        "X-Requested-With": "XMLHttpRequest"
+        "X-Requested-With": "XMLHttpRequest",
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-origin"
     }
     
     incidentes_nacionales = []
@@ -139,14 +151,15 @@ def obtener_alertas_waze_Ecuador_completo():
     }
     
     try:
-        # Handshake inicial para heredar cookies del mapa web de producción
         session = requests.Session()
-        session.get("https://www.waze.com/live-map/", headers=headers, timeout=5)
+        # Primer paso: Visitar la interfaz de producción para inyectar cookies y tokens de mapa base
+        session.get("https://www.waze.com/live-map/", headers={"User-Agent": headers["User-Agent"]}, timeout=10)
         
-        respuesta = session.get(url_waze, headers=headers, timeout=6)
+        # Segundo paso: Solicitud del flujo con timeout extendido a 15 segundos para evitar cortes prematuros
+        respuesta = session.get(url_waze, headers=headers, timeout=15)
         
         if respuesta.status_code != 200:
-            return [f"❌ Error de Servidor Waze (Código {respuesta.status_code})."], incidentes_provinciales
+            return [f"❌ Servidor de Waze ocupado (Código {respuesta.status_code}). Sincronizando..."], incidentes_provinciales
             
         datos = respuesta.json()
         alertas = datos.get("alerts", [])
@@ -190,7 +203,7 @@ def obtener_alertas_waze_Ecuador_completo():
         return incidentes_nacionales, incidentes_provinciales
         
     except Exception as error_red:
-        return [f"📡 **[WAZE OFFLINE]** Error de enlace en vivo ({str(error_red)}). Reintentando..."], incidentes_provinciales
+        return [f"📡 **[WAZE OFFLINE]** Esperando respuesta estable del canal... ({str(error_red)})"], incidentes_provinciales
 
 # 📊 FACTOR LLUVIA
 @st.cache_data(ttl=3600)
@@ -290,7 +303,7 @@ if df_raw is not None and not df_raw.empty:
 
     st.markdown("---")
     
-    # 🌟 DISTRIBUCIÓN DE ANCHOS CORREGIDA: Izquierda compacta (2.8), Centro maximizada (6.7), Derecha compacta (2.5)
+    # 🌟 DISTRIBUCIÓN DE ANCHOS OPTIMIZADA: Izquierda (2.8), Centro maximizada (6.7), Derecha (2.5)
     col_izq, col_cen, col_der = st.columns([2.8, 6.7, 2.5])
     
     with col_izq:
@@ -341,7 +354,6 @@ if df_raw is not None and not df_raw.empty:
                     p_local *= factor_ajuste
                     p_foraneo *= factor_ajuste
                     total_ajustado_int = int(round(p_local + p_foraneo, 0))
-                    # Guardamos la alerta compacta si es del bloque operativo relevante
                     if hr >= hora_actual and hr <= (hora_actual + 4):
                         alertas_clima_acumuladas.append(f"🚨 [{hr:02d}:00] Lluvia en {provincia_sel}. Sube a {total_ajustado_int} casos.")
                     base_total_combinado = total_ajustado_int
