@@ -410,11 +410,14 @@ if df_raw is not None and not df_raw.empty:
     with col_der:
         st.write("##### 🚛 Alertas e Incidentes")
         
+        # --- CONTROL DE ESTADO E INICIALIZACIÓN DE CRÉDITOS ---
         if 'waze_data' not in st.session_state:
             st.session_state['waze_data'] = []
             st.session_state['waze_time'] = "Nunca"
+            
+        # Fijado en 49 para preservar la consulta que hiciste antes del último cambio
         if 'creditos_waze' not in st.session_state:
-            st.session_state['creditos_waze'] = 50 
+            st.session_state['creditos_waze'] = 49 
             
         # --- NUEVA REGLA DE VALIDACIÓN PARA EL BOTÓN DE WAZE (PROVINCIA + SERVICIO) ---
         provincia_limpia = provincia_sel.upper().strip()
