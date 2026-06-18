@@ -14,20 +14,19 @@ st.set_page_config(
 )
 
 # --- RECARGA NATIVA FORZADA DE VENTANA CADA 5 MINUTOS (300 SEGUNDOS) ---
-# Este componente inyecta un temporizador directo en el navegador del usuario para recargar la ventana limpia.
 components.html(
     """
     <script>
         setTimeout(function(){
             window.parent.location.reload();
-        }, 300000); // 300000 ms = 5 minutos exactos
+        }, 300000); // 5 minutos exactos
     </script>
     """,
     height=0,
     width=0
 )
 
-# Estilos CSS corporativos y tamaño de letra optimizado para pantallas de control y móviles
+# Estilos CSS corporativos
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -36,14 +35,12 @@ st.markdown("""
     .stDataFrame [data-testid="stDataFrameDownloadButton"] {display: none;}
     button[title="View fullscreen"] {display: none;}
     
-    /* Margen corregido para optimizar espacio */
     .block-container {
         padding-top: 0.5rem !important;
         padding-bottom: 0.5rem !important;
         margin-top: 0px !important;
     }
     
-    /* Reducción de márgenes internos de tablas para máxima compactación */
     [data-testid="stTable"] td, [data-testid="stDataFrame"] td, div[data-testid="stDataFrame"] [role="gridcell"] {
         font-size: 14px !important;
         font-weight: 500 !important;
@@ -55,7 +52,6 @@ st.markdown("""
         padding: 6px 6px !important;
     }
     
-    /* Alertas de clima ultra compactas para evitar que empujen la tabla */
     .alerta-clima-mini {
         padding: 4px 10px !important;
         margin-bottom: 4px !important;
@@ -69,7 +65,6 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- CONTROL DE HORA ACTUAL (REGISTRO EXACTO DE ÚLTIMA ACTUALIZACIÓN) ---
 zona_ecuador = ZoneInfo("America/Guayaquil")
 ahora_actual = datetime.now(zona_ecuador)
 hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
@@ -96,7 +91,6 @@ diccionario_dias = {
     "JUEVES": 3, "VIERNES": 4, "SÁBADO": 5, "SABADO": 5, "DOMINGO": 6
 }
 
-# 🚗 CLIMA EN VIVO (Se limpia cada 5 minutos con la recarga total)
 @st.cache_data(ttl=300)
 def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
     try:
@@ -121,7 +115,20 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
     except:
         return {i: {"Detalle": "⚪ Sin Conexión", "Icono": "⚪", "Estado": "Normal"} for i in range(24)}
 
-# 📊 FACTOR LLUVIA HISTÓRICO
+@st.cache_data(ttl=300)
+def obtener_clima_actual_rapido(lat, lon):
+    try:
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true&timezone=auto"
+        res = requests.get(url).json()
+        code = res['current_weather']['weathercode']
+        temp = res['current_weather']['temperature']
+        if code == 0: return f"☀️ Despejado ({temp}°C)"
+        elif code in [1, 2, 3]: return f"☁️ Nublado ({temp}°C)"
+        elif code in [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99]: return f"🌧️ Lluvia ({temp}°C)"
+        return f"☁️ Nublado ({temp}°C)"
+    except:
+        return "⚪ N/A"
+
 @st.cache_data(ttl=3600)
 def calcular_factor_lluvia_en_vivo(df_historico, lat, lon):
     try:
@@ -226,22 +233,41 @@ if df_raw is not None and not df_raw.empty:
 
     st.markdown("---")
     
-    col_izq, col_cen, col_der = st.columns([2.8, 6.7, 2.5])
+    col_izq, col_cen, col_der = st.columns([3.4, 6.1, 2.5])
     
     with col_izq:
         promedio_asistencias_dia = int(round(len(df_filtrado) / num_fechas_reales, 0))
-        st.metric(label=f"📊 Promedio ({dia_sel.title()})", value=f"{promedio_asistencias_dia} Asist.")
+        st.metric(label=f"📊 Promedio Demanda ({dia_sel.title()})", value=f"{promedio_asistencias_dia} Asist.")
         
         if len(df_filtrado) > 0:
             if provincia_sel == "Todas":
                 st.write("##### 📋 Demanda Provincias")
                 df_tp = df_filtrado.groupby(col_provincia).size().reset_index(name='Casos')
                 df_tp['Prom.'] = (df_tp['Casos'] / num_fechas_reales).round(0).astype(int)
+                
+                # Inyección de Clima en Vivo por Provincia
+                climados = []
+                for prov in df_tp[col_provincia]:
+                    if prov in coordenadas_provincias:
+                        lat_p, lon_p = coordenadas_provincias[prov]
+                        climados.append(obtener_clima_actual_rapido(lat_p, lon_p))
+                    else:
+                        climados.append("🌍 N/A")
+                df_tp['Clima Online'] = climados
+                
+                df_tp = df_tp[[col_provincia, 'Clima Online', 'Casos', 'Prom.']]
                 st.dataframe(df_tp.sort_values(by='Casos', ascending=False), use_container_width=True, hide_index=True)
             else:
                 st.write(f"##### 📋 Ciudades: {provincia_sel.title()}")
                 df_tc = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos')
                 df_tc['Prom.'] = (df_tc['Casos'] / num_fechas_reales).round(0).astype(int)
+                
+                # Clima de la Provincia asignado a sus ciudades de forma limpia
+                lat_p, lon_p = coordenadas_provincias.get(provincia_sel, [-0.2298, -78.5249])
+                clima_prov_str = obtener_clima_actual_rapido(lat_p, lon_p)
+                df_tc['Clima Online'] = clima_prov_str
+                
+                df_tc = df_tc[[col_ciudad, 'Clima Online', 'Casos', 'Prom.']]
                 st.dataframe(df_tc.sort_values(by='Casos', ascending=False), use_container_width=True, hide_index=True)
 
     with col_cen:
@@ -269,7 +295,7 @@ if df_raw is not None and not df_raw.empty:
                 promedio_base_calculado = int(round(p_local + p_foraneo, 0))
                 
                 clima_info = diccionario_clima.get(hr, {"Detalle": "☁️ Nublado (N/A)", "Estado": "Normal"})
-                detalle_clima = clima_info["Detalle"] if provincia_sel != "Todas" else "🌍 Seleccione Prov."
+                detalle_clima = clima_info["Detalle"] if provincia_sel != "Todas" else "🌍 Filtre Provincia"
                 es_lluvia = (clima_info["Estado"] == "Lluvia" and provincia_sel != "Todas")
 
                 if es_lluvia:
@@ -314,9 +340,9 @@ if df_raw is not None and not df_raw.empty:
                     registros_tabla.append({
                         "HORA": f"{hr:02d}:00",
                         "🌤️ Clima Online": detalle_clima,
-                        "📊 Promedio Base": promedio_base_calculado,
-                        "📈 Proyección Ajustada": texto_proyeccion,
-                        "🚛 Grúas Necesarias": string_gruas,
+                        "📊 Promed": promedio_base_calculado,
+                        "📈 Proyección": texto_proyeccion,
+                        "🚛 Grúas N.": string_gruas,
                         "📋 ¿Por qué se necesitan estas grúas?": motivo_asesor
                     })
 
@@ -332,14 +358,14 @@ if df_raw is not None and not df_raw.empty:
                     column_config={
                         "HORA": st.column_config.TextColumn(alignment="center", width="small"),
                         "🌤️ Clima Online": st.column_config.TextColumn(alignment="left", width="medium"),
-                        "📊 Promedio Base": st.column_config.NumberColumn(alignment="center", width="small"),
-                        "📈 Proyección Ajustada": st.column_config.TextColumn(alignment="center", width="medium"),
-                        "🚛 Grúas Necesarias": st.column_config.TextColumn(alignment="center", width="small"),
+                        "📊 Promed": st.column_config.NumberColumn(alignment="center", width="small"),
+                        "📈 Proyección": st.column_config.TextColumn(alignment="center", width="medium"),
+                        "🚛 Grúas N.": st.column_config.TextColumn(alignment="center", width="small"),
                         "📋 ¿Por qué se necesitan estas grúas?": st.column_config.TextColumn(alignment="left", width="large")
                     }
                 )
 
     with col_der:
-        st.write("##### 🚛 Estado de Flota")
+        st.write("##### 🚛 Alertas")
         st.info("💡 Esperando aprobación del feed oficial de **Waze for Cities** para reactivar el canal automatizado de tráfico.")
         st.success("🟢 Monitor meteorológico y matriz analítica de arrastre operando al 100% en tiempo real.")
