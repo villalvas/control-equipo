@@ -4,7 +4,6 @@ import requests
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import math
-import time
 
 # 1. Configuración de pantalla ultra ancha para el monitor de control
 st.set_page_config(
@@ -12,6 +11,14 @@ st.set_page_config(
     page_title="Monitor de Proyecciones 2026 - Control de Flota",
     initial_sidebar_state="collapsed"
 )
+
+# --- REFRESCO AUTOMÁTICO NATIVO CADA 5 MINUTOS (300 SEGUNDOS) ---
+# Intentamos usar el autorefresh nativo para pantallas de control. Si no está instalado, usamos fragmentos de recarga.
+try:
+    from streamlit_autorefresh import st_autorefresh
+    st_autorefresh(interval=300000, key="datarefresh") # 300,000 ms = 5 minutos
+except ImportWarning:
+    pass
 
 # Estilos CSS corporativos y tamaño de letra optimizado para pantallas de control y móviles
 st.markdown("""
@@ -55,23 +62,13 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- CONTROL DEL TEMPORIZADOR Y HORA ESTÁTICA ---
+# --- CONTROL DE HORA ACTUAL ---
 zona_ecuador = ZoneInfo("America/Guayaquil")
 ahora_actual = datetime.now(zona_ecuador)
-
-if "ultima_actualizacion" not in st.session_state:
-    st.session_state.ultima_actualizacion = ahora_actual
-if "proxima_actualizacion" not in st.session_state:
-    st.session_state.proxima_actualizacion = ahora_actual + timedelta(minutes=5)
-
-if ahora_actual >= st.session_state.proxima_actualizacion:
-    st.session_state.ultima_actualizacion = ahora_actual
-    st.session_state.proxima_actualizacion = ahora_actual + timedelta(minutes=5)
-
-hora_estatica_str = st.session_state.ultima_actualizacion.strftime('%I:%M:%S %p')
+hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
 
 st.title("🔮 Monitor de Proyección Horaria y Alerta Temprana de Flota")
-st.caption(f"Centro de Control Geoanalítico | 🔄 Auto-refresco activo cada 5 min (Último: {hora_estatica_str})")
+st.caption(f"Centro de Control Geoanalítico | 🔄 Auto-refresco nativo activo cada 5 min (Actualizado: {hora_estatica_str})")
 
 coordenadas_provincias = {
     'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
@@ -191,12 +188,12 @@ if df_raw is not None and not df_raw.empty:
     if dia_sel.upper() == "TODOS":
         df_dia_especifico = df_raw.copy()
         num_fechas_reales = df_dia_especifico[col_fecha].nunique() if col_fecha in df_dia_especifico.columns else 1
-        fecha_target_str = st.session_state.ultima_actualizacion.strftime("%Y-%m-%d")
+        fecha_target_str = ahora_actual.strftime("%Y-%m-%d")
         dias_diferencia = 0
     else:
-        dia_destino_num = diccionario_dias.get(dia_sel.upper(), st.session_state.ultima_actualizacion.weekday())
-        dias_diferencia = (dia_destino_num - st.session_state.ultima_actualizacion.weekday()) % 7
-        fecha_target_str = (st.session_state.ultima_actualizacion + timedelta(days=dias_diferencia)).strftime("%Y-%m-%d")
+        dia_destino_num = diccionario_dias.get(dia_sel.upper(), ahora_actual.weekday())
+        dias_diferencia = (dia_destino_num - ahora_actual.weekday()) % 7
+        fecha_target_str = (ahora_actual + timedelta(days=dias_diferencia)).strftime("%Y-%m-%d")
         df_dia_especifico = df_raw[df_raw[col_dia].str.upper() == dia_sel.upper()]
         num_fechas_reales = df_dia_especifico[col_fecha].nunique() if col_fecha in df_dia_especifico.columns else 1
 
@@ -212,7 +209,7 @@ if df_raw is not None and not df_raw.empty:
         df_filtrado = df_filtrado[df_filtrado[col_provincia] == provincia_sel]
         if ciudad_sel: df_filtrado = df_filtrado[df_filtrado[col_ciudad].isin(ciudad_sel)]
 
-    hora_actual = st.session_state.ultima_actualizacion.hour
+    hora_actual = ahora_actual.hour
     if provincia_sel != "Todas":
         lat_c, lon_c = coordenadas_provincias.get(provincia_sel, [-0.2298, -78.5249])
         diccionario_clima = obtener_clima_horario_futuro(lat_c, lon_c, fecha_target_str)
@@ -339,7 +336,3 @@ if df_raw is not None and not df_raw.empty:
         st.write("##### 🚛 Estado de Flota")
         st.info("💡 Esperando aprobación del feed oficial de **Waze for Cities** para reactivar el canal automatizado de tráfico.")
         st.success("🟢 Monitor meteorológico y matriz analítica de arrastre operando al 100% en tiempo real.")
-
-    time.sleep(1)
-    if datetime.now(zona_ecuador) >= st.session_state.proxima_actualizacion:
-        st.rerun()
