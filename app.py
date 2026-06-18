@@ -416,21 +416,30 @@ if df_raw is not None and not df_raw.empty:
         if 'creditos_waze' not in st.session_state:
             st.session_state['creditos_waze'] = 50 
             
-        # --- NUEVA REGLA DE VALIDACIÓN PARA EL BOTÓN DE WAZE ---
+        # --- NUEVA REGLA DE VALIDACIÓN PARA EL BOTÓN DE WAZE (PROVINCIA + SERVICIO) ---
         provincia_limpia = provincia_sel.upper().strip()
         es_provincia_valida = provincia_limpia in coordenadas_bbox_provincias and provincia_sel != "Todas"
+        
+        # Validar que el servicio contenga REMOLQUE, GRÚA o GRUA (excluyendo "Todos")
+        servicio_limpio = str(servicio_sel).upper().strip()
+        es_servicio_valido = any(x in servicio_limpio for x in ["REMOLQUE", "GRÚA", "GRUA"]) and servicio_limpio != "TODOS"
 
-        # El botón se renderiza deshabilitado si no cumple la regla de las 4 provincias aprobadas
-        if es_provincia_valida:
+        # El botón solo se activa si cumple AMBOS criterios de forma simultánea
+        if es_provincia_valida and es_servicio_valido:
             btn_text = "🔍 Consultar Tráfico en Vivo (Waze)"
             is_disabled = False
         else:
-            btn_text = "🔒 Waze disponible solo en UIO/GYE/CUE/MNT"
+            if not es_servicio_valido and not es_provincia_valida:
+                btn_text = "🔒 Filtre Servicio Remolque y Región Válida"
+            elif not es_servicio_valido:
+                btn_text = "🔒 Waze solo para servicio de Remolque"
+            else:
+                btn_text = "🔒 Waze disponible solo en UIO/GYE/CUE/MNT"
             is_disabled = True
 
         btn_consultar = st.button(btn_text, use_container_width=True, disabled=is_disabled)
         
-        if btn_consultar and es_provincia_valida:
+        if btn_consultar and es_provincia_valida and es_servicio_valido:
             if st.session_state['creditos_waze'] > 0:
                 bbox_zona = coordenadas_bbox_provincias[provincia_limpia]
                 
@@ -444,10 +453,11 @@ if df_raw is not None and not df_raw.empty:
         
         st.caption(f"⏱️ Último reporte Waze: **{st.session_state['waze_time']}**")
         
-        if not es_provincia_valida:
-            st.warning("⚠️ Selecciona Pichincha, Guayas, Azuay o Manabí para desbloquear las consultas de Waze.")
+        # Bloques informativos de ayuda dinámica en la barra lateral
+        if not es_provincia_valida or not es_servicio_valido:
+            st.warning("⚠️ El botón requiere seleccionar una Provincia autorizada (Pichincha, Guayas, Azuay, Manabí) Y especificar el Servicio de Remolque.")
         elif not st.session_state['waze_data']:
-            st.info("💡 Presiona el botón de arriba para consultar el tráfico actual usando 1 crédito de tu plan.")
+            st.info("💡 Parámetros correctos. Presiona el botón de arriba para consultar el tráfico en vivo.")
         else:
             for incidente in st.session_state['waze_data']:
                 if "✅" in incidente:
