@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import requests
-import random
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import math
@@ -118,94 +117,7 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
     except:
         return {i: {"Detalle": "⚪ Sin Conexión", "Icono": "⚪", "Estado": "Normal"} for i in range(24)}
 
-# 🛰️ ENLACE INTEGRAL Y EN VIVO CON WAZE (Lógica antibloqueo y anti-error 501)
-@st.cache_data(ttl=60)
-def obtener_alertas_waze_Ecuador_completo():
-    url_waze = "https://www.waze.com/row-rtserver/web/getStreetUniqueAlerts?top=-0.001&bottom=-4.500&left=-81.100&right=-77.000"
-    
-    # Pool rotativo de agentes reales de alta fidelidad
-    lista_user_agents = [
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0",
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-    ]
-    
-    headers = {
-        "User-Agent": random.choice(lista_user_agents),
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Referer": "https://www.waze.com/live-map/",
-        "Origin": "https://www.waze.com",
-        "X-Requested-With": "XMLHttpRequest",
-        "Sec-Fetch-Dest": "empty",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Site": "same-origin"
-    }
-    
-    incidentes_nacionales = []
-    incidentes_provinciales = {
-        "PICHINCHA": [], "GUAYAS": [], "AZUAY": [], "MANABI": [], "MANABÍ": [], "LOS RIOS": [], "LOS RÍOS": [],
-        "TUNGURAHUA": [], "EL ORO": [], "LOJA": [], "CHIMBORAZO": [], "COTOPAXI": [], "ESMERALDAS": [],
-        "SANTO DOMINGO DE LOS TSÁCHILAS": [], "SANTO DOMINGO DE LOS TSACHILAS": [], "SANTA ELENA": [], "IMBABURA": []
-    }
-    
-    try:
-        session = requests.Session()
-        # Primer paso: Visitar la interfaz de producción para inyectar cookies y tokens de mapa base
-        session.get("https://www.waze.com/live-map/", headers={"User-Agent": headers["User-Agent"]}, timeout=10)
-        
-        # Segundo paso: Solicitud del flujo con timeout extendido a 15 segundos para evitar cortes prematuros
-        respuesta = session.get(url_waze, headers=headers, timeout=15)
-        
-        if respuesta.status_code != 200:
-            return [f"❌ Servidor de Waze ocupado (Código {respuesta.status_code}). Sincronizando..."], incidentes_provinciales
-            
-        datos = respuesta.json()
-        alertas = datos.get("alerts", [])
-        zona_ec = ZoneInfo("America/Guayaquil")
-        
-        for al in alertas:
-            calle = al.get("street", "Vía no identificada")
-            tipo = al.get("type", "TRÁFICO")
-            subtipo = al.get("subType", "")
-            descripcion = al.get("reportDescription", "")
-            millis = al.get("pubMillis", 0)
-            
-            if millis > 0:
-                dt_ec = datetime.fromtimestamp(millis / 1000.0, tz=ZoneInfo("UTC")).astimezone(zona_ec)
-                tiempo_str = dt_ec.strftime("%I:%M %p")
-            else:
-                tiempo_str = "En vivo"
-                
-            tipo_legible = subtipo.replace("_", " ").title() if subtipo else tipo.title()
-            icono = "💥" if "ACCIDENT" in tipo or "COLLISION" in tipo else "⚠️"
-            detalles = f" ({descripcion})" if descripcion else ""
-            texto_alerta = f"{icono} **[{tiempo_str}]** {calle}: {tipo_legible}{detalles}."
-            
-            calle_up = calle.upper()
-            
-            if any(pe in calle_up for pe in ["VIA", "VÍA", "PANAMERICANA", "ALOAG", "ALÓAG", "E35", "E25", "E45", "TRONCAL"]):
-                incidentes_nacionales.append(texto_alerta)
-                
-            if any(pq in calle_up for pq in ["QUITO", "SIMON BOLIVAR", "SIMÓN BOLÍVAR", "CUMBAYA", "INTEROCEANICA", "GALO PLAZA"]):
-                incidentes_provinciales["PICHINCHA"].append(texto_alerta)
-            elif any(pg in calle_up for pg in ["GUAYAQUIL", "JUAN TANCA", "SAMANES", "DAULE", "SAMBORONDON", "PERIMETRAL", "NARCISA"]):
-                incidentes_provinciales["GUAYAS"].append(texto_alerta)
-            elif any(pa in calle_up for pa in ["CUENCA", "ORDONEZ LASSO", "REMANSO"]):
-                incidentes_provinciales["AZUAY"].append(texto_alerta)
-            elif any(pm in calle_up for pm in ["MANTA", "PORTOVIEJO", "CHONE"]):
-                incidentes_provinciales["MANABI"].append(texto_alerta)
-                
-        if not incidentes_nacionales:
-            incidentes_nacionales = ["✅ **[WAZE ONLINE]** Ejes viales principales fluyendo sin alertas críticas reportadas."]
-            
-        return incidentes_nacionales, incidentes_provinciales
-        
-    except Exception as error_red:
-        return [f"📡 **[WAZE OFFLINE]** Esperando respuesta estable del canal... ({str(error_red)})"], incidentes_provinciales
-
-# 📊 FACTOR LLUVIA
+# 📊 FACTOR LLUVIA HISTÓRICO
 @st.cache_data(ttl=3600)
 def calcular_factor_lluvia_en_vivo(df_historico, lat, lon):
     try:
@@ -303,7 +215,7 @@ if df_raw is not None and not df_raw.empty:
 
     st.markdown("---")
     
-    # 🌟 DISTRIBUCIÓN DE ANCHOS OPTIMIZADA: Izquierda (2.8), Centro maximizada (6.7), Derecha (2.5)
+    # Anchos equilibrados tras remover Waze: Izquierda (2.8), Centro maximizada (6.7), Derecha (2.5)
     col_izq, col_cen, col_der = st.columns([2.8, 6.7, 2.5])
     
     with col_izq:
@@ -344,7 +256,9 @@ if df_raw is not None and not df_raw.empty:
             for hr in range(24):
                 p_local = casos_locales[hr] / num_fechas_reales
                 p_foraneo = casos_foraneos[hr] / num_fechas_reales
-                base_total_combinado = int(round(p_local + p_foraneo, 0))
+                
+                # Cálculo de promedio base sin alteraciones
+                promedio_base_calculado = int(round(p_local + p_foraneo, 0))
                 
                 clima_info = diccionario_clima.get(hr, {"Detalle": "☁️ Nublado (N/A)", "Estado": "Normal"})
                 detalle_clima = clima_info["Detalle"] if provincia_sel != "Todas" else "🌍 Seleccione Prov."
@@ -353,10 +267,13 @@ if df_raw is not None and not df_raw.empty:
                 if es_lluvia:
                     p_local *= factor_ajuste
                     p_foraneo *= factor_ajuste
-                    total_ajustado_int = int(round(p_local + p_foraneo, 0))
+                    proyeccion_final_int = int(round(p_local + p_foraneo, 0))
+                    texto_proyeccion = f"{proyeccion_final_int} (Lluvia 🌧️)"
                     if hr >= hora_actual and hr <= (hora_actual + 4):
-                        alertas_clima_acumuladas.append(f"🚨 [{hr:02d}:00] Lluvia en {provincia_sel}. Sube a {total_ajustado_int} casos.")
-                    base_total_combinado = total_ajustado_int
+                        alertas_clima_acumuladas.append(f"🚨 [{hr:02d}:00] Lluvia en {provincia_sel}. Sube de {promedio_base_calculado} a {proyeccion_final_int} casos.")
+                else:
+                    proyeccion_final_int = promedio_base_calculado
+                    texto_proyeccion = f"{proyeccion_final_int} (Normal)"
 
                 # FÓRMULA DE OPERACIÓN CON ARRASTRE
                 l_ant = p_local if hr == 0 else (casos_locales[hr-1] / num_fechas_reales)
@@ -368,15 +285,15 @@ if df_raw is not None and not df_raw.empty:
 
                 es_remolque = any(x in str(servicio_sel).upper() for x in ["REMOLQUE", "GRÚA", "GRUA", "TODOS"])
                 
-                if es_remolque and (base_total_combinado > 0 or gruas_necesarias > 0):
+                if es_remolque and (proyeccion_final_int > 0 or gruas_necesarias > 0):
                     if es_lluvia:
                         motivo_asesor = f"🔥 ALERTA DE LLUVIA: El clima aumentará los servicios."
-                    elif base_total_combinado > 0 and gruas_necesarias == base_total_combinado:
-                        motivo_asesor = f"🟢 Para los {base_total_combinado} casos nuevos de esta hora."
-                    elif base_total_combinado > 0 and gruas_necesarias > base_total_combinado:
-                        arrastre = gruas_necesarias - base_total_combinado
-                        motivo_asesor = f"⏳ {base_total_combinado} para casos nuevos + {arrastre} de arrastre del viaje anterior."
-                    elif base_total_combinado == 0 and gruas_necesarias > 0:
+                    elif proyeccion_final_int > 0 and gruas_necesarias == proyeccion_final_int:
+                        motivo_asesor = f"🟢 Para los {proyeccion_final_int} casos nuevos de esta hora."
+                    elif proyeccion_final_int > 0 and gruas_necesarias > proyeccion_final_int:
+                        arrastre = gruas_necesarias - proyeccion_final_int
+                        motivo_asesor = f"⏳ {proyeccion_final_int} para casos nuevos + {arrastre} de arrastre del viaje anterior."
+                    elif proyeccion_final_int == 0 and gruas_necesarias > 0:
                         motivo_asesor = f"🔄 No hay casos nuevos, pero se siguen terminando viajes anteriores."
                     else:
                         motivo_asesor = "✅ Flota disponible en base."
@@ -386,16 +303,17 @@ if df_raw is not None and not df_raw.empty:
                     string_gruas = "-"
                     motivo_asesor = "Normal"
 
-                if base_total_combinado > 0 or string_gruas != "-":
+                if proyeccion_final_int > 0 or string_gruas != "-":
                     registros_tabla.append({
                         "HORA": f"{hr:02d}:00",
                         "🌤️ Clima Online": detalle_clima,
-                        "🚗 Casos Nuevos": base_total_combinado,
+                        "📊 Promedio Base": promedio_base_calculado,
+                        "📈 Proyección Ajustada": texto_proyeccion,
                         "🚛 Grúas Necesarias": string_gruas,
                         "📋 ¿Por qué se necesitan estas grúas?": motivo_asesor
                     })
 
-            # Render de alertas en formato ultra compacto (HTML nativo liviano)
+            # Render de alertas meteorológicas activas en formato ultra compacto
             if alertas_clima_acumuladas:
                 html_alertas = "".join([f'<div class="alerta-clima-mini">{a}</div>' for a in alertas_clima_acumuladas[:3]])
                 st.markdown(html_alertas, unsafe_allow_html=True)
@@ -408,27 +326,17 @@ if df_raw is not None and not df_raw.empty:
                     column_config={
                         "HORA": st.column_config.TextColumn(alignment="center", width="small"),
                         "🌤️ Clima Online": st.column_config.TextColumn(alignment="left", width="medium"),
-                        "🚗 Casos Nuevos": st.column_config.NumberColumn(alignment="center", width="small"),
+                        "📊 Promedio Base": st.column_config.NumberColumn(alignment="center", width="small"),
+                        "📈 Proyección Ajustada": st.column_config.TextColumn(alignment="center", width="medium"),
                         "🚛 Grúas Necesarias": st.column_config.TextColumn(alignment="center", width="small"),
                         "📋 ¿Por qué se necesitan estas grúas?": st.column_config.TextColumn(alignment="left", width="large")
                     }
                 )
 
     with col_der:
-        st.write("##### 🛰️ Tráfico Waze")
-        inc_nac, inc_prov = obtener_alertas_waze_Ecuador_completo()
-        
-        st.markdown("🔗 **Troncales:**")
-        for al in inc_nac[:2]: st.warning(al)
-            
-        prov_up = provincia_sel.upper()
-        st.markdown(f"📍 **{provincia_sel.title()}:**")
-        alertas_locales = inc_prov.get(prov_up, []) if provincia_sel != "Todas" else [al for l in inc_prov.values() for al in l]
-        
-        if alertas_locales:
-            for al in alertas_locales[:3]: st.error(al) if "💥" in al else st.info(al)
-        else:
-            st.success("✅ Flujo estable.")
+        st.write("##### 🚛 Estado de Flota")
+        st.info("💡 Esperando aprobación del feed oficial de **Waze for Cities** para reactivar el canal automatizado de tráfico.")
+        st.success("🟢 Monitor meteorológico y matriz analítica de arrastre operando al 100% en tiempo real.")
 
     # AUTOMATIZACIÓN DE AUTO-REFRESCO NATIVO
     time.sleep(1)
