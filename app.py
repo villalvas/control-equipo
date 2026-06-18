@@ -81,24 +81,25 @@ hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
 st.title("🔮 Monitor de Proyección Horaria y Alerta Temprana de Flota")
 st.markdown(f"**Centro de Control Geoanalítico** | 🔄 Próximo refresco automático en 5 min. **(Última Actualización del Tablero: {hora_estatica_str})**")
 
-# --- MEMORIA COMPARTIDA GLOBAL ---
+# --- MEMORIA SERVIDOR ALTA DISPONIBILIDAD (No se destruye con refresh de navegador) ---
 @st.cache_resource
-def inicializar_memoria_compartida():
+def inicializar_memoria_inmune():
     return {
-        "creditos": 48,  # Sincronizado con tus consumos actuales
+        "creditos": 47,  # Sincronizado con tus consumos actuales
         "alertas_waze": [],
         "ultima_hora_waze": "Nunca",
         "filtros_persistentes": {
             "dia_sel": "TODOS",
             "servicio_sel": "Todos",
             "provincia_sel": "Todas",
-            "ciudad_sel": []
+            "ciudad_sel": [],
+            "estado_sel": []
         }
     }
 
-estado_global = inicializar_memoria_compartida()
+estado_global = inicializar_memoria_inmune()
 
-# Cargar estados persistentes en la sesión actual
+# Inyección segura desde la memoria inmune hacia la sesión limpia que acaba de nacer
 if "dia_sel_key" not in st.session_state:
     st.session_state["dia_sel_key"] = estado_global["filtros_persistentes"]["dia_sel"]
 if "servicio_sel_key" not in st.session_state:
@@ -107,6 +108,27 @@ if "provincia_sel_key" not in st.session_state:
     st.session_state["provincia_sel_key"] = estado_global["filtros_persistentes"]["provincia_sel"]
 if "ciudad_sel_key" not in st.session_state:
     st.session_state["ciudad_sel_key"] = estado_global["filtros_persistentes"]["ciudad_sel"]
+if "estado_sel_key" not in st.session_state:
+    st.session_state["estado_sel_key"] = estado_global["filtros_persistentes"]["estado_sel"]
+
+# Funciones callbacks para guardar cambios instantáneamente en el servidor al interactuar
+def guardar_dia_callback():
+    estado_global["filtros_persistentes"]["dia_sel"] = st.session_state["dia_sel_key"]
+
+def guardar_servicio_callback():
+    estado_global["filtros_persistentes"]["servicio_sel"] = st.session_state["servicio_sel_key"]
+
+def guardar_provincia_callback():
+    estado_global["filtros_persistentes"]["provincia_sel"] = st.session_state["provincia_sel_key"]
+    # Limpiamos las ciudades de la memoria inmune si se cambia de provincia
+    estado_global["filtros_persistentes"]["ciudad_sel"] = []
+    st.session_state["ciudad_sel_key"] = []
+
+def guardar_ciudad_callback():
+    estado_global["filtros_persistentes"]["ciudad_sel"] = st.session_state["ciudad_sel_key"]
+
+def guardar_estado_callback():
+    estado_global["filtros_persistentes"]["estado_sel"] = st.session_state["estado_sel_key"]
 
 # MACRO CUADRANTE NACIONAL PARA TODO ECUADOR CONTINENTAL
 bbox_nacional_ecuador = {
@@ -114,31 +136,15 @@ bbox_nacional_ecuador = {
     "top_right": "1.5000,-75.0000"
 }
 
-# Diccionario expandido y normalizado para evitar quiebres de N/A en clima
 coordenadas_provincias = {
-    'PICHINCHA': [-0.2298, -78.5249], 
-    'GUAYAS': [-2.1894, -79.8890], 
-    'AZUAY': [-2.9001, -79.0059],
-    'MANABI': [-1.0543, -80.4544],
-    'EL ORO': [-3.2581, -79.9553], 
-    'LOJA': [-3.9931, -79.2042], 
-    'TUNGURAHUA': [-1.2491, -78.6168], 
-    'CHIMBORAZO': [-1.6743, -78.6483], 
-    'ESMERALDAS': [0.9682, -79.6517], 
-    'LOS RIOS': [-1.4558, -79.4622], 
-    'SANTO DOMINGO DE LOS TSACHILAS': [-0.2530, -79.1754], 
-    'SANTA ELENA': [-2.2262, -80.8584], 
-    'IMBABURA': [0.3517, -78.1223], 
-    'COTOPAXI': [-0.9352, -78.6155], 
-    'CARCHI': [0.7384, -77.7289], 
-    'SUCUMBIOS': [0.0847, -76.8828], 
-    'ORELLANA': [-0.5665, -76.9872], 
-    'NAPO': [-0.9902, -77.8129], 
-    'PASTAZA': [-1.4870, -77.9954], 
-    'MORONA SANTIAGO': [-2.3087, -78.1114], 
-    'ZAMORA CHINCHIPE': [-4.0692, -78.9566],
-    'GALAPAGOS': [-0.7402, -90.3119], 
-    'BOLIVAR': [-1.5910, -79.0022], 
+    'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
+    'MANABI': [-1.0543, -80.4544], 'EL ORO': [-3.2581, -79.9553], 'LOJA': [-3.9931, -79.2042], 
+    'TUNGURAHUA': [-1.2491, -78.6168], 'CHIMBORAZO': [-1.6743, -78.6483], 'ESMERALDAS': [0.9682, -79.6517], 
+    'LOS RIOS': [-1.4558, -79.4622], 'SANTO DOMINGO DE LOS TSACHILAS': [-0.2530, -79.1754], 
+    'SANTA ELENA': [-2.2262, -80.8584], 'IMBABURA': [0.3517, -78.1223], 'COTOPAXI': [-0.9352, -78.6155], 
+    'CARCHI': [0.7384, -77.7289], 'SUCUMBIOS': [0.0847, -76.8828], 'ORELLANA': [-0.5665, -76.9872], 
+    'NAPO': [-0.9902, -77.8129], 'PASTAZA': [-1.4870, -77.9954], 'MORONA SANTIAGO': [-2.3087, -78.1114], 
+    'ZAMORA CHINCHIPE': [-4.0692, -78.9566], 'GALAPAGOS': [-0.7402, -90.3119], 'BOLIVAR': [-1.5910, -79.0022], 
     'CANAR': [-2.5518, -78.9392]
 }
 
@@ -157,7 +163,6 @@ def consultar_alertas_waze_real(bbox_dict):
         respuesta = requests.get(url, headers=headers, params=params, timeout=10).json()
         alertas = []
         if "alerts" in respuesta and respuesta["alerts"]:
-            # Filtramos y tomamos hasta 5 alertas relevantes a nivel nacional
             for item in respuesta["alerts"][:5]:
                 tipo = item.get("type", "TRÁFICO").replace("_", " ")
                 subtipo = item.get("subtype", "").replace("_", " ")
@@ -235,7 +240,7 @@ if df_raw is not None and not df_raw.empty:
     col_fecha = "FECHA CREACIÓN DE ASISTENCIA" if "FECHA CREACIÓN DE ASISTENCIA" in df_raw.columns else "FECHA CREACION DE ASISTENCIA"
     col_cobertura = "TIPO COBERTURA"
 
-    # Normalización de textos
+    # Normalización
     df_raw[col_provincia] = df_raw[col_provincia].astype(str).str.strip().str.upper()
     df_raw[col_provincia] = df_raw[col_provincia].str.normalize('NFKD').str.encode('ascii', errors='ignore').str.decode('utf-8')
 
@@ -245,40 +250,34 @@ if df_raw is not None and not df_raw.empty:
     st.write("### 🎛️ Panel de Filtros de Operación")
     f1, f2, f3, f4, f5 = st.columns([2, 2, 2, 3, 3])
     
-    def actualizar_dia():
-        st.session_state["dia_sel_key"] = st.session_state["dia_sel_key"]
-    def actualizar_servicio():
-        st.session_state["servicio_sel_key"] = st.session_state["servicio_sel_key"]
-    def actualizar_provincia():
-        st.session_state["ciudad_sel_key"] = []
-    
     with f1:
         dias_en_orden = ["TODOS", "LUNES", "MARTES", "MIÉRCOLES", "MIERCOLES", "JUEVES", "VIERNES", "SÁBADO", "SABADO", "DOMINGO"]
         dias_disponibles = [d for d in dias_en_orden if d == "TODOS" or d in list(df_raw[col_dia].str.upper().unique())]
-        dia_sel = st.selectbox("📅 Seleccionar Día Tipo:", dias_disponibles, key="dia_sel_key")
+        dia_sel = st.selectbox("📅 Seleccionar Día Tipo:", dias_disponibles, key="dia_sel_key", on_change=guardar_dia_callback)
     
     with f2:
         lista_servicios = ["Todos"] + sorted(list(df_raw[col_servicio].dropna().unique()))
-        servicio_sel = st.selectbox("🎯 Seleccionar Servicio:", lista_servicios, key="servicio_sel_key")
+        servicio_sel = st.selectbox("🎯 Seleccionar Servicio:", lista_servicios, key="servicio_sel_key", on_change=guardar_servicio_callback)
     
     with f3:
         lista_provincias = ["Todas"] + df_raw[col_provincia].value_counts().index.tolist()
-        provincia_sel = st.selectbox("📍 Seleccionar Provincia:", lista_provincias, key="provincia_sel_key", on_change=actualizar_provincia)
+        provincia_sel = st.selectbox("📍 Seleccionar Provincia:", lista_provincias, key="provincia_sel_key", on_change=guardar_provincia_callback)
     
     with f4:
         if provincia_sel != "Todas":
             ciudades_disponibles = sorted(df_raw[df_raw[col_provincia] == provincia_sel][col_ciudad].dropna().unique().tolist())
-            ciudad_sel = st.multiselect("🏙️ Filtrar Ciudades:", ciudades_disponibles, key="ciudad_sel_key")
+            ciudad_sel = st.multiselect("🏙️ Filtrar Ciudades:", ciudades_disponibles, key="ciudad_sel_key", on_change=guardar_ciudad_callback)
         else:
             ciudad_sel = st.multiselect("🏙️ Filtrar Ciudades:", options=[], disabled=True, placeholder="Filtre por Provincia primero")
     
     with f5:
         if col_estado in df_raw.columns:
             estados_disponibles = sorted(list(df_raw[col_estado].dropna().unique()))
-            estado_sel = st.multiselect("📌 Filtrar por Estado:", options=estados_disponibles, default=[], placeholder="Todos los estados")
+            estado_sel = st.multiselect("📌 Filtrar por Estado:", options=estados_disponibles, key="estado_sel_key", on_change=guardar_estado_callback)
         else:
             estado_sel = []
 
+    # Aplicación de filtros leídos de variables de ejecución actual
     if dia_sel.upper() == "TODOS":
         df_dia_especifico = df_raw.copy()
         num_fechas_reales = df_dia_especifico[col_fecha].nunique() if col_fecha in df_dia_especifico.columns else 1
@@ -402,15 +401,12 @@ if df_raw is not None and not df_raw.empty:
     with col_der:
         st.write("##### 🚛 Alertas e Incidentes Nacionales")
         
-        # El botón de cobertura nacional se mantiene siempre disponible para consulta manual
         btn_text = "🔍 Consultar Tráfico en Vivo (Ecuador)"
-        
         ejecutar_consulta = st.button(btn_text, use_container_width=True)
         
         if ejecutar_consulta:
             if estado_global["creditos"] > 0:
                 with st.spinner("Escaneando carreteras de Ecuador..."):
-                    # Llamada directa al cuadrante completo del país
                     estado_global["alertas_waze"] = consultar_alertas_waze_real(bbox_nacional_ecuador)
                     estado_global["ultima_hora_waze"] = ahora_actual.strftime('%I:%M:%S %p')
                     estado_global["creditos"] -= 1 
