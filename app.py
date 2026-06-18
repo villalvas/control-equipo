@@ -85,7 +85,7 @@ st.markdown(f"**Centro de Control Geoanalítico** | 🔄 Próximo refresco autom
 @st.cache_resource
 def inicializar_memoria_compartida():
     return {
-        "creditos": 49,  # Sincronizado con tus consultas reales
+        "creditos": 48,  # Sincronizado con tus consumos actuales
         "alertas_waze": [],
         "ultima_hora_waze": "Nunca",
         "filtros_persistentes": {
@@ -108,12 +108,10 @@ if "provincia_sel_key" not in st.session_state:
 if "ciudad_sel_key" not in st.session_state:
     st.session_state["ciudad_sel_key"] = estado_global["filtros_persistentes"]["ciudad_sel"]
 
-# Cuadrantes BBox autorizados para Waze
-coordenadas_bbox_provincias = {
-    'PICHINCHA': {"bottom_left": "-0.3700,-78.6500", "top_right": "-0.0500,-78.3500"}, 
-    'GUAYAS': {"bottom_left": "-2.3000,-80.0500", "top_right": "-2.0000,-79.7500"},    
-    'AZUAY': {"bottom_left": "-2.9500,-79.1000", "top_right": "-2.8500,-78.9500"},     
-    'MANABI': {"bottom_left": "-1.1000,-80.8000", "top_right": "-0.9000,-80.4000"}
+# MACRO CUADRANTE NACIONAL PARA TODO ECUADOR CONTINENTAL
+bbox_nacional_ecuador = {
+    "bottom_left": "-5.0000,-81.0000", 
+    "top_right": "1.5000,-75.0000"
 }
 
 # Diccionario expandido y normalizado para evitar quiebres de N/A en clima
@@ -156,17 +154,20 @@ def consultar_alertas_waze_real(bbox_dict):
         url = "https://api.openwebninja.com/waze/alerts-and-jams"
         headers = {"X-API-Key": api_key}
         params = {"bottom_left": bbox_dict["bottom_left"], "top_right": bbox_dict["top_right"]}
-        respuesta = requests.get(url, headers=headers, params=params, timeout=7).json()
+        respuesta = requests.get(url, headers=headers, params=params, timeout=10).json()
         alertas = []
         if "alerts" in respuesta and respuesta["alerts"]:
-            for item in respuesta["alerts"][:4]:
+            # Filtramos y tomamos hasta 5 alertas relevantes a nivel nacional
+            for item in respuesta["alerts"][:5]:
                 tipo = item.get("type", "TRÁFICO").replace("_", " ")
                 subtipo = item.get("subtype", "").replace("_", " ")
                 calle = item.get("street", "Vía pública")
-                alertas.append(f"⚠️ {tipo} ({subtipo}) en {calle}")
-        return alertas if alertas else ["✅ Sin incidentes graves reportados por Waze en este cuadrante."]
+                ciudad = item.get("city", "")
+                ubicacion = f" en {calle} ({ciudad})" if ciudad else f" en {calle}"
+                alertas.append(f"⚠️ {tipo} ({subtipo}){ubicacion}")
+        return alertas if alertas else ["✅ Sin incidentes críticos reportados en carreteras principales del país."]
     except:
-        return ["⚠️ No se encontraron reportes activos o error de conexión."]
+        return ["⚠️ Error de conexión o tiempo de espera agotado con los servidores viales."]
 
 @st.cache_data(ttl=300)
 def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
@@ -211,7 +212,7 @@ def calcular_factor_lluvia_en_vivo(df_historico, lat, lon):
     except:
         return 1.35
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=3600)
 def cargar_datos_vía_gviz():
     try:
         url_base = "https://docs.google.com/spreadsheets/d/1UWQy9XJy8UOdef1IcXWDt2Nmn7hTnsQLHby_3BhpJnc/edit"
@@ -245,24 +246,20 @@ if df_raw is not None and not df_raw.empty:
     f1, f2, f3, f4, f5 = st.columns([2, 2, 2, 3, 3])
     
     def actualizar_dia():
-        estado_global["filtros_persistentes"]["dia_sel"] = st.session_state["dia_sel_key"]
+        st.session_state["dia_sel_key"] = st.session_state["dia_sel_key"]
     def actualizar_servicio():
-        estado_global["filtros_persistentes"]["servicio_sel"] = st.session_state["servicio_sel_key"]
+        st.session_state["servicio_sel_key"] = st.session_state["servicio_sel_key"]
     def actualizar_provincia():
-        estado_global["filtros_persistentes"]["provincia_sel"] = st.session_state["provincia_sel_key"]
-        estado_global["filtros_persistentes"]["ciudad_sel"] = []
         st.session_state["ciudad_sel_key"] = []
-    def actualizar_ciudad():
-        estado_global["filtros_persistentes"]["ciudad_sel"] = st.session_state["ciudad_sel_key"]
     
     with f1:
         dias_en_orden = ["TODOS", "LUNES", "MARTES", "MIÉRCOLES", "MIERCOLES", "JUEVES", "VIERNES", "SÁBADO", "SABADO", "DOMINGO"]
         dias_disponibles = [d for d in dias_en_orden if d == "TODOS" or d in list(df_raw[col_dia].str.upper().unique())]
-        dia_sel = st.selectbox("📅 Seleccionar Día Tipo:", dias_disponibles, key="dia_sel_key", on_change=actualizar_dia)
+        dia_sel = st.selectbox("📅 Seleccionar Día Tipo:", dias_disponibles, key="dia_sel_key")
     
     with f2:
         lista_servicios = ["Todos"] + sorted(list(df_raw[col_servicio].dropna().unique()))
-        servicio_sel = st.selectbox("🎯 Seleccionar Servicio:", lista_servicios, key="servicio_sel_key", on_change=actualizar_servicio)
+        servicio_sel = st.selectbox("🎯 Seleccionar Servicio:", lista_servicios, key="servicio_sel_key")
     
     with f3:
         lista_provincias = ["Todas"] + df_raw[col_provincia].value_counts().index.tolist()
@@ -271,7 +268,7 @@ if df_raw is not None and not df_raw.empty:
     with f4:
         if provincia_sel != "Todas":
             ciudades_disponibles = sorted(df_raw[df_raw[col_provincia] == provincia_sel][col_ciudad].dropna().unique().tolist())
-            ciudad_sel = st.multiselect("🏙️ Filtrar Ciudades:", ciudades_disponibles, key="ciudad_sel_key", on_change=actualizar_ciudad, placeholder="Todas las ciudades")
+            ciudad_sel = st.multiselect("🏙️ Filtrar Ciudades:", ciudades_disponibles, key="ciudad_sel_key")
         else:
             ciudad_sel = st.multiselect("🏙️ Filtrar Ciudades:", options=[], disabled=True, placeholder="Filtre por Provincia primero")
     
@@ -403,40 +400,27 @@ if df_raw is not None and not df_raw.empty:
                 st.dataframe(pd.DataFrame(registros_tabla), use_container_width=True, hide_index=True)
 
     with col_der:
-        st.write("##### 🚛 Alertas e Incidentes")
-        provincia_limpia = provincia_sel.upper().strip()
-        es_provincia_valida = provincia_limpia in coordenadas_bbox_provincias and provincia_sel != "Todas"
+        st.write("##### 🚛 Alertas e Incidentes Nacionales")
         
-        # Filtro estricto de servicio remolque
-        servicio_limpio = str(servicio_sel).upper().strip()
-        es_servicio_valido = any(x in servicio_limpio for x in ["REMOLQUE", "GRÚA", "GRUA"])
-
-        # Control dinámico de deshabilitación del botón
-        if es_provincia_valida and es_servicio_valido:
-            btn_text, is_disabled = "🔍 Consultar Tráfico en Vivo (Waze)", False
-        else:
-            btn_text = "🔒 Filtre Servicio Remolque y Región Válida" if (not es_servicio_valido and not es_provincia_valida) else ("🔒 Waze solo para servicio de Remolque" if not es_servicio_valido else "🔒 Waze disponible solo en UIO/GYE/CUE/MNT")
-            is_disabled = True
-
-        # Renderizado aislado sin encadenar condicionales lógicos lógicos directos (Solución al DeltaGenerator)
-        ejecutar_consulta = st.button(btn_text, use_container_width=True, disabled=is_disabled)
+        # El botón de cobertura nacional se mantiene siempre disponible para consulta manual
+        btn_text = "🔍 Consultar Tráfico en Vivo (Ecuador)"
+        
+        ejecutar_consulta = st.button(btn_text, use_container_width=True)
         
         if ejecutar_consulta:
-            if es_provincia_valida and es_servicio_valido:
-                if estado_global["creditos"] > 0:
-                    with st.spinner("Conectando Waze..."):
-                        estado_global["alertas_waze"] = consultar_alertas_waze_real(coordenadas_bbox_provincias[provincia_limpia])
-                        estado_global["ultima_hora_waze"] = ahora_actual.strftime('%I:%M:%S %p')
-                        estado_global["creditos"] -= 1 
-                else:
-                    st.error("❌ Se ha alcanzado el límite global de 50 consultas del plan gratuito.")
+            if estado_global["creditos"] > 0:
+                with st.spinner("Escaneando carreteras de Ecuador..."):
+                    # Llamada directa al cuadrante completo del país
+                    estado_global["alertas_waze"] = consultar_alertas_waze_real(bbox_nacional_ecuador)
+                    estado_global["ultima_hora_waze"] = ahora_actual.strftime('%I:%M:%S %p')
+                    estado_global["creditos"] -= 1 
+            else:
+                st.error("❌ Se ha alcanzado el límite global de 50 consultas del plan gratuito.")
         
         st.caption(f"⏱️ Último reporte Waze: **{estado_global['ultima_hora_waze']}**")
         
-        if not es_provincia_valida or not es_servicio_valido:
-            st.warning("⚠️ El botón requiere seleccionar una Provincia autorizada (Pichincha, Guayas, Azuay, Manabí) Y especificar el Servicio de Remolque.")
-        elif not estado_global["alertas_waze"]:
-            st.info("💡 Parámetros correctos. Presiona el botón de arriba para consultar el tráfico en vivo.")
+        if not estado_global["alertas_waze"]:
+            st.info("💡 Consulta manual habilitada. Presiona el botón de arriba para extraer incidentes en tiempo real a nivel nacional.")
         else:
             for incidente in estado_global["alertas_waze"]:
                 if "✅" in incidente:
