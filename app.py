@@ -62,6 +62,15 @@ st.markdown("""
         font-weight: bold;
         border-radius: 4px;
     }
+    
+    .card-saldo {
+        background-color: #f0f7f4;
+        border: 1px solid #d2e7de;
+        padding: 10px;
+        border-radius: 6px;
+        text-align: center;
+        margin-top: 10px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -71,6 +80,15 @@ hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
 
 st.title("🔮 Monitor de Proyección Horaria y Alerta Temprana de Flota")
 st.markdown(f"**Centro de Control Geoanalítico** | 🔄 Próximo refresco automático en 5 min. **(Última Actualización del Tablero: {hora_estatica_str})**")
+
+# Cuadrantes BBox autorizados para las 4 regiones clave solicitadas
+coordenadas_bbox_provincias = {
+    'PICHINCHA': {"bottom_left": "-0.3700,-78.6500", "top_right": "-0.0500,-78.3500"}, # Quito y valles
+    'GUAYAS': {"bottom_left": "-2.3000,-80.0500", "top_right": "-2.0000,-79.7500"},    # Guayaquil y enlaces
+    'AZUAY': {"bottom_left": "-2.9500,-79.1000", "top_right": "-2.8500,-78.9500"},     # Cuenca
+    'MANABI': {"bottom_left": "-1.1000,-80.8000", "top_right": "-0.9000,-80.4000"},    # Manta / Portoviejo
+    'MANABÍ': {"bottom_left": "-1.1000,-80.8000", "top_right": "-0.9000,-80.4000"}
+}
 
 coordenadas_provincias = {
     'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
@@ -90,6 +108,32 @@ diccionario_dias = {
     "LUNES": 0, "MARTES": 1, "MIÉRCOLES": 2, "MIERCOLES": 2, 
     "JUEVES": 3, "VIERNES": 4, "SÁBADO": 5, "SABADO": 5, "DOMINGO": 6
 }
+
+# 🛣️ CONSULTA ADAPTADA A TU ENDPOINT DE OPENWEBNINJA (ALERTS-AND-JAMS)
+def consultar_alertas_waze_real(bbox_dict):
+    api_key = "ak_823f13app2zd9qkia4z6vdi27ttb31z9a7v7pvlhnn878w3"
+    try:
+        url = "https://api.openwebninja.com/waze/alerts-and-jams"
+        headers = {"X-API-Key": api_key}
+        params = {
+            "bottom_left": bbox_dict["bottom_left"],
+            "top_right": bbox_dict["top_right"]
+        }
+        respuesta = requests.get(url, headers=headers, params=params, timeout=7).json()
+        
+        alertas = []
+        if "alerts" in respuesta and respuesta["alerts"]:
+            for item in respuesta["alerts"][:4]:
+                tipo = item.get("type", "TRÁFICO").replace("_", " ")
+                subtipo = item.get("subtype", "").replace("_", " ")
+                calle = item.get("street", "Vía pública")
+                alertas.append(f"⚠️ {tipo} ({subtipo}) en {calle}")
+        
+        if not alertas:
+            return ["✅ Sin incidentes graves reportados por Waze en este cuadrante."]
+        return alertas
+    except:
+        return ["⚠️ No se encontraron reportes activos o el formato de zona requiere mayor precisión."]
 
 @st.cache_data(ttl=300)
 def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
@@ -245,7 +289,6 @@ if df_raw is not None and not df_raw.empty:
                 df_tp = df_filtrado.groupby(col_provincia).size().reset_index(name='Casos')
                 df_tp['Prom.'] = (df_tp['Casos'] / num_fechas_reales).round(0).astype(int)
                 
-                # Inyección de Clima en Vivo por Provincia
                 climados = []
                 for prov in df_tp[col_provincia]:
                     if prov in coordenadas_provincias:
@@ -262,7 +305,6 @@ if df_raw is not None and not df_raw.empty:
                 df_tc = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos')
                 df_tc['Prom.'] = (df_tc['Casos'] / num_fechas_reales).round(0).astype(int)
                 
-                # Clima de la Provincia asignado a sus ciudades de forma limpia
                 lat_p, lon_p = coordenadas_provincias.get(provincia_sel, [-0.2298, -78.5249])
                 clima_prov_str = obtener_clima_actual_rapido(lat_p, lon_p)
                 df_tc['Clima Online'] = clima_prov_str
@@ -366,6 +408,60 @@ if df_raw is not None and not df_raw.empty:
                 )
 
     with col_der:
-        st.write("##### 🚛 Alertas")
-        st.info("💡 Esperando aprobación del feed oficial de **Waze for Cities** para reactivar el canal automatizado de tráfico.")
-        st.success("🟢 Monitor meteorológico y matriz analítica de arrastre operando al 100% en tiempo real.")
+        st.write("##### 🚛 Alertas e Incidentes")
+        
+        if 'waze_data' not in st.session_state:
+            st.session_state['waze_data'] = []
+            st.session_state['waze_time'] = "Nunca"
+        if 'creditos_waze' not in st.session_state:
+            st.session_state['creditos_waze'] = 50 
+            
+        # --- NUEVA REGLA DE VALIDACIÓN PARA EL BOTÓN DE WAZE ---
+        provincia_limpia = provincia_sel.upper().strip()
+        es_provincia_valida = provincia_limpia in coordenadas_bbox_provincias and provincia_sel != "Todas"
+
+        # El botón se renderiza deshabilitado si no cumple la regla de las 4 provincias aprobadas
+        if es_provincia_valida:
+            btn_text = "🔍 Consultar Tráfico en Vivo (Waze)"
+            is_disabled = False
+        else:
+            btn_text = "🔒 Waze disponible solo en UIO/GYE/CUE/MNT"
+            is_disabled = True
+
+        btn_consultar = st.button(btn_text, use_container_width=True, disabled=is_disabled)
+        
+        if btn_consultar and es_provincia_valida:
+            if st.session_state['creditos_waze'] > 0:
+                bbox_zona = coordenadas_bbox_provincias[provincia_limpia]
+                
+                with st.spinner(f"Conectando Waze ({provincia_sel.title()})..."):
+                    resultado_waze = consultar_alertas_waze_real(bbox_zona)
+                    st.session_state['waze_data'] = resultado_waze
+                    st.session_state['waze_time'] = ahora_actual.strftime('%I:%M:%S %p')
+                    st.session_state['creditos_waze'] -= 1 
+            else:
+                st.error("❌ Has alcanzado el límite de 50 consultas de tu plan gratuito mensual.")
+        
+        st.caption(f"⏱️ Último reporte Waze: **{st.session_state['waze_time']}**")
+        
+        if not es_provincia_valida:
+            st.warning("⚠️ Selecciona Pichincha, Guayas, Azuay o Manabí para desbloquear las consultas de Waze.")
+        elif not st.session_state['waze_data']:
+            st.info("💡 Presiona el botón de arriba para consultar el tráfico actual usando 1 crédito de tu plan.")
+        else:
+            for incidente in st.session_state['waze_data']:
+                if "✅" in incidente:
+                    st.success(incidente)
+                else:
+                    st.error(incidente)
+                
+        # Contador visual de saldo
+        st.markdown(f"""
+            <div class="card-saldo">
+                <span style="font-size: 12px; color: #555555; font-weight: bold; display:block;">🔑 CRÉDITOS OPENWEBNINJA</span>
+                <span style="font-size: 26px; color: #2e7d32; font-weight: 800;">{st.session_state['creditos_waze']}</span>
+                <span style="font-size: 14px; color: #777777;"> / 50 Restantes</span>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        st.success("🟢 Monitor meteorológico y matriz analítica operando al 100% en tiempo real.")
