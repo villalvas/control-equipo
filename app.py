@@ -4,6 +4,7 @@ import requests
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import math
+import streamlit.components.v1 as components
 
 # 1. Configuración de pantalla ultra ancha para el monitor de control
 st.set_page_config(
@@ -12,17 +13,19 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- REFRESCO AUTOMÁTICO DINÁMICO Y SEGURO ---
-def activar_refresco_seguro():
-    try:
-        # Importación interna para evitar que la app falle si el módulo no está instalado
-        from streamlit_autorefresh import st_autorefresh
-        st_autorefresh(interval=300000, key="datarefresh") # 5 minutos
-    except Exception:
-        # Si no está instalado, usamos el truco legacy de Streamlit para no detener la pantalla
-        pass
-
-activar_refresco_seguro()
+# --- RECARGA NATIVA FORZADA DE VENTANA CADA 5 MINUTOS (300 SEGUNDOS) ---
+# Este componente inyecta un temporizador directo en el navegador del usuario para recargar la ventana limpia.
+components.html(
+    """
+    <script>
+        setTimeout(function(){
+            window.parent.location.reload();
+        }, 300000); // 300000 ms = 5 minutos exactos
+    </script>
+    """,
+    height=0,
+    width=0
+)
 
 # Estilos CSS corporativos y tamaño de letra optimizado para pantallas de control y móviles
 st.markdown("""
@@ -66,13 +69,13 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- CONTROL DE HORA ACTUAL ---
+# --- CONTROL DE HORA ACTUAL (REGISTRO EXACTO DE ÚLTIMA ACTUALIZACIÓN) ---
 zona_ecuador = ZoneInfo("America/Guayaquil")
 ahora_actual = datetime.now(zona_ecuador)
 hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
 
 st.title("🔮 Monitor de Proyección Horaria y Alerta Temprana de Flota")
-st.caption(f"Centro de Control Geoanalítico | 🔄 Auto-refresco nativo activo cada 5 min (Actualizado: {hora_estatica_str})")
+st.markdown(f"**Centro de Control Geoanalítico** | 🔄 Próximo refresco automático en 5 min. **(Última Actualización del Tablero: {hora_estatica_str})**")
 
 coordenadas_provincias = {
     'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
@@ -93,7 +96,7 @@ diccionario_dias = {
     "JUEVES": 3, "VIERNES": 4, "SÁBADO": 5, "SABADO": 5, "DOMINGO": 6
 }
 
-# 🚗 CLIMA EN VIVO
+# 🚗 CLIMA EN VIVO (Se limpia cada 5 minutos con la recarga total)
 @st.cache_data(ttl=300)
 def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
     try:
