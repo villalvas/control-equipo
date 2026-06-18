@@ -117,25 +117,39 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
     except:
         return {i: {"Detalle": "⚪ Sin Conexión", "Icono": "⚪", "Estado": "Normal"} for i in range(24)}
 
-# 🛰️ CORRECCIÓN DE CONEXIÓN WAZE ALERTAS EN VIVO (Mapeo GeoEstructural de Ecuador)
+# 🛰️ ENLACE REAL Y EN VIVO CON WAZE (Sin simulaciones)
 @st.cache_data(ttl=60)
 def obtener_alertas_waze_Ecuador_completo():
-    # Encuadre geográfico corregido y ampliado para cubrir perfectamente Ecuador continental
-    url_waze = "https://www.waze.com/row-rtserver/web/getStreetUniqueAlerts?top=1.65&bottom=-5.15&left=-81.25&right=-74.95"
+    url_waze = "https://www.waze.com/row-rtserver/web/getStreetUniqueAlerts?top=-0.001&bottom=-4.500&left=-81.100&right=-77.000"
+    
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
         "Referer": "https://www.waze.com/live-map/",
-        "Accept-Language": "es-ES,es;q=0.9"
+        "Origin": "https://www.waze.com",
+        "X-Requested-With": "XMLHttpRequest"
     }
+    
     incidentes_nacionales = []
     incidentes_provinciales = {
         "PICHINCHA": [], "GUAYAS": [], "AZUAY": [], "MANABI": [], "MANABÍ": [], "LOS RIOS": [], "LOS RÍOS": [],
         "TUNGURAHUA": [], "EL ORO": [], "LOJA": [], "CHIMBORAZO": [], "COTOPAXI": [], "ESMERALDAS": [],
         "SANTO DOMINGO DE LOS TSÁCHILAS": [], "SANTO DOMINGO DE LOS TSACHILAS": [], "SANTA ELENA": [], "IMBABURA": []
     }
+    
     try:
-        respuesta = requests.get(url_waze, headers=headers, timeout=8).json()
-        alertas = respuesta.get("alerts", [])
+        # Handshake inicial para heredar cookies del mapa web de producción
+        session = requests.Session()
+        session.get("https://www.waze.com/live-map/", headers=headers, timeout=5)
+        
+        respuesta = session.get(url_waze, headers=headers, timeout=6)
+        
+        if respuesta.status_code != 200:
+            return [f"❌ Error de Servidor Waze (Código {respuesta.status_code})."], incidentes_provinciales
+            
+        datos = respuesta.json()
+        alertas = datos.get("alerts", [])
         zona_ec = ZoneInfo("America/Guayaquil")
         
         for al in alertas:
@@ -157,12 +171,11 @@ def obtener_alertas_waze_Ecuador_completo():
             texto_alerta = f"{icono} **[{tiempo_str}]** {calle}: {tipo_legible}{detalles}."
             
             calle_up = calle.upper()
-            # Clasificación robusta de troncales nacionales
+            
             if any(pe in calle_up for pe in ["VIA", "VÍA", "PANAMERICANA", "ALOAG", "ALÓAG", "E35", "E25", "E45", "TRONCAL"]):
                 incidentes_nacionales.append(texto_alerta)
                 
-            # Asignación por zonas geográficas clave
-            if any(pq in calle_up for pq in ["QUITO", "SIMON BOLIVAR", "SIMÓN BOLÍVAR", "CUMBAYA", "MARISCAL", "GALO PLAZA"]):
+            if any(pq in calle_up for pq in ["QUITO", "SIMON BOLIVAR", "SIMÓN BOLÍVAR", "CUMBAYA", "INTEROCEANICA", "GALO PLAZA"]):
                 incidentes_provinciales["PICHINCHA"].append(texto_alerta)
             elif any(pg in calle_up for pg in ["GUAYAQUIL", "JUAN TANCA", "SAMANES", "DAULE", "SAMBORONDON", "PERIMETRAL", "NARCISA"]):
                 incidentes_provinciales["GUAYAS"].append(texto_alerta)
@@ -172,11 +185,12 @@ def obtener_alertas_waze_Ecuador_completo():
                 incidentes_provinciales["MANABI"].append(texto_alerta)
                 
         if not incidentes_nacionales:
-            incidentes_nacionales = ["✅ **[WAZE]** Ejes principales estables. Sin cierres críticos."]
+            incidentes_nacionales = ["✅ **[WAZE ONLINE]** Ejes viales principales fluyendo sin alertas críticas reportadas."]
+            
         return incidentes_nacionales, incidentes_provinciales
-    except:
-        # Fallback inteligente: Evita quedarse congelado en cargando si la API satura temporalmente
-        return ["✅ **[WAZE]** Conexión segura. Monitoreando troncales nacionales en vivo..."], incidentes_provinciales
+        
+    except Exception as error_red:
+        return [f"📡 **[WAZE OFFLINE]** Error de enlace en vivo ({str(error_red)}). Reintentando..."], incidentes_provinciales
 
 # 📊 FACTOR LLUVIA
 @st.cache_data(ttl=3600)
@@ -276,7 +290,7 @@ if df_raw is not None and not df_raw.empty:
 
     st.markdown("---")
     
-    # 🌟 ASIGNACIÓN DE COLUMNAS OPTIMIZADAS: Izquierda (2.8), Centro ancha (6.7), Derecha (2.5)
+    # 🌟 DISTRIBUCIÓN DE ANCHOS CORREGIDA: Izquierda compacta (2.8), Centro maximizada (6.7), Derecha compacta (2.5)
     col_izq, col_cen, col_der = st.columns([2.8, 6.7, 2.5])
     
     with col_izq:
