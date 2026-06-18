@@ -81,12 +81,12 @@ hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
 st.title("🔮 Monitor de Proyección Horaria y Alerta Temprana de Flota")
 st.markdown(f"**Centro de Control Geoanalítico** | 🔄 Próximo refresco automático en 5 min. **(Última Actualización del Tablero: {hora_estatica_str})**")
 
-# --- MEMORIA COMPARTIDA GLOBAL (PERSISTENTE ENTRE NAVEGADORES) ---
+# --- MEMORIA COMPARTIDA GLOBAL (PERSISTENTE ENTRE TODOS LOS OPERADORES) ---
 @st.cache_resource
 def inicializar_memoria_compartida():
-    # Mantiene el estado unificado sin importar quién acceda al enlace
+    # Sincronizado exactamente a 48 según el perfil real de consumo (2 consultas realizadas)
     return {
-        "creditos": 49, # Iniciado en 49 según tu estado actual
+        "creditos": 48, 
         "alertas_waze": [],
         "ultima_hora_waze": "Nunca"
     }
@@ -422,7 +422,7 @@ if df_raw is not None and not df_raw.empty:
     with col_der:
         st.write("##### 🚛 Alertas e Incidentes")
         
-        # --- NUEVA REGLA DE VALIDACIÓN PARA EL BOTÓN DE WAZE (PROVINCIA + SERVICIO) ---
+        # --- REGLA DE VALIDACIÓN PARA EL BOTÓN DE WAZE (PROVINCIA + SERVICIO) ---
         provincia_limpia = provincia_sel.upper().strip()
         es_provincia_valida = provincia_limpia in coordenadas_bbox_provincias and provincia_sel != "Todas"
         
@@ -444,14 +444,14 @@ if df_raw is not None and not df_raw.empty:
         btn_consultar = st.button(btn_text, use_container_width=True, disabled=is_disabled)
         
         if btn_consultar and es_provincia_valida and es_servicio_valido:
-            # Validación basada en el estado global unificado
+            # Validación basada en el estado unificado real
             if estado_global["creditos"] > 0:
                 bbox_zona = coordenadas_bbox_provincias[provincia_limpia]
                 
                 with st.spinner(f"Conectando Waze ({provincia_sel.title()})..."):
                     resultado_waze = consultar_alertas_waze_real(bbox_zona)
                     
-                    # Mutación directa del diccionario compartido por todos los navegadores
+                    # Al mutar el estado global, el cambio se refleja en todas las computadoras abiertas
                     estado_global["alertas_waze"] = resultado_waze
                     estado_global["ultima_hora_waze"] = ahora_actual.strftime('%I:%M:%S %p')
                     estado_global["creditos"] -= 1 
@@ -472,7 +472,7 @@ if df_raw is not None and not df_raw.empty:
                 else:
                     st.error(incidente)
                 
-        # Contador visual sincronizado en tiempo real para todos los operadores
+        # Contador visual sincronizado en tiempo real para todos los operadores (Inicia en 48)
         st.markdown(f"""
             <div class="card-saldo">
                 <span style="font-size: 12px; color: #555555; font-weight: bold; display:block;">🔑 CRÉDITOS OPENWEBNINJA (COMPARTIDO)</span>
