@@ -236,9 +236,10 @@ if df_raw is not None and not df_raw.empty:
                 estado_sel = st.multiselect("📌 Estado:", options=estados_disponibles, key="estado_sel_key", on_change=guardar_estado_callback)
             else: estado_sel = []
 
+        # --- CORRECCIÓN CRUCIAL: CÁLCULO ESTABLE DE FECHAS GLOBALES ---
         if dia_sel.upper() == "TODOS":
             df_filtrado_dia = df_raw.copy()
-            num_fechas_reales = df_filtrado_dia[col_fecha].nunique() if col_fecha in df_filtrado_dia.columns else 1
+            num_fechas_reales = df_raw[col_fecha].nunique() if col_fecha in df_raw.columns else 1
             fecha_target_str = ahora_actual.strftime("%Y-%m-%d")
         else:
             dia_destino_num = diccionario_dias.get(dia_sel.upper(), ahora_actual.weekday())
@@ -249,6 +250,7 @@ if df_raw is not None and not df_raw.empty:
 
         if num_fechas_reales <= 0: num_fechas_reales = 1
 
+        # Los filtros específicos de granularidad se aplican después, manteniendo intacto el denominador
         df_filtrado = df_filtrado_dia.copy()
         if estado_sel and col_estado in df_raw.columns: df_filtrado = df_filtrado[df_filtrado[col_estado].isin(estado_sel)]
         if servicio_sel != "Todos": df_filtrado = df_filtrado[df_filtrado[col_servicio] == servicio_sel]
@@ -269,7 +271,7 @@ if df_raw is not None and not df_raw.empty:
         if len(df_filtrado) > 0 and col_hora_agrupada in df_filtrado.columns:
             df_horas_raw = df_filtrado.copy()
             
-            # --- SE RESTAURA LA EXTRACCIÓN DE LA HORA SEGÚN TU LÓGICA ORIGINAL ---
+            # Restauración de extracción de hora numérica limpia
             df_horas_raw[col_hora_agrupada] = pd.to_numeric(df_horas_raw[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
             
             casos_locales, casos_foraneos = [0] * 24, [0] * 24
@@ -342,7 +344,6 @@ if df_raw is not None and not df_raw.empty:
                         Total_Casos=('SERVICIO', 'count')
                     ).reset_index()
                     
-                    # Se mantiene el requerimiento de entero redondeado estricto sin decimales
                     df_top['📊 Prom/Día'] = (df_top['Total_Casos'] / num_fechas_reales).round(0).astype(int)
                     
                     df_top = df_top.rename(columns={col_agrupar: '📍 UBICACIÓN', 'Total_Casos': 'Casos'})
@@ -483,7 +484,6 @@ if df_raw is not None and not df_raw.empty:
                 st.markdown(f'<div class="banner-feriado">📈 <b>Datos Históricos Reales:</b> Analizando Primer Día Laboral de Retorno del feriado del <b>{fecha_original}</b></div>', unsafe_allow_html=True)
             
             if not df_data_feriado.empty:
-                # --- SE RESTAURA LA EXTRACCIÓN DE LA HORA TAMBIÉN EN LA PESTAÑA DE FERIADOS ---
                 df_data_feriado[col_hora_agrupada] = pd.to_numeric(df_data_feriado[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
                 
                 df_neto_hora = df_data_feriado.groupby(col_hora_agrupada).size().reset_index(name='HISTORICO_CASOS')
