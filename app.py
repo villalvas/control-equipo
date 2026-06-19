@@ -277,15 +277,21 @@ if df_raw is not None and not df_raw.empty:
                 p_local_calc = p_local
                 p_foraneo_calc = p_foraneo
 
+            # --- LÓGICA DE ARRASTRE MEJORADA (ATENUACIÓN DE CASCADA) ---
             l_ant = p_local_calc if hr == 0 else (casos_locales[hr-1] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
             f_ant1 = p_foraneo_calc if hr == 0 else (casos_foraneos[hr-1] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
             f_ant2 = p_foraneo_calc if hr <= 1 else (casos_foraneos[hr-2] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
             
-            gruas_necesarias = math.ceil((p_local_calc + (0.5 * l_ant)) + (p_foraneo_calc + f_ant1 + f_ant2))
+            # Si no hay demanda nueva en la hora actual, atenuamos fuertemente el residuo del pasado
+            if promedio_proyectado == 0:
+                gruas_necesarias = math.ceil((0.1 * l_ant) + (0.2 * f_ant1) + (0.1 * f_ant2))
+            else:
+                gruas_necesarias = math.ceil((p_local_calc + (0.5 * l_ant)) + (p_foraneo_calc + f_ant1 + f_ant2))
+                
             es_remolque = any(x in str(servicio_sel).upper() for x in ["REMOLQUE", "GRÚA", "GRUA", "TODOS"])
-            
             string_gruas = f"🚛 {gruas_necesarias} U." if es_remolque and (promedio_proyectado > 0 or gruas_necesarias > 0) else "-"
 
+            # Ajuste de Diagnósticos dinámicos y coherentes
             if promedio_base_calculado == 0 and gruas_necesarias == 0:
                 motivo_asesor = "Sin demanda"
             else:
@@ -344,7 +350,7 @@ if df_raw is not None and not df_raw.empty:
                 else:
                     st.info("Sin asistencias.")
 
-            # --- FILA INFERIOR CENTRAL: CURVA LINEAL + RESUMEN EJECUTIVO / WAZE ---
+            # --- FILA INFERIOR CENTRAL: CURVA LINEAL (PROMEDIO Y PROYECCIÓN CLIMA SOLAMENTE) ---
             st.markdown("<div style='margin-top: 4px; border-top: 1px solid #ddd; padding-top: 2px;'></div>", unsafe_allow_html=True)
             
             col_grafico_full, col_resumen_waze = st.columns([6.8, 3.2])
