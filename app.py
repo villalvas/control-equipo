@@ -13,13 +13,14 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- RECARGA NATIVA FORZADA DE VENTANA CADA 5 MINUTOS (300 SEGUNDOS) ---
+# --- RECARGA NATIVA FORZADA DE VENTANA CADA 15 MINUTOS (900 SEGUNDOS) ---
+# Nota: Si deseas cambiar el tiempo a 5 minutos, reemplaza el 900000 por 300000
 components.html(
     """
     <script>
         setTimeout(function(){
             window.parent.location.reload();
-        }, 300000); // 5 minutos exactos
+        }, 900000); // 15 minutos exactos (900,000 milisegundos)
     </script>
     """,
     height=0,
@@ -87,13 +88,13 @@ ahora_actual = datetime.now(zona_ecuador)
 hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
 
 st.title("🔮 Monitor de Proyección Horaria y Alerta Temprana de Flota")
-st.markdown(f"**Centro de Control Geoanalítico** | 🔄 Próximo refresco automático en 5 min. **(Última Actualización del Tablero: {hora_estatica_str})**")
+st.markdown(f"**Centro de Control Geoanalítico** | 🔄 Próximo refresco automático en 15 min. **(Última Actualización del Tablero: {hora_estatica_str})**")
 
 # --- MEMORIA SERVIDOR ALTA DISPONIBILIDAD (Inmune a refresh de navegador) ---
 @st.cache_resource
 def inicializar_memoria_inmune():
     return {
-        "creditos": 47,
+        "creditos": 48,
         "alertas_waze": [],
         "ultima_hora_waze": "Nunca",
         "filtros_persistentes": {
@@ -166,7 +167,7 @@ def consultar_alertas_waze_real(bbox_dict):
         return alertas if alertas else ["✅ Sin incidentes críticos reportados en carreteras principales del país."]
     except: return ["⚠️ Error de conexión con los servidores viales."]
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=900)
 def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
     try:
         url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,weathercode&timezone=auto&forecast_days=7"
@@ -183,7 +184,7 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
         return datos_clima
     except: return {}
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=900)
 def obtener_clima_actual_rapido(lat, lon):
     try:
         url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true&timezone=auto"
@@ -192,7 +193,7 @@ def obtener_clima_actual_rapido(lat, lon):
         return f"🌧️ Lluvia ({temp}°C)" if code in [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99] else f"☁️ Nublado ({temp}°C)"
     except: return "🌍 N/A"
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=900)
 def cargar_datos_vía_gviz():
     try:
         url_base = "https://docs.google.com/spreadsheets/d/1UWQy9XJy8UOdef1IcXWDt2Nmn7hTnsQLHby_3BhpJnc/edit"
@@ -357,59 +358,78 @@ if df_raw is not None and not df_raw.empty:
 
 
     # ==========================================
-    # PESTAÑA 2: PLANIFICADOR DE FERIADOS (REPARADO)
+    # PESTAÑA 2: PLANIFICADOR DE FERIADOS NACIONALES
     # ==========================================
     with tab_feriados:
         st.write("### 🏖️ Analizador de Tendencias y Retornos de Feriados Nacionales")
         
         c_fer1, c_fer2 = st.columns([4, 4])
         with c_fer1:
-            # Mapeo estructurado de forma idéntica al formato D/M/YYYY de tu base de datos del 2026
+            # Diccionario con el listado exacto de feriados nacionales oficiales solicitados
             calendario_feriados_2026 = {
-                "Retorno Año Nuevo (Enero 2)": {"fecha_formato": "2/1/2026", "tipo": "Año Nuevo"},
-                "Retorno Carnaval (Febrero 17/18)": {"fecha_formato": "18/2/2026", "tipo": "Carnaval (Fin de semana largo)"},
-                "Retorno Viernes Santo (Abril 3)": {"fecha_formato": "3/4/2026", "tipo": "Viernes Santo"},
-                "Retorno Día del Trabajo (Mayo 1)": {"fecha_formato": "1/5/2026", "tipo": "Día del Trabajo"},
-                "🔮 [Proyección] Batalla de Pichincha (Mayo 24)": {"fecha_formato": "24/5/2026", "tipo": "Feriado Nacional"},
-                "🔮 [Proyección] Primer Grito de Independencia (Agosto 10)": {"fecha_formato": "10/8/2026", "tipo": "Feriado Nacional"},
-                "🔮 [Proyección] Independencia de Guayaquil (Octubre 9)": {"fecha_formato": "9/10/2026", "tipo": "Feriado Nacional"},
-                "🔮 [Proyección] Día de Difuntos y Cuenca (Noviembre 3)": {"fecha_formato": "3/11/2026", "tipo": "Feriado Nacional"},
-                "🔮 [Proyección] Retorno Navidad (Diciembre 25)": {"fecha_formato": "25/12/2026", "tipo": "Feriado Nacional"}
+                "Año Nuevo (Jueves 01 de Enero)": {
+                    "fecha_visual": "1/1/2026", "fecha_datos_historicos": "2/1/2026", "tipo": "Real (Retorno Año Nuevo)"
+                },
+                "Carnaval (Lunes 16 y Martes 17 de Febrero)": {
+                    "fecha_visual": "17/2/2026", "fecha_datos_historicos": "18/2/2026", "tipo": "Real (Retorno Carnaval)"
+                },
+                "🔮 [Proyección] Viernes Santo (Viernes 03 de Abril)": {
+                    "fecha_visual": "3/4/2026", "fecha_datos_historicos": "2/1/2026", "tipo": "Simulado (Espejo Retorno Fin de Semana Largo)"
+                },
+                "🔮 [Proyección] Día del Trabajo (Viernes 01 de Mayo)": {
+                    "fecha_visual": "1/5/2026", "fecha_datos_historicos": "2/1/2026", "tipo": "Simulado (Espejo Retorno Fin de Semana Largo)"
+                },
+                "🔮 [Proyección] Batalla del Pichincha (Domingo 24 se pasa a Lunes 25 de Mayo)": {
+                    "fecha_visual": "25/5/2026", "fecha_datos_historicos": "2/1/2026", "tipo": "Simulado (Espejo Retorno Fin de Semana Largo)"
+                },
+                "🔮 [Proyección] Primer Grito de Independencia (Lunes 10 de Agosto)": {
+                    "fecha_visual": "10/8/2026", "fecha_datos_historicos": "2/1/2026", "tipo": "Simulado (Espejo Retorno Fin de Semana Largo)"
+                },
+                "🔮 [Proyección] Independencia de Guayaquil (Viernes 09 de Octubre)": {
+                    "fecha_visual": "9/10/2026", "fecha_datos_historicos": "2/1/2026", "tipo": "Simulado (Espejo Retorno Fin de Semana Largo)"
+                },
+                "🔮 [Proyección] Día de Difuntos e Ind. de Cuenca (Lunes 02 y Martes 03 de Noviembre)": {
+                    "fecha_visual": "3/11/2026", "fecha_datos_historicos": "18/2/2026", "tipo": "Simulado (Espejo de Carnaval - Feriado de 4 días)"
+                },
+                "🔮 [Proyección] Navidad (Viernes 25 de Diciembre)": {
+                    "fecha_visual": "25/12/2026", "fecha_datos_historicos": "2/1/2026", "tipo": "Simulado (Espejo Retorno Fin de Semana Largo)"
+                }
             }
             
-            feriado_seleccionado = st.selectbox("📅 Seleccione el Feriado a Analizar:", list(calendario_feriados_2026.keys()))
+            feriado_seleccionado = st.selectbox("📅 Seleccione el Feriado Nacional a Analizar:", list(calendario_feriados_2026.keys()))
         with c_fer2:
             servicio_feriado = st.selectbox("🎯 Filtrar Servicio para Feriado:", sorted(list(df_raw[col_servicio].dropna().unique())), index=0)
 
         meta_feriado = calendario_feriados_2026[feriado_seleccionado]
-        fecha_buscar_str = meta_feriado["fecha_formato"]
+        fecha_buscar_str = meta_feriado["fecha_datos_historicos"]
+        fecha_nominal = meta_feriado["fecha_visual"]
         
-        # Limpieza por texto plano para blindar la coincidencia exacta de strings sin distorsión de formato
+        # Sincronización de tipos string del DataFrame para garantizar el correcto emparejamiento
         df_raw[col_fecha] = df_raw[col_fecha].astype(str).str.strip()
         df_data_feriado = df_raw[(df_raw[col_fecha] == fecha_buscar_str) & (df_raw[col_servicio] == servicio_feriado)]
         
         st.markdown(f"""
             <div class="banner-feriado">
-                ℹ️ <b>Estructura de Simulación:</b> Real ({meta_feriado['tipo']}) | 
-                <b>Buscando Cadena de Fecha:</b> {fecha_buscar_str}
+                🇨🇪 <b>Feriado Nacional Seleccionado:</b> {feriado_seleccionado}<br>
+                📊 <b>Modelo de Simulación Operativa:</b> Curva basada en el comportamiento real del <b>{fecha_buscar_str}</b> ({meta_feriado['tipo']})
             </div>
         """, unsafe_allow_html=True)
 
         if df_data_feriado.empty:
-            st.warning(f"⚠️ No se encontraron registros de asistencias para el servicio '{servicio_feriado}' en la fecha histórica {fecha_buscar_str}. Pruebe cambiando de servicio.")
+            st.warning(f"⚠️ No se encontraron registros de asistencias para el servicio '{servicio_feriado}' en la fecha base histórica {fecha_buscar_str}. Pruebe cambiando de servicio.")
         else:
             col_f_izq, col_f_der = st.columns([4, 8])
             
             with col_f_izq:
                 total_casos_feriado = len(df_data_feriado)
-                st.metric(label="📊 Volumen Total de Asistencias en Retorno", value=f"{total_casos_feriado} Casos")
+                st.metric(label="📊 Volumen Proyectado de Asistencias en Retorno", value=f"{total_casos_feriado} Casos")
                 
-                st.write("##### 📍 Provincias con Mayor Carga de Retorno")
+                st.write("##### 📍 Distribución Geográfica Estimada (Provincias)")
                 df_prov_feriado = df_data_feriado.groupby(col_provincia).size().reset_index(name='Casos').sort_values(by='Casos', ascending=False)
                 st.dataframe(df_prov_feriado, use_container_width=True, hide_index=True)
                 
             with col_f_der:
-                st.write(f"### ⏰ Matriz Horaria y Flota Crítica de Retorno")
+                st.write(f"### ⏰ Matriz Horaria y Flota Crítica Proyectada")
                 
                 df_data_feriado[col_hora_agrupada] = pd.to_numeric(df_data_feriado[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
                 casos_loc_f, casos_for_f = [0] * 24, [0] * 24
@@ -435,7 +455,7 @@ if df_raw is not None and not df_raw.empty:
                         alerta_pico = "🔥 PICO CRÍTICO" if total_hora >= 4 else "Normal"
                         tabla_feriado_reporte.append({
                             "HORA": f"{hr:02d}:00",
-                            "📉 Volumen Histórico": total_hora,
+                            "📉 Volumen Estimado": total_hora,
                             "🚛 Grúas Críticas Requeridas": f"🚛 {gruas_feriado} U.",
                             "🚨 Estado Operativo": alerta_pico
                         })
@@ -443,4 +463,4 @@ if df_raw is not None and not df_raw.empty:
                 if tabla_feriado_reporte:
                     st.dataframe(pd.DataFrame(tabla_feriado_reporte), use_container_width=True, hide_index=True)
                 else:
-                    st.info("Sin registros horarios estructurados.")
+                    st.info("Sin registros horarios estructurados para esta combinación.")
