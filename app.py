@@ -236,7 +236,6 @@ if df_raw is not None and not df_raw.empty:
     tab_normal, tab_feriados = st.tabs(["🔮 Operación Diaria (Normal)", "📈 Planificador de Feriados Nacionales"])
 
     with tab_normal:
-        # Ajuste de proporciones: reducimos el espacio de filtros y reacomodamos la mesa de control
         col_f, col_c = st.columns([1.6, 8.4])
         
         with col_f:
@@ -358,24 +357,24 @@ if df_raw is not None and not df_raw.empty:
             promedio_asistencias_dia = int(round(len(df_filtrado) / num_fechas_reales, 0))
             st.metric(label=f"Promedio Total ({dia_sel.title()})", value=f"{promedio_asistencias_dia} Asist.")
             
-            # Ajuste de columnas internas: Reducimos el Top Localidades de 3.5 a 2.6 para compactar el ancho vacío
-            col_mando_izq, col_mando_der = st.columns([2.6, 7.4])
+            # Proporciones ultra optimizadas para compactar el espacio en blanco lateral
+            col_mando_izq, col_mando_der = st.columns([2.8, 7.2])
             
             with col_mando_izq:
                 st.markdown("<span style='font-size:15px; font-weight:bold; color:#111;'>📍 Top Localidades</span>", unsafe_allow_html=True)
                 if len(df_filtrado) > 0:
                     if provincia_sel == "Todas":
-                        df_tp = df_filtrado.groupby(col_provincia).size().reset_index(name='PROVINCIA')
-                        df_tp['Casos'] = df_tp['PROVINCIA'] # Reordenación visual limpia
-                        df_tp['PROVINCIA'] = df_filtrado.groupby(col_provincia).size().index
+                        df_tp = df_filtrado.groupby(col_provincia).size().reset_index(name='Casos')
+                        df_tp = df_tp.rename(columns={col_provincia: 'PROVINCIA'})
                         df_tp['P.'] = (df_tp['Casos'] / num_fechas_reales).round(0).astype(int)
-                        st.dataframe(df_tp.sort_values(by='Casos', ascending=False).head(5), use_container_width=True, height=215, hide_index=True)
+                        df_tp = df_tp[['PROVINCIA', 'Casos', 'P.']].sort_values(by='Casos', ascending=False).head(5)
+                        st.dataframe(df_tp, use_container_width=True, height=215, hide_index=True)
                     else:
-                        df_tc = df_filtrado.groupby(col_ciudad).size().reset_index(name='CIUDAD')
-                        df_tc['Casos'] = df_tc['CIUDAD']
-                        df_tc['CIUDAD'] = df_filtrado.groupby(col_ciudad).size().index
+                        df_tc = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos')
+                        df_tc = df_tc.rename(columns={col_ciudad: 'CIUDAD'})
                         df_tc['P.'] = (df_tc['Casos'] / num_fechas_reales).round(0).astype(int)
-                        st.dataframe(df_tc.sort_values(by='Casos', ascending=False).head(5), use_container_width=True, height=215, hide_index=True)
+                        df_tc = df_tc[['CIUDAD', 'Casos', 'P.']].sort_values(by='Casos', ascending=False).head(5)
+                        st.dataframe(df_tc, use_container_width=True, height=215, hide_index=True)
                 else:
                     st.info("Sin datos.")
 
