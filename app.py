@@ -340,7 +340,7 @@ if df_raw is not None and not df_raw.empty:
                 
                 data_grafico_lineas.append({
                     "Hora": hr, "Promedio Base": promedio_base_calculado,
-                    "Proyección Ajustada": promedio_proyectado, "Grúas Necesarias": val_grafico_gruas
+                    "Proyección Ajustada": promedio_proyectado, "Grúas Necesarias": val_gruas_grafico
                 })
 
         # --- SECCIÓN DE CONTENIDO ---
@@ -401,7 +401,7 @@ if df_raw is not None and not df_raw.empty:
             st.markdown("#### 🎛️ Filtros Feriado")
             calendario_feriados_2026 = {
                 "Año Nuevo (Retorno Enero 5)": {"fecha_datos_historicos": "5/1/2026", "tipo": "Retorno Año Nuevo"},
-                "Carnaval (Retorno Febrero 18)": {"fecha_datos_historicos": "18/2/2026", "tipo": "Retorno Carnaval (4 días)"},
+                "Carnaval (Retorno Febrero 18)": {"fecha_datos_historicos": "18/2/2026", "tipo": "Retorno Carnaval (4 days)"},
                 "Viernes Santo (Retorno Abril 6)": {"fecha_datos_historicos": "6/4/2026", "tipo": "Retorno Viernes Santo"},
                 "Día del Trabajo (Retorno Mayo 4)": {"fecha_datos_historicos": "4/5/2026", "tipo": "Retorno Día del Trabajo"},
                 "Batalla del Pichincha (Retorno Mayo 25)": {"fecha_datos_historicos": "25/5/2026", "tipo": "Retorno Batalla Pichincha"},
