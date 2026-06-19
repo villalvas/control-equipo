@@ -204,7 +204,7 @@ def obtener_clima_actual_rapido(lat, lon):
         return f"🌧️ Lluvia ({temp}°C)" if code in [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99] else f"☁️ Nublado ({temp}°C)"
     except: return "🌍 N/A"
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=300)
 def cargar_datos_vía_gviz():
     try:
         url_base = "https://docs.google.com/spreadsheets/d/1UWQy9XJy8UOdef1IcXWDt2Nmn7hTnsQLHby_3BhpJnc/edit"
@@ -369,7 +369,7 @@ if df_raw is not None and not df_raw.empty:
 
 
     # ==========================================
-    # PESTAÑA 2: PLANIFICADOR DE FERIADOS (CORREGIDO)
+    # PESTAÑA 2: PLANIFICADOR DE FERIADOS
     # ==========================================
     with tab_feriados:
         st.write("### 🏖️ Analizador de Tendencias y Retornos de Feriados Nacionales")
@@ -383,9 +383,13 @@ if df_raw is not None and not df_raw.empty:
         meta_feriado = calendario_feriados_2026[feriado_seleccionado]
         fecha_analisis = meta_feriado["fecha_origen"]
         
-        # --- BLINDAJE DE ERROR POR STRING DIRECTO ---
-        df_raw["FECHA_LIMPIA"] = df_raw[col_fecha].astype(str).str.split().str[0]
-        df_data_feriado = df_raw[(df_raw["FECHA_LIMPIA"] == fecha_analisis) & (df_raw[col_servicio] == servicio_feriado)]
+        # --- NUEVA LÓGICA DE DETECCIÓN INTELEGENTE DE FORMATOS DE FECHA ---
+        # Convertimos la columna de texto a un objeto datetime puro para evitar colisiones de strings (DD/MM/AAAA vs AAAA-MM-DD)
+        df_raw["FECHA_DATETIME"] = pd.to_datetime(df_raw[col_fecha], errors='coerce')
+        fecha_analisis_dt = pd.to_datetime(fecha_analisis).date()
+        
+        # Filtrado optimizado por fecha absoluta y servicio
+        df_data_feriado = df_raw[(df_raw["FECHA_DATETIME"].dt.date == fecha_analisis_dt) & (df_raw[col_servicio] == servicio_feriado)]
         
         st.markdown(f"""
             <div class="banner-feriado">
