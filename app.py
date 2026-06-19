@@ -81,10 +81,6 @@ zona_ecuador = ZoneInfo("America/Guayaquil")
 ahora_actual = datetime.now(zona_ecuador)
 hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
 
-# Título General Reducido
-st.title("🔮 Proyección Horaria y Alerta de Flota")
-st.markdown(f"**Control Geoanalítico** | 🔄 Refresco en 15 min. **(Última Actualización: {hora_estatica_str})**")
-
 # --- MEMORIA SERVIDOR ALTA DISPONIBILIDAD ---
 @st.cache_resource
 def inicializar_memoria_inmune():
@@ -103,6 +99,56 @@ def inicializar_memoria_inmune():
 
 estado_global = inicializar_memoria_inmune()
 
+# --- FILA SUPERIOR: TÍTULO GENERAL Y ALERTAS WAZE A LA DERECHA ---
+col_titulo_izq, col_waze_der = st.columns([6.5, 3.5])
+
+with col_titulo_izq:
+    st.title("🔮 Proyección Horaria y Alerta de Flota")
+    st.markdown(f"**Control Geoanalítico** | 🔄 Refresco en 15 min. **(Última Actualización: {hora_estatica_str})**")
+
+with col_waze_der:
+    st.markdown("<span style='font-size:12px; font-weight:bold; color:#1e88e5;'>🚛 Alertas Waze Realtime</span>", unsafe_allow_html=True)
+    c_w1, c_w2 = st.columns([5.0, 5.0])
+    with c_w1:
+        ejecutar_consulta = st.button("🔍 Escanear Mapa", use_container_width=True)
+        if ejecutar_consulta and estado_global["creditos"] > 0:
+            with st.spinner("Escaneando..."):
+                bbox_nacional_ecuador = {"bottom_left": "-5.0000,-81.0000", "top_right": "1.5000,-75.0000"}
+                
+                def consultar_alertas_waze_real(bbox_dict):
+                    api_key = "ak_823f13app2zd9qkia4z6vdi27ttb31z9a7v7pvlhnn878w3"
+                    try:
+                        url = "https://api.openwebninja.com/waze/alerts-and-jams"
+                        headers = {"X-API-Key": api_key}
+                        params = {"bottom_left": bbox_dict["bottom_left"], "top_right": bbox_dict["top_right"]}
+                        respuesta = requests.get(url, headers=headers, params=params, timeout=10).json()
+                        alertas = []
+                        if "alerts" in respuesta and respuesta["alerts"]:
+                            for item in respuesta["alerts"][:4]:
+                                tipo = item.get("type", "TRÁFICO").replace("_", " ")
+                                subtipo = item.get("subtype", "").replace("_", " ")
+                                calle = item.get("street", "Vía pública")
+                                ciudad = item.get("city", "")
+                                ubicacion = f" en {calle} ({ciudad})" if ciudad else f" en {calle}"
+                                alertas.append(f"⚠️ {tipo} ({subtipo}){ubicacion}")
+                        return alertas if alertas else ["✅ Sin incidentes críticos."]
+                    except: return ["⚠️ Error de conexión vial."]
+                
+                estado_global["alertas_waze"] = consultar_alertas_waze_real(bbox_nacional_ecuador)
+                estado_global["ultima_hora_waze"] = ahora_actual.strftime('%I:%M:%S %p')
+                estado_global["creditos"] -= 1
+        st.markdown(f'<div class="card-saldo"><span style="font-size:10px;color:#555;display:block;">Tokens: <b>{estado_global["creditos"]}</b> / 50</span></div>', unsafe_allow_html=True)
+    
+    with c_w2:
+        st.markdown(f"<span style='font-size:10px; color:#777;'>Último: {estado_global['ultima_hora_waze']}</span>", unsafe_allow_html=True)
+        if not estado_global["alertas_waze"]: 
+            st.caption("💡 Requiere escaneo.")
+        else:
+            for incidente in estado_global["alertas_waze"][:2]:
+                st.markdown(f"<span style='font-size:10px; display:block; line-height:1.1;'>• {incidente[:25]}...</span>", unsafe_allow_html=True)
+
+st.markdown("---")
+
 if "dia_sel_key" not in st.session_state: st.session_state["dia_sel_key"] = estado_global["filtros_persistentes"]["dia_sel"]
 if "servicio_sel_key" not in st.session_state: st.session_state["servicio_sel_key"] = estado_global["filtros_persistentes"]["servicio_sel"]
 if "provincia_sel_key" not in st.session_state: st.session_state["provincia_sel_key"] = estado_global["filtros_persistentes"]["provincia_sel"]
@@ -118,8 +164,6 @@ def guardar_provincia_callback():
 def guardar_ciudad_callback(): estado_global["filtros_persistentes"]["ciudad_sel"] = st.session_state["ciudad_sel_key"]
 def guardar_estado_callback(): estado_global["filtros_persistentes"]["estado_sel"] = st.session_state["estado_sel_key"]
 
-bbox_nacional_ecuador = {"bottom_left": "-5.0000,-81.0000", "top_right": "1.5000,-75.0000"}
-
 coordenadas_provincias = {
     'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
     'MANABI': [-1.0543, -80.4544], 'EL ORO': [-3.2581, -79.9553], 'LOJA': [-3.9931, -79.2042], 
@@ -134,25 +178,6 @@ coordenadas_provincias = {
 
 diccionario_dias = {"LUNES": 0, "MARTES": 1, "MIÉRCOLES": 2, "MIERCOLES": 2, "JUEVES": 3, "VIERNES": 4, "SÁBADO": 5, "SABADO": 5, "DOMINGO": 6}
 
-def consultar_alertas_waze_real(bbox_dict):
-    api_key = "ak_823f13app2zd9qkia4z6vdi27ttb31z9a7v7pvlhnn878w3"
-    try:
-        url = "https://api.openwebninja.com/waze/alerts-and-jams"
-        headers = {"X-API-Key": api_key}
-        params = {"bottom_left": bbox_dict["bottom_left"], "top_right": bbox_dict["top_right"]}
-        respuesta = requests.get(url, headers=headers, params=params, timeout=10).json()
-        alertas = []
-        if "alerts" in respuesta and respuesta["alerts"]:
-            for item in respuesta["alerts"][:4]:
-                tipo = item.get("type", "TRÁFICO").replace("_", " ")
-                subtipo = item.get("subtype", "").replace("_", " ")
-                calle = item.get("street", "Vía pública")
-                ciudad = item.get("city", "")
-                ubicacion = f" en {calle} ({ciudad})" if ciudad else f" en {calle}"
-                alertas.append(f"⚠️ {tipo} ({subtipo}){ubicacion}")
-        return alertas if alertas else ["✅ Sin incidentes viales."]
-    except: return ["⚠️ Error de conexión vial."]
-
 @st.cache_data(ttl=900)
 def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
     try:
@@ -166,7 +191,7 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
                 hora_int = int(hora_part.split(":")[0])
                 estado = "Lluvia" if codigo in [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99] else "Normal"
                 icono = "🌧️" if estado == "Lluvia" else ("☀️" if codigo == 0 else "☁️")
-                datos_clima[hora_int] = {"Detalle": f"{icono} {estado} ({temp}°C)", "Estado": estado}
+                datos_clima[hora_int] = {"Detalle": f"{icono} {temp}°C", "Estado": estado}
         return datos_clima
     except: return {}
 
@@ -199,9 +224,6 @@ if df_raw is not None and not df_raw.empty:
 
     tab_normal, tab_feriados = st.tabs(["🔮 Operación Diaria (Normal)", "📈 Planificador de Feriados Nacionales"])
 
-    # ==========================================
-    # PESTAÑA 1: OPERACIÓN NORMAL
-    # ==========================================
     with tab_normal:
         col_f, col_c = st.columns([1.8, 8.2])
         
@@ -299,18 +321,15 @@ if df_raw is not None and not df_raw.empty:
                 string_gruas = f"🚛 {gruas_necesarias} U." if es_remolque and (promedio_proyectado > 0 or gruas_necesarias > 0) else "-"
                 val_gruas_grafico = gruas_necesarias if es_remolque else 0
 
-                # --- EXPLICACIÓN ANALÍTICA DETALLADA DEL DIAGNÓSTICO ---
+                # --- EXPLICACIÓN ANALÍTICA EXPLICATIVA SOLICITADA ---
                 if promedio_base_calculado == 0 and gruas_necesarias == 0:
                     motivo_asesor = "Sin demanda"
                 else:
                     explicaciones = []
                     if promedio_proyectado > 0:
-                        if es_lluvia:
-                            explicaciones.append(f"{promedio_proyectado} nuevos por lluvia")
-                        else:
-                            explicaciones.append(f"{promedio_proyectado} nuevos")
+                        if es_lluvia: explicaciones.append(f"{promedio_proyectado} nuevos por lluvia")
+                        else: explicaciones.append(f"{promedio_proyectado} nuevos")
                     
-                    # Si las grúas necesarias superan los casos nuevos de la hora, es por el arrastre de cola
                     if gruas_necesarias > promedio_proyectado:
                         explicaciones.append("arrastre de unidad anterior")
                     
@@ -327,56 +346,38 @@ if df_raw is not None and not df_raw.empty:
                     "Proyección Ajustada": promedio_proyectado, "Grúas Necesarias": val_gruas_grafico
                 })
 
-        # --- ESTRUCTURACIÓN VANGUARDISTA ALINEADA AL TOPE ---
+        # --- DISTRIBUCIÓN SOLICITADA: TOP LOCALIDADES A LA IZQUIERDA, MATRIZ A LA DERECHA ---
         with col_c:
-            col_izq_mando, col_der_mando = st.columns([6.2, 3.8])
+            col_mando_izq, col_mando_der = st.columns([3.5, 6.5])
             
-            # AMBAS TABLAS ALINEADAS EXACTAMENTE A LA MISMA ALTURA DESDE EL INICIO
-            with col_izq_mando:
-                st.markdown(f"##### ⏰ Matriz Horaria Detallada: {dia_sel.title()}")
+            # BLOQUE IZQUIERDO: TOP LOCALIDADES
+            with col_mando_izq:
+                st.markdown("<span style='font-size:15px; font-weight:bold; color:#111;'>📍 Top Localidades</span>", unsafe_allow_html=True)
+                
+                promedio_asistencias_dia = int(round(len(df_filtrado) / num_fechas_reales, 0))
+                st.metric(label=f"Promedio Total ({dia_sel.title()})", value=f"{promedio_asistencias_dia} Asist.")
+                
+                if len(df_filtrado) > 0:
+                    if provincia_sel == "Todas":
+                        df_tp = df_filtrado.groupby(col_provincia).size().reset_index(name='Casos')
+                        df_tp['P.'] = (df_tp['Casos'] / num_fechas_reales).round(0).astype(int)
+                        st.dataframe(df_tp.sort_values(by='Casos', ascending=False).head(5), use_container_width=True, height=140, hide_index=True)
+                    else:
+                        df_tc = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos')
+                        df_tc['P.'] = (df_tc['Casos'] / num_fechas_reales).round(0).astype(int)
+                        st.dataframe(df_tc.sort_values(by='Casos', ascending=False).head(5), use_container_width=True, height=140, hide_index=True)
+                else:
+                    st.info("Sin datos.")
+
+            # BLOQUE DERECHO: MATRIZ HORARIA DETALLADA (Alineación perfecta al mismo nivel horizontal)
+            with col_mando_der:
+                st.markdown(f"<span style='font-size:15px; font-weight:bold; color:#111;'>⏰ Matriz Horaria Detallada: {dia_sel.title()}</span>", unsafe_allow_html=True)
                 if registros_tabla: 
                     st.dataframe(pd.DataFrame(registros_tabla), use_container_width=True, height=215, hide_index=True)
                 else:
-                    st.info("Sin asistencias.")
+                    st.info("Sin asistencias registradas.")
 
-            with col_der_mando:
-                sub_c1, sub_c2 = st.columns([4.8, 5.2])
-                
-                with sub_c1:
-                    promedio_asistencias_dia = int(round(len(df_filtrado) / num_fechas_reales, 0))
-                    st.metric(label=f"Promedio ({dia_sel.title()})", value=f"{promedio_asistencias_dia} Asist.")
-                    
-                    st.markdown("<span style='font-size:11px; font-weight:bold; color:#555;'>Top Localidades</span>", unsafe_allow_html=True)
-                    if len(df_filtrado) > 0:
-                        if provincia_sel == "Todas":
-                            df_tp = df_filtrado.groupby(col_provincia).size().reset_index(name='Casos')
-                            df_tp['P.'] = (df_tp['Casos'] / num_fechas_reales).round(0).astype(int)
-                            st.dataframe(df_tp.sort_values(by='Casos', ascending=False).head(4), use_container_width=True, height=125, hide_index=True)
-                        else:
-                            df_tc = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos')
-                            df_tc['P.'] = (df_tc['Casos'] / num_fechas_reales).round(0).astype(int)
-                            st.dataframe(df_tc.sort_values(by='Casos', ascending=False).head(4), use_container_width=True, height=125, hide_index=True)
-
-                with sub_c2:
-                    st.markdown("<span style='font-size:12px; font-weight:bold; color:#1e88e5;'>🚛 Alertas Waze Realtime</span>", unsafe_allow_html=True)
-                    ejecutar_consulta = st.button("🔍 Escanear Mapa", use_container_width=True)
-                    if ejecutar_consulta and estado_global["creditos"] > 0:
-                        with st.spinner("Escaneando..."):
-                            estado_global["alertas_waze"] = consultar_alertas_waze_real(bbox_nacional_ecuador)
-                            estado_global["ultima_hora_waze"] = ahora_actual.strftime('%I:%M:%S %p')
-                            estado_global["creditos"] -= 1 
-                    
-                    st.markdown(f"<span style='font-size:10px; color:#777;'>Último: {estado_global['ultima_hora_waze']}</span>", unsafe_allow_html=True)
-                    
-                    if not estado_global["alertas_waze"]: 
-                        st.caption("💡 Requiere escaneo.")
-                    else:
-                        for incidente in estado_global["alertas_waze"][:3]:
-                            st.markdown(f"<span style='font-size:11px; display:block; line-height:1.2;'>• {incidente[:28]}...</span>", unsafe_allow_html=True)
-                            
-                    st.markdown(f'<div class="card-saldo"><span style="font-size:10px;color:#555;display:block;">Tokens: <b>{estado_global["creditos"]}</b> / 50</span></div>', unsafe_allow_html=True)
-
-            # --- SECCIÓN INFERIOR: EL GRÁFICO ---
+            # --- SECCIÓN INFERIOR: GRÁFICO ANALÍTICO DE CURVA ---
             st.markdown("---")
             st.markdown("##### 📈 Curva de Carga Operativa (24 Horas)")
             if data_grafico_lineas:
@@ -428,7 +429,7 @@ if df_raw is not None and not df_raw.empty:
             """, unsafe_allow_html=True)
 
             if df_data_feriado.empty:
-                st.warning(f"⚠️ Sin registros históricos.")
+                st.warning(f"⚠️ Sin registros históricos encontrados.")
             else:
                 col_f_izq, col_f_der = st.columns([3.5, 6.5])
                 
