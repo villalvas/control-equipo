@@ -68,10 +68,10 @@ st.markdown("""
     .card-saldo {
         background-color: #f0f7f4;
         border: 1px solid #d2e7de;
-        padding: 10px;
+        padding: 8px;
         border-radius: 6px;
         text-align: center;
-        margin-top: 10px;
+        margin-top: 5px;
     }
     .banner-feriado {
         background-color: #fff8e1;
@@ -165,7 +165,7 @@ def consultar_alertas_waze_real(bbox_dict):
                 ciudad = item.get("city", "")
                 ubicacion = f" en {calle} ({ciudad})" if ciudad else f" en {calle}"
                 alertas.append(f"⚠️ {tipo} ({subtipo}){ubicacion}")
-        return alertas if alertas else ["✅ Sin incidentes críticos reportados en carreteras principales del país."]
+        return alertas if alertas else ["✅ Sin incidentes críticos reportados en carreteras principales."]
     except: return ["⚠️ Error de conexión con los servidores viales."]
 
 @st.cache_data(ttl=900)
@@ -220,14 +220,14 @@ if df_raw is not None and not df_raw.empty:
     if col_ciudad in df_raw.columns: df_raw[col_ciudad] = df_raw[col_ciudad].astype(str).str.strip()
     df_raw[col_cobertura] = df_raw[col_cobertura].astype(str).str.strip().str.upper() if col_cobertura in df_raw.columns else "LOCAL"
 
-    # --- LIMPIEZA DE FECHAS SEGURO ---
+    # Limpieza básica de fechas para el planificador
     df_raw[col_fecha] = df_raw[col_fecha].astype(str).str.strip().str.split().str[0]
 
-    # --- ENRUTAMIENTO POR PESTAÑAS ---
+    # --- PESTAÑAS DEL TABLERO ---
     tab_normal, tab_feriados = st.tabs(["🔮 Operación Diaria (Normal)", "📈 Planificador de Feriados Nacionales"])
 
     # ==========================================
-    # PESTAÑA 1: OPERACIÓN NORMAL (Con Gráficos Interactivos)
+    # PESTAÑA 1: OPERACIÓN NORMAL (ZERO-SCROLL)
     # ==========================================
     with tab_normal:
         st.write("### 🎛️ Panel de Filtros de Operación")
@@ -285,7 +285,7 @@ if df_raw is not None and not df_raw.empty:
             diccionario_clima = {}
             lat_c, lon_c = -0.2298, -78.5249
 
-        # --- PROCESAMIENTO PREVIO PARA MATRIZ Y GRÁFICOS ---
+        # --- PROCESAMIENTO MATRIZ Y GRÁFICOS ---
         registros_tabla = []
         data_grafico_lineas = []
 
@@ -308,7 +308,7 @@ if df_raw is not None and not df_raw.empty:
                 detalle_clima = clima_info["Detalle"] if provincia_sel != "Todas" else "🌍 Filtre Provincia"
                 es_lluvia = clima_info["Estado"] == "Lluvia"
 
-                # --- MULTIPLICADOR DEL +20% POR LLUVIA ---
+                # Lógica del +20% por lluvia aplicada de forma nativa a la proyección
                 if es_lluvia and promedio_base_calculado > 0:
                     promedio_proyectado = math.ceil(promedio_base_calculado * 1.20)
                     etiqueta_proyeccion = f"{promedio_proyectado} (🌧️ +20%)"
@@ -352,100 +352,107 @@ if df_raw is not None and not df_raw.empty:
                     "Grúas Necesarias": val_gruas_grafico
                 })
 
-        # ==========================================
-        # NUEVA SECCIÓN DE ANÁLISIS OPERATIVO VISUAL
-        # ==========================================
-        st.write("### 📊 Centro de Mando Visual e Interactivo")
-        g_col1, g_col2 = st.columns([7, 3])
+        # =====================================================================
+        # ARQUITECTURA VISUAL COMPACTA (DISTRIBUCIÓN LADO A LADO - ZERO-SCROLL)
+        # =====================================================================
+        st.write("### 📊 Centro de Mando Analítico")
+        col_principal_izq, col_principal_der = st.columns([6.3, 3.7])
 
-        with g_col1:
+        # ---------------------------------------------------------------------
+        # BLOQUE IZQUIERDO: Curva Analítica de Carga + Matriz Horaria
+        # ---------------------------------------------------------------------
+        with col_principal_izq:
+            st.markdown("##### 📈 Curva de Carga Operativa (24 Horas)")
             if data_grafico_lineas:
                 df_gl = pd.DataFrame(data_grafico_lineas)
                 fig_lineas = go.Figure()
-                fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Promedio Base"], name="📊 Promedio Base", mode="lines+markers", line=dict(color="#1f77b4", width=2)))
-                fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Proyección Ajustada"], name="📈 Proyección (+20% Lluvia)", mode="lines+markers", line=dict(color="#ff7f0e", width=2.5, dash="dash")))
-                fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Grúas Necesarias"], name="🚛 Grúas Requeridas", mode="lines+markers", line=dict(color="#2ca02c", width=3)))
+                fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Promedio Base"], name="📊 Promed Base", mode="lines+markers", line=dict(color="#1f77b4", width=2)))
+                fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Proyección Ajustada"], name="📈 Proyecc (+20% Lluvia)", mode="lines+markers", line=dict(color="#ff7f0e", width=2, dash="dash")))
+                fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Grúas Necesarias"], name="🚛 Grúas Req", mode="lines+markers", line=dict(color="#2ca02c", width=2.5)))
                 fig_lineas.update_layout(
-                    title=f"Curva de Carga Operativa de las 24 Horas ({dia_sel.title()})",
-                    xaxis=dict(title="Hora del Día", tickmode="linear", tick0=0, dtick=1),
-                    yaxis=dict(title="Cantidad de Incidentes / Unidades"),
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                    margin=dict(l=20, r=20, t=40, b=20),
-                    height=280
+                    xaxis=dict(title="Hora del Día", tickmode="linear", tick0=0, dtick=2),
+                    yaxis=dict(title="Unidades / Casos"),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10)),
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    height=180,  # Altura ultra compacta
+                    showlegend=True
                 )
                 st.plotly_chart(fig_lineas, use_container_width=True)
             else:
-                st.info("Filtre datos válidos para inicializar la curva horaria.")
+                st.info("Filtre datos válidos para inicializar la curva.")
 
-        with g_col2:
+            # Matriz Horaria integrada debajo de su gráfico respectivo
+            st.markdown(f"##### ⏰ Matriz Horaria Detallada: {dia_sel.title()}")
+            if registros_tabla: 
+                # Forzado de altura estricta para evitar desborde vertical
+                st.dataframe(pd.DataFrame(registros_tabla), use_container_width=True, height=270, hide_index=True)
+            else:
+                st.info("No se registraron asistencias que coincidan con los filtros.")
+
+        # ---------------------------------------------------------------------
+        # BLOQUE DERECHO: Distribución Geográfica, Resumen y Bloque Waze
+        # ---------------------------------------------------------------------
+        with col_principal_der:
+            st.markdown("##### 🗺️ Distribución Geográfica de Carga")
             if len(df_filtrado) > 0:
                 if provincia_sel == "Todas":
                     df_g_bar = df_filtrado.groupby(col_provincia).size().reset_index(name='Casos')
                     df_g_bar['Promed.'] = (df_g_bar['Casos'] / num_fechas_reales).round(1)
-                    df_g_bar = df_g_bar.sort_values(by='Promed.', ascending=True).tail(5)
-                    eje_x_y_labels = {"x": "Promed.", "y": col_provincia, "title": "Top 5 Provincias Críticas"}
+                    df_g_bar = df_g_bar.sort_values(by='Promed.', ascending=True).tail(4)
+                    eje_x_y_labels = {"x": "Promed.", "y": col_provincia}
                 else:
                     df_g_bar = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos')
                     df_g_bar['Promed.'] = (df_g_bar['Casos'] / num_fechas_reales).round(1)
-                    df_g_bar = df_g_bar.sort_values(by='Promed.', ascending=True).tail(5)
-                    eje_x_y_labels = {"x": "Promed.", "y": col_ciudad, "title": f"Top Ciudades: {provincia_sel.title()}"}
+                    df_g_bar = df_g_bar.sort_values(by='Promed.', ascending=True).tail(4)
+                    eje_x_y_labels = {"x": "Promed.", "y": col_ciudad}
 
-                fig_barras = px.bar(df_g_bar, x=eje_x_y_labels["x"], y=eje_x_y_labels["y"], orientation='h', labels={"Promed.": "Promedio Asist."}, color_discrete_sequence=["#7f7f7f"])
+                fig_barras = px.bar(df_g_bar, x=eje_x_y_labels["x"], y=eje_x_y_labels["y"], orientation='h', labels={"Promed.": "Prom."}, color_discrete_sequence=["#7f7f7f"])
                 fig_barras.update_layout(
-                    title=eje_x_y_labels["title"],
-                    margin=dict(l=20, r=20, t=40, b=20),
-                    height=280
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    height=130,  # Sincronizado con el bloque opuesto
+                    xaxis=dict(title="Promedio"),
+                    yaxis=dict(title="")
                 )
                 st.plotly_chart(fig_barras, use_container_width=True)
             else:
-                st.info("Sin datos para barras.")
+                st.info("Sin datos geográficos.")
 
-        # --- SECCIÓN TABULAR Y ALERTAS BAJO LOS GRAFICOS ---
-        col_izq, col_cen, col_der = st.columns([2.5, 7, 2.5])
-        
-        with col_izq:
-            promedio_asistencias_dia = int(round(len(df_filtrado) / num_fechas_reales, 0))
-            st.write(f"##### 📋 Resumen Demanda")
-            st.metric(label=f"Promedio ({dia_sel.title()})", value=f"{promedio_asistencias_dia} Asist.")
+            # Sub-bloque métrico + Waze integrado en columnas inferiores derechas
+            sub_c1, sub_c2 = st.columns([4.5, 5.5])
             
-            if len(df_filtrado) > 0:
-                if provincia_sel == "Todas":
-                    st.write("##### 📋 Tabla Macro Provincias")
-                    df_tp = df_filtrado.groupby(col_provincia).size().reset_index(name='Casos')
-                    df_tp['Prom.'] = (df_tp['Casos'] / num_fechas_reales).round(0).astype(int)
-                    df_tp['Clima Online'] = [obtener_clima_actual_rapido(coordenadas_provincias[p][0], coordenadas_provincias[p][1]) if p in coordenadas_provincias else "🌍 N/A" for p in df_tp[col_provincia]]
-                    st.dataframe(df_tp.sort_values(by='Casos', ascending=False), use_container_width=True, hide_index=True)
+            with sub_c1:
+                promedio_asistencias_dia = int(round(len(df_filtrado) / num_fechas_reales, 0))
+                st.metric(label=f"Promedio ({dia_sel.title()})", value=f"{promedio_asistencias_dia} Asist.")
+                
+                if len(df_filtrado) > 0:
+                    if provincia_sel == "Todas":
+                        df_tp = df_filtrado.groupby(col_provincia).size().reset_index(name='Casos')
+                        df_tp['Prom.'] = (df_tp['Casos'] / num_fechas_reales).round(0).astype(int)
+                        st.dataframe(df_tp.sort_values(by='Casos', ascending=False).head(3), use_container_width=True, height=130, hide_index=True)
+                    else:
+                        df_tc = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos')
+                        df_tc['Prom.'] = (df_tc['Casos'] / num_fechas_reales).round(0).astype(int)
+                        st.dataframe(df_tc.sort_values(by='Casos', ascending=False).head(3), use_container_width=True, height=130, hide_index=True)
+
+            with sub_c2:
+                st.markdown("<span style='font-size:13px; font-weight:bold;'>🚛 Alertas Nacionales Waze</span>", unsafe_allow_html=True)
+                ejecutar_consulta = st.button("🔍 Escanear Mapa", use_container_width=True)
+                if ejecutar_consulta and estado_global["creditos"] > 0:
+                    with st.spinner("Buscando..."):
+                        estado_global["alertas_waze"] = consultar_alertas_waze_real(bbox_nacional_ecuador)
+                        estado_global["ultima_hora_waze"] = ahora_actual.strftime('%I:%M:%S %p')
+                        estado_global["creditos"] -= 1 
+                
+                st.markdown(f"<span style='font-size:11px; color:#666;'>Último: {estado_global['ultima_hora_waze']}</span>", unsafe_allow_html=True)
+                
+                if not estado_global["alertas_waze"]: 
+                    st.caption("💡 Requiere escaneo manual.")
                 else:
-                    st.write(f"##### 📋 Detalle Ciudades")
-                    df_tc = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos')
-                    df_tc['Prom.'] = (df_tc['Casos'] / num_fechas_reales).round(0).astype(int)
-                    df_tc['Clima Online'] = obtener_clima_actual_rapido(lat_c, lon_c)
-                    st.dataframe(df_tc.sort_values(by='Casos', ascending=False), use_container_width=True, hide_index=True)
-
-        with col_cen:
-            st.write(f"### ⏰ Matriz Horaria Detallada: {dia_sel.title()}")
-            if registros_tabla: 
-                st.dataframe(pd.DataFrame(registros_tabla), use_container_width=True, height=450, hide_index=True)
-            else:
-                st.info("No se registraron asistencias que coincidan con los filtros seleccionados.")
-
-        with col_der:
-            st.write("##### 🚛 Alertas Nacionales Waze")
-            ejecutar_consulta = st.button("🔍 Consultar Tráfico en Vivo (Ecuador)", use_container_width=True)
-            if ejecutar_consulta and estado_global["creditos"] > 0:
-                with st.spinner("Escaneando Ecuador..."):
-                    estado_global["alertas_waze"] = consultar_alertas_waze_real(bbox_nacional_ecuador)
-                    estado_global["ultima_hora_waze"] = ahora_actual.strftime('%I:%M:%S %p')
-                    estado_global["creditos"] -= 1 
-            st.caption(f"⏱️ Último reporte Waze: **{estado_global['ultima_hora_waze']}**")
-            
-            if not estado_global["alertas_waze"]: st.info("💡 Consulta manual activa para cuidar créditos.")
-            else:
-                for incidente in estado_global["alertas_waze"]:
-                    if "✅" in incidente: st.success(incidente)
-                    else: st.error(incidente)
-                    
-            st.markdown(f'<div class="card-saldo"><span style="font-size:11px;color:#555;font-weight:bold;display:block;">🔑 CRÉDITOS DISPONIBLES</span><span style="font-size:24px;color:#2e7d32;font-weight:800;">{estado_global["creditos"]}</span><span style="font-size:13px;color:#777;"> / 50 Restantes</span></div>', unsafe_allow_html=True)
+                    for incidente in estado_global["alertas_waze"][:2]:
+                        if "✅" in incidente: st.caption(f"🍏 {incidente[:35]}...")
+                        else: st.caption(f"🍎 {incidente[:35]}...")
+                        
+                st.markdown(f'<div class="card-saldo"><span style="font-size:9px;color:#555;display:block;">🔑 CRÉDITOS: <b>{estado_global["creditos"]}</b> / 50</span></div>', unsafe_allow_html=True)
 
 
     # ==========================================
@@ -484,7 +491,7 @@ if df_raw is not None and not df_raw.empty:
         """, unsafe_allow_html=True)
 
         if df_data_feriado.empty:
-            st.warning(f"⚠️ No se encontraron registros de asistencias para el servicio '{servicio_feriado}' en la fecha histórica '{fecha_buscar_str}'. Verifique si el servicio seleccionado tuvo demanda ese día.")
+            st.warning(f"⚠️ No se encontraron registros de asistencias para el servicio '{servicio_feriado}' en la fecha histórica '{fecha_buscar_str}'.")
         else:
             col_f_izq, col_f_der = st.columns([4, 8])
             
