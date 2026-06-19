@@ -285,7 +285,6 @@ if df_raw is not None and not df_raw.empty:
             es_remolque = any(x in str(servicio_sel).upper() for x in ["REMOLQUE", "GRÚA", "GRUA", "TODOS"])
             
             string_gruas = f"🚛 {gruas_necesarias} U." if es_remolque and (promedio_proyectado > 0 or gruas_necesarias > 0) else "-"
-            val_gruas_grafico = gruas_necesarias if es_remolque else 0
 
             if promedio_base_calculado == 0 and gruas_necesarias == 0:
                 motivo_asesor = "Sin demanda"
@@ -306,7 +305,7 @@ if df_raw is not None and not df_raw.empty:
             
             data_grafico_lineas.append({
                 "Hora": hr, "Promedio Base": promedio_base_calculado,
-                "Proyección Ajustada": promedio_proyectado, "Grúas Necesarias": val_gruas_grafico
+                "Proyección Ajustada": promedio_proyectado
             })
 
     with col_main_content:
@@ -326,17 +325,14 @@ if df_raw is not None and not df_raw.empty:
                         df_top = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos')
                         df_top = df_top.rename(columns={col_ciudad: '📍 UBICACIÓN'})
                     
-                    # Ordenar de Mayor a Menor (Top 5)
                     df_top = df_top.sort_values(by='Casos', ascending=False).head(5)
                     
-                    # Calcular el porcentaje exacto para la tabla
                     total_general_casos = df_filtrado.shape[0]
                     if total_general_casos > 0:
                         df_top['%'] = (df_top['Casos'] / total_general_casos * 100).round(1).astype(str) + '%'
                     else:
                         df_top['%'] = '0%'
                     
-                    # RENDERIZADO COMO TABLA COMPACTA (Inmune a problemas de escala y visualización)
                     st.dataframe(df_top, use_container_width=True, height=140, hide_index=True)
                 else:
                     st.info("Sin datos.")
@@ -358,12 +354,16 @@ if df_raw is not None and not df_raw.empty:
                 if data_grafico_lineas:
                     df_gl = pd.DataFrame(data_grafico_lineas)
                     fig_lineas = go.Figure()
-                    fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Promedio Base"], name="📊 Base", mode="lines+markers", line=dict(color="#1f77b4", width=2)))
-                    fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Proyección Ajustada"], name="📈 Proy", mode="lines+markers", line=dict(color="#ff7f0e", width=2, dash="dash")))
-                    fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Grúas Necesarias"], name="🚛 Requeridas", mode="lines+markers", line=dict(color="#2ca02c", width=2.5)))
+                    
+                    # Serie 1: Promedio Base Histórico
+                    fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Promedio Base"], name="📊 Promedio Base", mode="lines+markers", line=dict(color="#1f77b4", width=2)))
+                    
+                    # Serie 2: Proyección Ajustada por Clima
+                    fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Proyección Ajustada"], name="📈 Proyección por Clima", mode="lines+markers", line=dict(color="#ff7f0e", width=2, dash="dash")))
+                    
                     fig_lineas.update_layout(
                         xaxis=dict(tickmode="linear", tick0=0, dtick=1, title=dict(text="Hora del Día", font=dict(size=10))),
-                        yaxis=dict(title=dict(text="Unidades / Incidentes", font=dict(size=10))),
+                        yaxis=dict(title=dict(text="Incidentes / Asistencias", font=dict(size=10))),
                         margin=dict(l=5, r=5, t=5, b=5),
                         height=150,
                         showlegend=True,
