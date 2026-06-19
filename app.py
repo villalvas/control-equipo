@@ -219,6 +219,9 @@ if df_raw is not None and not df_raw.empty:
     if col_ciudad in df_raw.columns: df_raw[col_ciudad] = df_raw[col_ciudad].astype(str).str.strip()
     df_raw[col_cobertura] = df_raw[col_cobertura].astype(str).str.strip().str.upper() if col_cobertura in df_raw.columns else "LOCAL"
 
+    # --- LIMPIEZA DE FECHAS SEGURO (Previene NameError y homologa formatos D/M/AAAA) ---
+    df_raw[col_fecha] = df_raw[col_fecha].astype(str).str.strip().str.split().str[0]
+
     # --- ENRUTAMIENTO POR PESTAÑAS ---
     tab_normal, tab_feriados = st.tabs(["🔮 Operación Diaria (Normal)", "📈 Planificador de Feriados Nacionales"])
 
@@ -252,19 +255,19 @@ if df_raw is not None and not df_raw.empty:
             else: estado_sel = []
 
         if dia_sel.upper() == "TODOS":
-            df_dia_especifico = df_raw.copy()
-            num_fechas_reales = df_dia_especifico[col_fecha].nunique() if col_fecha in df_dia_especifico.columns else 1
+            df_filtrado_dia = df_raw.copy()
+            num_fechas_reales = df_filtrado_dia[col_fecha].nunique() if col_fecha in df_filtrado_dia.columns else 1
             fecha_target_str = ahora_actual.strftime("%Y-%m-%d")
         else:
             dia_destino_num = diccionario_dias.get(dia_sel.upper(), ahora_actual.weekday())
             dias_diferencia = (dia_destino_num - ahora_actual.weekday()) % 7
             fecha_target_str = (ahora_actual + timedelta(days=dias_diferencia)).strftime("%Y-%m-%d")
-            df_dia_especifico = df_raw[df_raw[col_dia].str.upper() == dia_sel.upper()]
-            num_fechas_reales = df_dia_especifico[col_fecha].nunique() if col_fecha in df_dia_especifico.columns else 1
+            df_filtrado_dia = df_raw[df_raw[col_dia].str.upper() == dia_sel.upper()]
+            num_fechas_reales = df_filtrado_dia[col_fecha].nunique() if col_fecha in df_filtrado_dia.columns else 1
 
         if num_fechas_reales <= 0: num_fechas_reales = 1
 
-        df_filtrado = df_dia_especifico.copy()
+        df_filtrado = df_filtrado_dia.copy()
         if estado_sel and col_estado in df_raw.columns: df_filtrado = df_filtrado[df_filtrado[col_estado].isin(estado_sel)]
         if servicio_sel != "Todos": df_filtrado = df_filtrado[df_filtrado[col_servicio] == servicio_sel]
         if provincia_sel != "Todas":
@@ -358,41 +361,41 @@ if df_raw is not None and not df_raw.empty:
 
 
     # ==========================================
-    # PESTAÑA 2: PLANIFICADOR DE FERIADOS NACIONALES
+    # PESTAÑA 2: PLANIFICADOR DE FERIADOS NACIONALES (Sincronizado con Formato de Data Real D/M/AAAA)
     # ==========================================
     with tab_feriados:
         st.write("### 🏖️ Analizador de Tendencias y Retornos de Feriados Nacionales")
         
         c_fer1, c_fer2 = st.columns([4, 4])
         with c_fer1:
-            # Diccionario con el listado exacto de feriados nacionales oficiales solicitados
+            # Diccionario ajustado con las fechas en formato exacto D/M/AAAA que constan en tu base de datos
             calendario_feriados_2026 = {
-                "Año Nuevo (Jueves 01 de Enero)": {
-                    "fecha_visual": "1/1/2026", "fecha_datos_historicos": "2/1/2026", "tipo": "Real (Retorno Año Nuevo)"
+                "Año Nuevo (Retorno Enero 5)": {
+                    "fecha_datos_historicos": "5/1/2026", "tipo": "Data Real (Retorno de Año Nuevo)"
                 },
-                "Carnaval (Lunes 16 y Martes 17 de Febrero)": {
-                    "fecha_visual": "17/2/2026", "fecha_datos_historicos": "18/2/2026", "tipo": "Real (Retorno Carnaval)"
+                "Carnaval (Retorno Febrero 18)": {
+                    "fecha_datos_historicos": "18/2/2026", "tipo": "Data Real (Retorno de Carnaval - Fin de semana de 4 días)"
                 },
-                "🔮 [Proyección] Viernes Santo (Viernes 03 de Abril)": {
-                    "fecha_visual": "3/4/2026", "fecha_datos_historicos": "2/1/2026", "tipo": "Simulado (Espejo Retorno Fin de Semana Largo)"
+                "Viernes Santo (Retorno Abril 6)": {
+                    "fecha_datos_historicos": "6/4/2026", "tipo": "Data Real (Retorno de Viernes Santo)"
                 },
-                "🔮 [Proyección] Día del Trabajo (Viernes 01 de Mayo)": {
-                    "fecha_visual": "1/5/2026", "fecha_datos_historicos": "2/1/2026", "tipo": "Simulado (Espejo Retorno Fin de Semana Largo)"
+                "Día del Trabajo (Retorno Mayo 4)": {
+                    "fecha_datos_historicos": "4/5/2026", "tipo": "Data Real (Retorno Día del Trabajo)"
                 },
-                "🔮 [Proyección] Batalla del Pichincha (Domingo 24 se pasa a Lunes 25 de Mayo)": {
-                    "fecha_visual": "25/5/2026", "fecha_datos_historicos": "2/1/2026", "tipo": "Simulado (Espejo Retorno Fin de Semana Largo)"
+                "Batalla del Pichincha (Retorno Mayo 25)": {
+                    "fecha_datos_historicos": "25/5/2026", "tipo": "Data Real (Retorno Batalla del Pichincha)"
                 },
-                "🔮 [Proyección] Primer Grito de Independencia (Lunes 10 de Agosto)": {
-                    "fecha_visual": "10/8/2026", "fecha_datos_historicos": "2/1/2026", "tipo": "Simulado (Espejo Retorno Fin de Semana Largo)"
+                "🔮 [Proyección] Primer Grito de Independencia (Agosto 10)": {
+                    "fecha_datos_historicos": "25/5/2026", "tipo": "Modelo Simulado (Espejo Retorno Fin de Semana Largo de Mayo)"
                 },
-                "🔮 [Proyección] Independencia de Guayaquil (Viernes 09 de Octubre)": {
-                    "fecha_visual": "9/10/2026", "fecha_datos_historicos": "2/1/2026", "tipo": "Simulado (Espejo Retorno Fin de Semana Largo)"
+                "🔮 [Proyección] Independencia de Guayaquil (Octubre 12)": {
+                    "fecha_datos_historicos": "6/4/2026", "tipo": "Modelo Simulado (Espejo Retorno Fin de Semana Largo de Abril)"
                 },
-                "🔮 [Proyección] Día de Difuntos e Ind. de Cuenca (Lunes 02 y Martes 03 de Noviembre)": {
-                    "fecha_visual": "3/11/2026", "fecha_datos_historicos": "18/2/2026", "tipo": "Simulado (Espejo de Carnaval - Feriado de 4 días)"
+                "🔮 [Proyección] Día de Difuntos e Ind. de Cuenca (Noviembre 3)": {
+                    "fecha_datos_historicos": "18/2/2026", "tipo": "Modelo Simulado (Espejo de Carnaval - Feriado de 4 días)"
                 },
-                "🔮 [Proyección] Navidad (Viernes 25 de Diciembre)": {
-                    "fecha_visual": "25/12/2026", "fecha_datos_historicos": "2/1/2026", "tipo": "Simulado (Espejo Retorno Fin de Semana Largo)"
+                "🔮 [Proyección] Navidad (Diciembre 28)": {
+                    "fecha_datos_historicos": "5/1/2026", "tipo": "Modelo Simulado (Espejo Retorno Fin de Semana Largo de Año Nuevo)"
                 }
             }
             
@@ -402,34 +405,32 @@ if df_raw is not None and not df_raw.empty:
 
         meta_feriado = calendario_feriados_2026[feriado_seleccionado]
         fecha_buscar_str = meta_feriado["fecha_datos_historicos"]
-        fecha_nominal = meta_feriado["fecha_visual"]
         
-        # Sincronización de tipos string del DataFrame para garantizar el correcto emparejamiento
-        df_raw[col_fecha] = df_raw[col_fecha].astype(str).str.strip()
+        # Filtrado directo sin transformaciones que puedan alterar los strings originales de la base
         df_data_feriado = df_raw[(df_raw[col_fecha] == fecha_buscar_str) & (df_raw[col_servicio] == servicio_feriado)]
         
         st.markdown(f"""
             <div class="banner-feriado">
                 🇨🇪 <b>Feriado Nacional Seleccionado:</b> {feriado_seleccionado}<br>
-                📊 <b>Modelo de Simulación Operativa:</b> Curva basada en el comportamiento real del <b>{fecha_buscar_str}</b> ({meta_feriado['tipo']})
+                📊 <b>Modelo de Simulación Operativa:</b> Evaluando la fecha base histórica <b>{fecha_buscar_str}</b> ({meta_feriado['tipo']})
             </div>
         """, unsafe_allow_html=True)
 
         if df_data_feriado.empty:
-            st.warning(f"⚠️ No se encontraron registros de asistencias para el servicio '{servicio_feriado}' en la fecha base histórica {fecha_buscar_str}. Pruebe cambiando de servicio.")
+            st.warning(f"⚠️ No se encontraron registros de asistencias para el servicio '{servicio_feriado}' en la fecha histórica '{fecha_buscar_str}'. Verifique si el servicio seleccionado tuvo demanda ese día.")
         else:
             col_f_izq, col_f_der = st.columns([4, 8])
             
             with col_f_izq:
                 total_casos_feriado = len(df_data_feriado)
-                st.metric(label="📊 Volumen Proyectado de Asistencias en Retorno", value=f"{total_casos_feriado} Casos")
+                st.metric(label="Volumen Total de Asistencias en Retorno", value=f"{total_casos_feriado} Casos")
                 
-                st.write("##### 📍 Distribución Geográfica Estimada (Provincias)")
+                st.write("##### 📍 Provincias con Mayor Carga de Retorno")
                 df_prov_feriado = df_data_feriado.groupby(col_provincia).size().reset_index(name='Casos').sort_values(by='Casos', ascending=False)
                 st.dataframe(df_prov_feriado, use_container_width=True, hide_index=True)
                 
             with col_f_der:
-                st.write(f"### ⏰ Matriz Horaria y Flota Crítica Proyectada")
+                st.write(f"### ⏰ Matriz Horaria y Flota Crítica de Retorno")
                 
                 df_data_feriado[col_hora_agrupada] = pd.to_numeric(df_data_feriado[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
                 casos_loc_f, casos_for_f = [0] * 24, [0] * 24
@@ -455,9 +456,9 @@ if df_raw is not None and not df_raw.empty:
                         alerta_pico = "🔥 PICO CRÍTICO" if total_hora >= 4 else "Normal"
                         tabla_feriado_reporte.append({
                             "HORA": f"{hr:02d}:00",
-                            "📉 Volumen Estimado": total_hora,
-                            "🚛 Grúas Críticas Requeridas": f"🚛 {gruas_feriado} U.",
-                            "🚨 Estado Operativo": alerta_pico
+                            "Volumen Histórico": total_hora,
+                            "Grúas Críticas Requeridas": f"🚛 {gruas_feriado} U.",
+                            "Estado Operativo": alerta_pico
                         })
                 
                 if tabla_feriado_reporte:
