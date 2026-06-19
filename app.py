@@ -106,7 +106,7 @@ zona_ecuador = ZoneInfo("America/Guayaquil")
 ahora_actual = datetime.now(zona_ecuador)
 hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
 
-# --- MEMORIA SERVIDOR ALTA DISPONIBILIDAD (INMUNE A REFRESCAMIENTOS) ---
+# --- MEMORIA SERVIDOR ALTA DISPONIBILIDAD ---
 @st.cache_resource
 def inicializar_memoria_inmune():
     return {
@@ -130,7 +130,6 @@ def inicializar_memoria_inmune():
 
 estado_global = inicializar_memoria_inmune()
 
-# Título del Monitor Principal de Control
 st.markdown(f"<h2 style='margin:0px; padding:0px; font-size:26px;'>🔮 Proyección Horaria y Alerta de Flota</h2>", unsafe_allow_html=True)
 st.markdown(f"<p style='margin:0px 0px 6px 0px; font-size:11px; color:#555;'><b>Control Geoanalítico</b> | 🔄 Memoria Inmune Activa (Última Actualización: {hora_estatica_str})</p>", unsafe_allow_html=True)
 
@@ -192,7 +191,6 @@ if df_raw is not None and not df_raw.empty:
     df_raw[col_cobertura] = df_raw[col_cobertura].astype(str).str.strip().str.upper() if col_cobertura in df_raw.columns else "LOCAL"
     df_raw[col_fecha] = df_raw[col_fecha].astype(str).str.strip().str.split().str[0]
 
-    # --- PESTAÑAS PRINCIPALES DE ENTRADA ---
     tab_normal, tab_feriados = st.tabs(["🔮 Operación Diaria (Normal)", "📈 Planificador de Feriados"])
 
     # ==========================================
@@ -201,7 +199,6 @@ if df_raw is not None and not df_raw.empty:
     with tab_normal:
         col_sidebar, col_main_content = st.columns([1.6, 8.4])
         
-        # Sincronización Inmune Operación Normal
         if "dia_sel_key" not in st.session_state: st.session_state["dia_sel_key"] = estado_global["filtros_normal"]["dia_sel"]
         if "servicio_sel_key" not in st.session_state: st.session_state["servicio_sel_key"] = estado_global["filtros_normal"]["servicio_sel"]
         if "provincia_sel_key" not in st.session_state: st.session_state["provincia_sel_key"] = estado_global["filtros_normal"]["provincia_sel"]
@@ -272,10 +269,8 @@ if df_raw is not None and not df_raw.empty:
         if len(df_filtrado) > 0 and col_hora_agrupada in df_filtrado.columns:
             df_horas_raw = df_filtrado.copy()
             
-            # --- PARCHE DE EXTRACCIÓN ULTRA-FLEXIBLE DE HORA (Pestaña 1) ---
-            df_horas_raw[col_hora_agrupada] = df_horas_raw[col_hora_agrupada].astype(str).str.strip()
-            df_horas_raw[col_hora_agrupada] = df_horas_raw[col_hora_agrupada].apply(lambda x: x.split(':')[0] if ':' in x else x)
-            df_horas_raw[col_hora_agrupada] = pd.to_numeric(df_horas_raw[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
+            # Conversión temporal para extraer la hora exacta de formatos como HH:MM:SS
+            df_horas_raw[col_hora_agrupada] = pd.to_datetime(df_horas_raw[col_hora_agrupada], errors='coerce').dt.hour.fillna(-1).astype(int)
             
             casos_locales, casos_foraneos = [0] * 24, [0] * 24
             for hr in range(24):
@@ -341,15 +336,24 @@ if df_raw is not None and not df_raw.empty:
             with col_mando_izq:
                 st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📍 Top Localidades Afectadas</span>", unsafe_allow_html=True)
                 if len(df_filtrado) > 0:
-                    if provincia_sel == "Todas":
-                        df_top = df_filtrado.groupby(col_provincia).size().reset_index(name='Casos')
-                        df_top = df_top.rename(columns={col_provincia: '📍 UBICACIÓN'})
-                    else:
-                        df_top = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos')
-                        df_top = df_top.rename(columns={col_ciudad: '📍 UBICACIÓN'})
+                    # --- NUEVA LÓGICA CON COLUMNA PROMEDIO DIARIO ---
+                    col_agrupar = col_provincia if provincia_sel == "Todas" else col_ciudad
+                    
+                    df_top = df_filtrado.groupby(col_agrupar).agg(
+                        Total_Casos=('SERVICIO', 'count')
+                    ).reset_index()
+                    
+                    # Cálculo del promedio real dividiendo el total acumulado para las fechas únicas mapeadas
+                    df_top['📊 Prom/Día'] = (df_top['Total_Casos'] / num_fechas_reales).round(1)
+                    
+                    df_top = df_top.rename(columns={col_agrupar: '📍 UBICACIÓN', 'Total_Casos': 'Casos'})
                     df_top = df_top.sort_values(by='Casos', ascending=False).head(5)
+                    
                     total_general_casos = df_filtrado.shape[0]
                     df_top['%'] = (df_top['Casos'] / total_general_casos * 100).round(1).astype(str) + '%' if total_general_casos > 0 else '0%'
+                    
+                    # Reordenar columnas para una visualización más ejecutiva
+                    df_top = df_top[['📍 UBICACIÓN', 'Casos', '📊 Prom/Día', '%']]
                     st.dataframe(df_top, use_container_width=True, height=140, hide_index=True)
                 else: st.info("Sin datos.")
 
@@ -419,7 +423,6 @@ if df_raw is not None and not df_raw.empty:
     with tab_feriados:
         col_f_fer, col_c_fer = st.columns([1.6, 8.4])
         
-        # Sincronización Inmune Pestaña de Feriados
         if "feriado_sel_key" not in st.session_state: st.session_state["feriado_sel_key"] = estado_global["filtros_feriados"]["feriado_sel"]
         if "servicio_fer_key" not in st.session_state: st.session_state["servicio_fer_key"] = estado_global["filtros_feriados"]["servicio_sel"]
         if "provincia_fer_key" not in st.session_state: st.session_state["provincia_fer_key"] = estado_global["filtros_feriados"]["provincia_sel"]
@@ -482,10 +485,7 @@ if df_raw is not None and not df_raw.empty:
                 st.markdown(f'<div class="banner-feriado">📈 <b>Datos Históricos Reales:</b> Analizando Primer Día Laboral de Retorno del feriado del <b>{fecha_original}</b></div>', unsafe_allow_html=True)
             
             if not df_data_feriado.empty:
-                # --- PARCHE DE EXTRACCIÓN ULTRA-FLEXIBLE DE HORA (Pestaña 2: Feriados) ---
-                df_data_feriado[col_hora_agrupada] = df_data_feriado[col_hora_agrupada].astype(str).str.strip()
-                df_data_feriado[col_hora_agrupada] = df_data_feriado[col_hora_agrupada].apply(lambda x: x.split(':')[0] if ':' in x else x)
-                df_data_feriado[col_hora_agrupada] = pd.to_numeric(df_data_feriado[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
+                df_data_feriado[col_hora_agrupada] = pd.to_datetime(df_data_feriado[col_hora_agrupada], errors='coerce').dt.hour.fillna(-1).astype(int)
                 
                 df_neto_hora = df_data_feriado.groupby(col_hora_agrupada).size().reset_index(name='HISTORICO_CASOS')
                 df_neto_hora = df_neto_hora.sort_values(by=col_hora_agrupada)
