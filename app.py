@@ -236,7 +236,7 @@ if df_raw is not None and not df_raw.empty:
                 estado_sel = st.multiselect("📌 Estado:", options=estados_disponibles, key="estado_sel_key", on_change=guardar_estado_callback)
             else: estado_sel = []
 
-        # --- CORRECCIÓN CRUCIAL: CÁLCULO ESTABLE DE FECHAS GLOBALES ---
+        # --- CÁLCULO DE FECHAS GLOBALES ---
         if dia_sel.upper() == "TODOS":
             df_filtrado_dia = df_raw.copy()
             num_fechas_reales = df_raw[col_fecha].nunique() if col_fecha in df_raw.columns else 1
@@ -250,7 +250,7 @@ if df_raw is not None and not df_raw.empty:
 
         if num_fechas_reales <= 0: num_fechas_reales = 1
 
-        # Los filtros específicos de granularidad se aplican después, manteniendo intacto el denominador
+        # Filtros de localización aplicados con estabilidad
         df_filtrado = df_filtrado_dia.copy()
         if estado_sel and col_estado in df_raw.columns: df_filtrado = df_filtrado[df_filtrado[col_estado].isin(estado_sel)]
         if servicio_sel != "Todos": df_filtrado = df_filtrado[df_filtrado[col_servicio] == servicio_sel]
@@ -270,16 +270,18 @@ if df_raw is not None and not df_raw.empty:
 
         if len(df_filtrado) > 0 and col_hora_agrupada in df_filtrado.columns:
             df_horas_raw = df_filtrado.copy()
-            
-            # Restauración de extracción de hora numérica limpia
             df_horas_raw[col_hora_agrupada] = pd.to_numeric(df_horas_raw[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
             
             casos_locales, casos_foraneos = [0] * 24, [0] * 24
             for hr in range(24):
                 df_b = df_horas_raw[df_horas_raw[col_hora_agrupada] == hr]
                 for _, fila in df_b.iterrows():
-                    if "FOR" in str(fila[col_cobertura]).upper(): casos_foraneos[hr] += 1
-                    else: casos_locales[hr] += 1
+                    cobertura_str = str(fila[col_cobertura]).upper().strip()
+                    # --- SOLUCIÓN AL CERO TOTAL EN DAULE: Tratamiento robusto si viene Vacío/NaN ---
+                    if "FOR" in cobertura_str: 
+                        casos_foraneos[hr] += 1
+                    else: 
+                        casos_locales[hr] += 1
 
             for hr in range(24):
                 p_local, p_foraneo = casos_locales[hr] / num_fechas_reales, casos_foraneos[hr] / num_fechas_reales
@@ -415,6 +417,15 @@ if df_raw is not None and not df_raw.empty:
                     else:
                         for incidente in estado_global["alertas_waze"][:1]:
                             st.markdown(f"<span style='font-size:9px; color:#d32f2f; font-weight:500;'>• {incidente}</span>", unsafe_allow_html=True)
+
+            # --- RESTAURACIÓN DEL BOTÓN REBOOT APP EN LA ESQUINA INFERIOR DERECHA ---
+            st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
+            c_rb1, c_rb2 = st.columns([7.5, 2.5])
+            with c_rb2:
+                if st.button("🔄 REBOOT APP", use_container_width=True, key="btn_reboot_global"):
+                    st.cache_data.clear()
+                    st.cache_resource.clear()
+                    st.rerun()
 
     # ==========================================
     # PESTAÑA 2: PLANIFICADOR DE FERIADOS
