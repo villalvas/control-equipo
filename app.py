@@ -385,39 +385,23 @@ if df_raw is not None and not df_raw.empty:
                 else:
                     st.info("Sin asistencias registradas.")
 
-            # --- SECCIÓN INFERIOR: GRÁFICO COMBINADO (BARRAS + LÍNEA) ---
+            # --- SECCIÓN INFERIOR: GRÁFICO ANALÍTICO DE CURVA LINEAL ORIGINAL ---
             st.markdown("---")
-            st.markdown("##### 📈 Curva de Carga Operativa (Gráfico Combinado)")
+            st.markdown("##### 📈 Curva de Carga Operativa (24 Horas)")
             if data_grafico_lineas:
                 df_gl = pd.DataFrame(data_grafico_lineas)
-                fig_combinado = go.Figure()
-                
-                # Demandas en Barras para ver el volumen físico ocupado
-                fig_combinado.add_trace(go.Bar(
-                    x=df_gl["Hora"], y=df_gl["Promedio Base"], 
-                    name="📊 Base", marker_color="#1f77b4", opacity=0.75
-                ))
-                fig_combinado.add_trace(go.Bar(
-                    x=df_gl["Hora"], y=df_gl["Proyección Ajustada"], 
-                    name="📈 Proy", marker_color="#ff7f0e", opacity=0.6
-                ))
-                
-                # Capacidad de Grúas en Línea para ver si cubre la demanda por encima
-                fig_combinado.add_trace(go.Scatter(
-                    x=df_gl["Hora"], y=df_gl["Grúas Necesarias"], 
-                    name="🚛 Requeridas", mode="lines+markers", 
-                    line=dict(color="#2ca02c", width=3)
-                ))
-                
-                fig_combinado.update_layout(
-                    barmode="group", # Barras agrupadas por hora
+                fig_lineas = go.Figure()
+                fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Promedio Base"], name="📊 Base", mode="lines+markers", line=dict(color="#1f77b4", width=2)))
+                fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Proyección Ajustada"], name="📈 Proy", mode="lines+markers", line=dict(color="#ff7f0e", width=2, dash="dash")))
+                fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Grúas Necesarias"], name="🚛 Requeridas", mode="lines+markers", line=dict(color="#2ca02c", width=2.5)))
+                fig_lineas.update_layout(
                     xaxis=dict(tickmode="linear", tick0=0, dtick=1),
                     margin=dict(l=10, r=10, t=5, b=5),
                     height=145,  
                     showlegend=True,
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10))
                 )
-                st.plotly_chart(fig_combinado, use_container_width=True)
+                st.plotly_chart(fig_lineas, use_container_width=True)
 
     # ==========================================
     # PESTAÑA 2: PLANIFICADOR DE FERIADOS
