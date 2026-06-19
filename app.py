@@ -326,32 +326,36 @@ if df_raw is not None and not df_raw.empty:
                         df_top = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos')
                         df_top = df_top.rename(columns={col_ciudad: 'Eje'})
                     
-                    # Ordenar estrictamente de Mayor a Menor para el Top 5
+                    # Ordenar de Mayor a Menor (Top 5)
                     df_top = df_top.sort_values(by='Casos', ascending=False).head(5)
                     
-                    # Calcular el porcentaje respecto a la suma del Top 5 para armar la etiqueta
-                    total_top_casos = df_top['Casos'].sum()
-                    if total_top_casos > 0:
-                        df_top['Etiqueta'] = df_top.apply(lambda r: f"{r['Casos']} ({int(round((r['Casos']/total_top_casos)*100, 0))}%)", axis=1)
+                    # Calcular el porcentaje total real respecto a la muestra filtrada completa
+                    total_general_casos = df_filtrado.shape[0]
+                    if total_general_casos > 0:
+                        df_top['Etiqueta'] = df_top.apply(lambda r: f" {r['Casos']} ({int(round((r['Casos']/total_general_casos)*100, 0))}%) ", axis=1)
                     else:
                         df_top['Etiqueta'] = df_top['Casos'].astype(str)
                     
+                    # CONFIGURACIÓN AUTOMÁTICA INMUNE AL ZOOM:
+                    # 'inside' posiciona las etiquetas de texto adentro de las barras y 'auto' maneja el contraste.
                     fig_top = go.Figure(go.Bar(
                         x=df_top['Casos'],
                         y=df_top['Eje'],
                         orientation='h',
                         text=df_top['Etiqueta'],            
-                        textposition='outside',            
+                        textposition='inside',              # <--- Inmune al zoom: el texto vive dentro de la barra
+                        insidetextanchor='end',             # <--- Alineado perfectamente al extremo derecho de la barra
                         marker_color='#444444',            
-                        textfont=dict(size=10, family="Arial")  
+                        textfont=dict(size=11, family="Arial", color="white") # Fuente clara y muy legible
                     ))
                     fig_top.update_layout(
-                        margin=dict(l=5, r=80, t=5, b=5),  # r=80 da el espacio necesario al 100% de zoom para evitar cortes
+                        margin=dict(l=5, r=10, t=5, b=5),  
                         height=140,
                         xaxis=dict(showgrid=False, visible=False), 
                         yaxis=dict(autorange="reversed", tickfont=dict(size=11)), 
                         plot_bgcolor='rgba(0,0,0,0)',
-                        paper_bgcolor='rgba(0,0,0,0)'
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        barmode='stack'
                     )
                     st.plotly_chart(fig_top, use_container_width=True, config={'displayModeBar': False})
                 else:
