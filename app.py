@@ -106,6 +106,12 @@ with col_titulo_izq:
     st.title("🔮 Proyección Horaria y Alerta de Flota")
     st.markdown(f"**Control Geoanalítico** | 🔄 Refresco en 15 min. **(Última Actualización: {hora_estatica_str})**")
 
+# Capturamos provincia_sel preventivamente para Waze Dinámico antes de pintar el widget
+if "provincia_sel_key" in st.session_state:
+    provincia_actual_waze = st.session_state["provincia_sel_key"]
+else:
+    provincia_actual_waze = estado_global["filtros_persistentes"]["provincia_sel"]
+
 with col_waze_der:
     st.markdown("<span style='font-size:12px; font-weight:bold; color:#1e88e5;'>🚛 Alertas Waze Realtime</span>", unsafe_allow_html=True)
     c_w1, c_w2 = st.columns([5.0, 5.0])
@@ -120,7 +126,13 @@ with col_waze_der:
                     try:
                         url = "https://api.openwebninja.com/waze/alerts-and-jams"
                         headers = {"X-API-Key": api_key}
-                        params = {"bottom_left": bbox_dict["bottom_left"], "top_right": bbox_dict["top_right"]}
+                        
+                        # Optimización dinámica: Evita cuadrantes vacíos gigantes
+                        if provincia_actual_waze == "Todas":
+                            params = {"bottom_left": "-2.2500,-79.9500", "top_right": "-2.1000,-79.8000"} 
+                        else:
+                            params = {"bottom_left": bbox_dict["bottom_left"], "top_right": bbox_dict["top_right"]}
+                        
                         respuesta = requests.get(url, headers=headers, params=params, timeout=10).json()
                         alertas = []
                         if "alerts" in respuesta and respuesta["alerts"]:
@@ -128,10 +140,10 @@ with col_waze_der:
                                 tipo = item.get("type", "TRÁFICO").replace("_", " ")
                                 subtipo = item.get("subtype", "").replace("_", " ")
                                 calle = item.get("street", "Vía pública")
-                                ciudad = item.get("city", "")
-                                ubicacion = f" en {calle} ({ciudad})" if ciudad else f" en {calle}"
-                                alertas.append(f"⚠️ {tipo} ({subtipo}){ubicacion}")
-                        return alertas if alertas else ["✅ Sin incidentes críticos."]
+                                ciudad = item.get("city", "Ecuador")
+                                tipo_bonito = "💥 Accidente" if "ACCIDENT" in str(item.get("type")) else f"⚠️ {tipo}"
+                                alertas.append(f"{tipo_bonito} en {calle} ({ciudad})")
+                        return alertas if alertas else ["✅ Flujo normal en el cuadrante."]
                     except: return ["⚠️ Error de conexión vial."]
                 
                 estado_global["alertas_waze"] = consultar_alertas_waze_real(bbox_nacional_ecuador)
@@ -236,8 +248,7 @@ if df_raw is not None and not df_raw.empty:
             lista_servicios = ["Todos"] + sorted(list(df_raw[col_servicio].dropna().unique()))
             servicio_sel = st.selectbox("🎯 Servicio:", lista_servicios, key="servicio_sel_key", on_change=guardar_servicio_callback)
             
-            lista_provincias = ["Todas"] + df_raw[col_provincia].value_counts().index.tolist()
-            provincia_sel = st.selectbox("📍 Provincia:", lista_provincias, key="provincia_sel_key", on_change=guardar_provincia_callback)
+            provincia_sel = st.selectbox("📍 Provincia:", ["Todas"] + df_raw[col_provincia].value_counts().index.tolist(), key="provincia_sel_key", on_change=guardar_provincia_callback)
             
             if provincia_sel != "Todas":
                 ciudades_disponibles = sorted(df_raw[df_raw[col_provincia] == provincia_sel][col_ciudad].dropna().unique().tolist())
@@ -343,9 +354,9 @@ if df_raw is not None and not df_raw.empty:
                     "Proyección Ajustada": promedio_proyectado, "Grúas Necesarias": val_gruas_grafico
                 })
 
-        # --- SECCIÓN DE CONTENIDO ---
+        # --- SECCIÓN DE CONTENIDO VISUAL ENMENDADO ---
         with col_c:
-            # 1. Indicador métrico global en la parte superior
+            # 1. Indicador métrico global arriba
             promedio_asistencias_dia = int(round(len(df_filtrado) / num_fechas_reales, 0))
             st.metric(label=f"Promedio Total ({dia_sel.title()})", value=f"{promedio_asistencias_dia} Asist.")
             
@@ -401,7 +412,7 @@ if df_raw is not None and not df_raw.empty:
             st.markdown("#### 🎛️ Filtros Feriado")
             calendario_feriados_2026 = {
                 "Año Nuevo (Retorno Enero 5)": {"fecha_datos_historicos": "5/1/2026", "tipo": "Retorno Año Nuevo"},
-                "Carnaval (Retorno Febrero 18)": {"fecha_datos_historicos": "18/2/2026", "tipo": "Retorno Carnaval (4 days)"},
+                "Carnaval (Retorno Febrero 18)": {"fecha_datos_historicos": "18/2/2026", "tipo": "Retorno Carnaval (4 días)"},
                 "Viernes Santo (Retorno Abril 6)": {"fecha_datos_historicos": "6/4/2026", "tipo": "Retorno Viernes Santo"},
                 "Día del Trabajo (Retorno Mayo 4)": {"fecha_datos_historicos": "4/5/2026", "tipo": "Retorno Día del Trabajo"},
                 "Batalla del Pichincha (Retorno Mayo 25)": {"fecha_datos_historicos": "25/5/2026", "tipo": "Retorno Batalla Pichincha"},
