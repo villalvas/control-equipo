@@ -336,15 +336,15 @@ if df_raw is not None and not df_raw.empty:
             with col_mando_izq:
                 st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📍 Top Localidades Afectadas</span>", unsafe_allow_html=True)
                 if len(df_filtrado) > 0:
-                    # --- NUEVA LÓGICA CON COLUMNA PROMEDIO DIARIO ---
+                    # --- CONFIGURACIÓN DE AGRUPACIÓN ---
                     col_agrupar = col_provincia if provincia_sel == "Todas" else col_ciudad
                     
                     df_top = df_filtrado.groupby(col_agrupar).agg(
                         Total_Casos=('SERVICIO', 'count')
                     ).reset_index()
                     
-                    # Cálculo del promedio real dividiendo el total acumulado para las fechas únicas mapeadas
-                    df_top['📊 Prom/Día'] = (df_top['Total_Casos'] / num_fechas_reales).round(1)
+                    # CORRECCIÓN: Cálculo de promedio entero absoluto redondeando a 0 decimales sin flotantes
+                    df_top['📊 Prom/Día'] = (df_top['Total_Casos'] / num_fechas_reales).round(0).astype(int)
                     
                     df_top = df_top.rename(columns={col_agrupar: '📍 UBICACIÓN', 'Total_Casos': 'Casos'})
                     df_top = df_top.sort_values(by='Casos', ascending=False).head(5)
@@ -352,7 +352,7 @@ if df_raw is not None and not df_raw.empty:
                     total_general_casos = df_filtrado.shape[0]
                     df_top['%'] = (df_top['Casos'] / total_general_casos * 100).round(1).astype(str) + '%' if total_general_casos > 0 else '0%'
                     
-                    # Reordenar columnas para una visualización más ejecutiva
+                    # Reordenar columnas para visualización final
                     df_top = df_top[['📍 UBICACIÓN', 'Casos', '📊 Prom/Día', '%']]
                     st.dataframe(df_top, use_container_width=True, height=140, hide_index=True)
                 else: st.info("Sin datos.")
