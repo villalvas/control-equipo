@@ -11,7 +11,7 @@ import plotly.graph_objects as go
 st.set_page_config(
     layout="wide", 
     page_title="Monitor de Proyecciones 2026 - Control de Flota",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # --- RECARGA NATIVA FORZADA DE VENTANA CADA 15 MINUTOS ---
@@ -89,7 +89,6 @@ st.markdown("""
         padding-bottom: 0px !important;
         gap: 0px !important;
     }
-    /* Optimizar el espaciado de los selectores de filtros */
     div[data-testid="stSelectbox"] label, div[data-testid="stMultiSelect"] label {
         font-size: 11px !important;
         margin-bottom: 2px !important;
@@ -191,6 +190,17 @@ if df_raw is not None and not df_raw.empty:
     df_raw[col_cobertura] = df_raw[col_cobertura].astype(str).str.strip().str.upper() if col_cobertura in df_raw.columns else "LOCAL"
     df_raw[col_fecha] = df_raw[col_fecha].astype(str).str.strip().str.split().str[0]
 
+    # --- LIMPIEZA INTELIGENTE Y ROBUSTA DE LA COLUMNA DE HORAS ---
+    def extraer_hora_limpia(val):
+        val_str = str(val).strip().split('.')[0]
+        if ":" in val_str:
+            return int(val_str.split(":")[0])
+        try: return int(val_str)
+        except: return -1
+
+    if col_hora_agrupada in df_raw.columns:
+        df_raw[col_hora_agrupada] = df_raw[col_hora_agrupada].apply(extraer_hora_limpia)
+
     tab_normal, tab_feriados = st.tabs(["🔮 Operación Diaria (Normal)", "📈 Planificador de Feriados"])
 
     # ==========================================
@@ -236,6 +246,13 @@ if df_raw is not None and not df_raw.empty:
                 estado_sel = st.multiselect("📌 Estado:", options=estados_disponibles, key="estado_sel_key", on_change=guardar_estado_callback)
             else: estado_sel = []
 
+            # --- UBICACIÓN INMUNE E INMEDIATA DEL BOTÓN REBOOT EN EL SIDEBAR ---
+            st.markdown("<div style='margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 10px;'></div>", unsafe_allow_html=True)
+            if st.button("🔄 REBOOT APP", use_container_width=True, key="btn_reboot_sidebar"):
+                st.cache_data.clear()
+                st.cache_resource.clear()
+                st.rerun()
+
         # --- CÁLCULO DE FECHAS GLOBALES ---
         if dia_sel.upper() == "TODOS":
             df_filtrado_dia = df_raw.copy()
@@ -250,7 +267,6 @@ if df_raw is not None and not df_raw.empty:
 
         if num_fechas_reales <= 0: num_fechas_reales = 1
 
-        # Filtros de localización aplicados con estabilidad
         df_filtrado = df_filtrado_dia.copy()
         if estado_sel and col_estado in df_raw.columns: df_filtrado = df_filtrado[df_filtrado[col_estado].isin(estado_sel)]
         if servicio_sel != "Todos": df_filtrado = df_filtrado[df_filtrado[col_servicio] == servicio_sel]
@@ -270,14 +286,12 @@ if df_raw is not None and not df_raw.empty:
 
         if len(df_filtrado) > 0 and col_hora_agrupada in df_filtrado.columns:
             df_horas_raw = df_filtrado.copy()
-            df_horas_raw[col_hora_agrupada] = pd.to_numeric(df_horas_raw[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
             
             casos_locales, casos_foraneos = [0] * 24, [0] * 24
             for hr in range(24):
                 df_b = df_horas_raw[df_horas_raw[col_hora_agrupada] == hr]
                 for _, fila in df_b.iterrows():
-                    cobertura_str = str(fila[col_cobertura]).upper().strip()
-                    # --- SOLUCIÓN AL CERO TOTAL EN DAULE: Tratamiento robusto si viene Vacío/NaN ---
+                    cobertura_str = str(fila[col_cobertura]).upper().strip() if col_cobertura in fila else "LOCAL"
                     if "FOR" in cobertura_str: 
                         casos_foraneos[hr] += 1
                     else: 
@@ -285,7 +299,7 @@ if df_raw is not None and not df_raw.empty:
 
             for hr in range(24):
                 p_local, p_foraneo = casos_locales[hr] / num_fechas_reales, casos_foraneos[hr] / num_fechas_reales
-                promedio_base_calculado = int(round(p_local + p_foraneo, 0))
+                promedio_base_calculado = round(p_local + p_foraneo, 1)
                 
                 clima_info = diccionario_clima.get(hr, {"Detalle": "☁️ Nublado", "Estado": "Normal"})
                 detalle_clima = clima_info["Detalle"] if provincia_sel != "Todas" else "🌍 Filtre Prov."
@@ -297,7 +311,7 @@ if df_raw is not None and not df_raw.empty:
                     p_local_calc = p_local * 1.20
                     p_foraneo_calc = p_foraneo * 1.20
                 else:
-                    promedio_proyectado = promedio_base_calculado
+                    promedio_proyectado = int(round(promedio_base_calculado, 0))
                     etiqueta_proyeccion = f"{promedio_proyectado} (Norm)"
                     p_local_calc = p_local
                     p_foraneo_calc = p_foraneo
@@ -346,8 +360,7 @@ if df_raw is not None and not df_raw.empty:
                         Total_Casos=('SERVICIO', 'count')
                     ).reset_index()
                     
-                    df_top['📊 Prom/Día'] = (df_top['Total_Casos'] / num_fechas_reales).round(0).astype(int)
-                    
+                    df_top['📊 Prom/Día'] = (df_top['Total_Casos'] / num_fechas_reales).round(1)
                     df_top = df_top.rename(columns={col_agrupar: '📍 UBICACIÓN', 'Total_Casos': 'Casos'})
                     df_top = df_top.sort_values(by='Casos', ascending=False).head(5)
                     
@@ -382,7 +395,7 @@ if df_raw is not None and not df_raw.empty:
                     st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
             with col_resumen_waze:
-                promedio_asistencias_dia = int(round(len(df_filtrado) / num_fechas_reales, 0))
+                promedio_asistencias_dia = round(len(df_filtrado) / num_fechas_reales, 1)
                 st.markdown(f"<span style='font-size:11px; color:#555;'>Promedio ({dia_sel.title()})</span>", unsafe_allow_html=True)
                 st.markdown(f"<h3 style='margin:0px; padding:0px; font-size:28px; line-height:1;'>{promedio_asistencias_dia} Asist.</h3>", unsafe_allow_html=True)
                 st.markdown("<span style='font-size:11px; font-weight:bold; color:#1e88e5; display:block; margin-top:4px;'>🚛 Alertas Waze Realtime</span>", unsafe_allow_html=True)
@@ -417,15 +430,6 @@ if df_raw is not None and not df_raw.empty:
                     else:
                         for incidente in estado_global["alertas_waze"][:1]:
                             st.markdown(f"<span style='font-size:9px; color:#d32f2f; font-weight:500;'>• {incidente}</span>", unsafe_allow_html=True)
-
-            # --- RESTAURACIÓN DEL BOTÓN REBOOT APP EN LA ESQUINA INFERIOR DERECHA ---
-            st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
-            c_rb1, c_rb2 = st.columns([7.5, 2.5])
-            with c_rb2:
-                if st.button("🔄 REBOOT APP", use_container_width=True, key="btn_reboot_global"):
-                    st.cache_data.clear()
-                    st.cache_resource.clear()
-                    st.rerun()
 
     # ==========================================
     # PESTAÑA 2: PLANIFICADOR DE FERIADOS
@@ -495,8 +499,6 @@ if df_raw is not None and not df_raw.empty:
                 st.markdown(f'<div class="banner-feriado">📈 <b>Datos Históricos Reales:</b> Analizando Primer Día Laboral de Retorno del feriado del <b>{fecha_original}</b></div>', unsafe_allow_html=True)
             
             if not df_data_feriado.empty:
-                df_data_feriado[col_hora_agrupada] = pd.to_numeric(df_data_feriado[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
-                
                 df_neto_hora = df_data_feriado.groupby(col_hora_agrupada).size().reset_index(name='HISTORICO_CASOS')
                 df_neto_hora = df_neto_hora.sort_values(by=col_hora_agrupada)
                 
