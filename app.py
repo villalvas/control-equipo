@@ -109,7 +109,7 @@ hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
 @st.cache_resource
 def inicializar_memoria_inmune():
     return {
-        "historico_alertas": [], # Almacena diccionarios con claves: 'hora', 'provincia', 'texto'
+        "historico_alertas": [], 
         "ultima_consulta_tomtom": "Nunca",
         "filtros_normal": {
             "dia_sel": "TODOS",
@@ -128,29 +128,30 @@ def inicializar_memoria_inmune():
 
 estado_global = inicializar_memoria_inmune()
 
-# --- MOTOR AUTOMÁTICO DE ENLACE DE TRÁFICO ONLINE (Ecuador) ---
-def actualizar_alertas_nacionales_tomtom():
+# --- FUNCIÓN DE CONSULTA REAL (TOMTOM) ---
+def ejecutar_consulta_tomtom():
     # AGREGA TU KEY GRATUITA DE TOMTOM DEVELOPER AQUÍ
     TOMTOM_API_KEY = "TU_API_KEY_DE_TOMTOM"
     
     if TOMTOM_API_KEY == "TU_API_KEY_DE_TOMTOM":
+        estado_global["ultima_consulta_tomtom"] = datetime.now(zona_ecuador).strftime('%I:%M:%S %p')
         return
         
-    # Rectángulo contenedor que encierra a todo el territorio de Ecuador
     bbox_ecuador = "-81.0000,-5.0000,-75.0000,1.5000"
-    
     try:
         url = f"https://api.tomtom.com/traffic/services/4/incidentDetails/s3/{bbox_ecuador}/11/-1/json"
         params = {"key": TOMTOM_API_KEY, "geometries": "false", "language": "es-ES"}
         respuesta = requests.get(url, params=params, timeout=8).json()
         
         if "tm" in respuesta and "poi" in respuesta["tm"]:
+            # Limpiar historial previo para la consulta manual fresca
+            estado_global["historico_alertas"] = []
+            
             for incidente in respuesta["tm"]["poi"]:
                 descripcion = incidente.get("d", "Incidente")
                 calle = incidente.get("f", "Vía")
-                magnitud = incidente.get("ic", 1) # 1: Bajo, 2: Medio, 3: Grave, 4: Cierre Total
+                magnitud = incidente.get("ic", 1)
                 
-                # Taggeo automático para filtrar por provincia de forma inteligente
                 prov_detectada = "TODAS"
                 listado_provincias = ['PICHINCHA', 'GUAYAS', 'AZUAY', 'MANABI', 'EL ORO', 'LOJA', 'LOS RIOS', 'SANTA ELENA', 'TUNGURAHUA']
                 for p in listado_provincias:
@@ -162,21 +163,16 @@ def actualizar_alertas_nacionales_tomtom():
                 txt_final = f"{iconos.get(magnitud, '⚠️')} | {calle}: {descripcion}"
                 h_reporte = datetime.now(zona_ecuador).strftime('%I:%M %p')
                 
-                if not any(x['texto'] == txt_final for x in estado_global["historico_alertas"]):
-                    estado_global["historico_alertas"].insert(0, {
-                        "hora": h_reporte,
-                        "provincia": prov_detectada,
-                        "texto": txt_final
-                    })
+                estado_global["historico_alertas"].append({
+                    "hora": h_reporte,
+                    "provincia": prov_detectada,
+                    "texto": txt_final
+                })
             
-            # Mantener un tope para evitar sobrecarga visual
             estado_global["historico_alertas"] = estado_global["historico_alertas"][:30]
-            estado_global["ultima_consulta_tomtom"] = datetime.now(zona_ecuador).strftime('%I:%M %p')
+        estado_global["ultima_consulta_tomtom"] = datetime.now(zona_ecuador).strftime('%I:%M:%S %p')
     except:
         pass
-
-# Se ejecuta en silencio de fondo con cada refresco
-actualizar_alertas_nacionales_tomtom()
 
 st.markdown(f"<h2 style='margin:0px; padding:0px; font-size:26px;'>🔮 Proyección Horaria y Alerta de Flota</h2>", unsafe_allow_html=True)
 st.markdown(f"<p style='margin:0px 0px 6px 0px; font-size:11px; color:#555;'><b>Control Geoanalítico</b> | 🔄 Memoria Inmune Activa (Última Actualización: {hora_estatica_str})</p>", unsafe_allow_html=True)
@@ -244,9 +240,6 @@ if df_raw is not None and not df_raw.empty:
 
     tab_normal, tab_feriados = st.tabs(["🔮 Operación Diaria (Normal)", "📈 Planificador de Feriados"])
 
-    # ==========================================
-    # PESTAÑA 1: OPERACIÓN NORMAL
-    # ==========================================
     with tab_normal:
         col_sidebar, col_main_content = st.columns([1.6, 8.4])
         
@@ -423,20 +416,17 @@ if df_raw is not None and not df_raw.empty:
                     st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
             # =========================================================================
-            # ESTRUCTURA ORIGINAL RESPETADA: REEMPLAZO EXACTO DE LA LÓGICA DE ALERTA WAZE
+            # CAJA INFERIOR DERECHA: BOTÓN MANUAL PARA ADQUIRIR ALERTAS REALTIME 
             # =========================================================================
             with col_resumen_waze:
                 promedio_asistencias_dia = int(round(len(df_filtrado) / num_fechas_reales, 0))
                 st.markdown(f"<span style='font-size:11px; color:#555;'>Promedio ({dia_sel.title()})</span>", unsafe_allow_html=True)
                 st.markdown(f"<h3 style='margin:0px; padding:0px; font-size:28px; line-height:1;'>{promedio_asistencias_dia} Asist.</h3>", unsafe_allow_html=True)
                 
-                # Mantenemos el mismo estilo compacto del indicador de Alertas
                 st.markdown("<span style='font-size:11px; font-weight:bold; color:#1e88e5; display:block; margin-top:4px;'>🚛 Alertas Nacionales Realtime</span>", unsafe_allow_html=True)
                 
-                # Conservamos las mismas dos columnas pequeñas originales del layout de Waze para no alterar píxeles
                 c_w1, c_w2 = st.columns([4.5, 5.5])
                 with c_w1:
-                    # Mapeo por provincia para el feed
                     if provincia_sel == "Todas":
                         alertas_filtradas = estado_global["historico_alertas"]
                         etiqueta_cobertura = "Global"
@@ -444,21 +434,23 @@ if df_raw is not None and not df_raw.empty:
                         alertas_filtradas = [x for x in estado_global["historico_alertas"] if x["provincia"] == provincia_sel.upper().strip()]
                         etiqueta_cobertura = provincia_sel[:10]
 
-                    # Mantenemos la tarjeta de estado con el mismo formato visual CSS
                     st.markdown(f'<div class="card-saldo"><span style="font-size:9px;color:#444;">Filtro: <b>{etiqueta_cobertura}</b></span></div>', unsafe_allow_html=True)
                 with c_w2:
-                    st.markdown(f"<span style='font-size:9px; color:#777; display:block;'>Actualizado: {estado_global['ultima_consulta_tomtom']}</span>", unsafe_allow_html=True)
+                    st.markdown(f"<span style='font-size:9px; color:#777; display:block;'>Último: {estado_global['ultima_consulta_tomtom']}</span>", unsafe_allow_html=True)
                 
-                # Contenedor de visualización para listar los incidentes detectados de forma nativa
+                # Despliegue de los incidentes si existen
                 if not alertas_filtradas:
-                    st.markdown("<span style='font-size:9px; color:#999;'>• Rutas estables en la red nacional.</span>", unsafe_allow_html=True)
+                    st.markdown("<span style='font-size:9px; color:#999; display:block; margin-bottom:2px;'>• Rutas estables en la red nacional.</span>", unsafe_allow_html=True)
                 else:
-                    for incidente in alertas_filtradas[:2]: # Mostramos los 2 incidentes críticos en la misma caja
+                    for incidente in alertas_filtradas[:2]:
                         st.markdown(f"<span style='font-size:9px; color:#d32f2f; font-weight:500; display:block; line-height:1.2;'>• {incidente['texto'][:35]}...</span>", unsafe_allow_html=True)
+                
+                # BOTÓN MANUAL EXACTAMENTE ABAJO DE LA CAJA ORIGINAL
+                if st.button("🔄 CONSULTAR ALERTAS MANUALMENTE", use_container_width=True, key="btn_manual_tomtom"):
+                    ejecutar_consulta_tomtom()
+                    st.rerun()
 
-    # ==========================================
-    # PESTAÑA 2: PLANIFICADOR DE FERIADOS
-    # ==========================================
+    # Planificador de feriados (Sin cambios en su estructura)
     with tab_feriados:
         col_f_fer, col_c_fer = st.columns([1.6, 8.4])
         
