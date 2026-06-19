@@ -319,7 +319,6 @@ if df_raw is not None and not df_raw.empty:
             with col_mando_izq:
                 st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📍 Top Localidades Affected</span>", unsafe_allow_html=True)
                 if len(df_filtrado) > 0:
-                    # Determinación de columna y agrupación
                     if provincia_sel == "Todas":
                         df_top = df_filtrado.groupby(col_provincia).size().reset_index(name='Casos')
                         df_top = df_top.rename(columns={col_provincia: 'Eje'})
@@ -330,22 +329,21 @@ if df_raw is not None and not df_raw.empty:
                     # Ordenar estrictamente de Mayor a Menor para el Top 5
                     df_top = df_top.sort_values(by='Casos', ascending=False).head(5)
                     
-                    # Generación del gráfico horizontal mediante Plotly con etiquetas explícitas
-                    # Nota: Plotly grafica de abajo hacia arriba en barras horizontales, por ende invertimos el eje en el layout para mantener el mayor arriba.
+                    # CORRECCIÓN EXPLICITA: Se reemplaza 'fontfamily' por 'family' para evitar el ValueError de Plotly
                     fig_top = go.Figure(go.Bar(
                         x=df_top['Casos'],
                         y=df_top['Eje'],
                         orientation='h',
-                        text=df_top['Casos'],              # Muestra la cantidad directamente
-                        textposition='outside',            # Posiciona el número fuera de la barra
-                        marker_color='#444444',            # Tono oscuro ejecutivo idéntico al mock
-                        textfont=dict(size=11, fontfamily="Arial")
+                        text=df_top['Casos'],              
+                        textposition='outside',            
+                        marker_color='#444444',            
+                        textfont=dict(size=11, family="Arial")  # <--- CORREGIDO AQUÍ
                     ))
                     fig_top.update_layout(
-                        margin=dict(l=5, r=40, t=5, b=5),  # Margen derecho amplio para el número
+                        margin=dict(l=5, r=40, t=5, b=5),  
                         height=140,
-                        xaxis=dict(showgrid=False, visible=False), # Ocultamos el eje X para ahorrar espacio
-                        yaxis=dict(autorange="reversed", font=dict(size=11)), # Forzado estricto de Mayor arriba
+                        xaxis=dict(showgrid=False, visible=False), 
+                        yaxis=dict(autorange="reversed", tickfont=dict(size=11)), 
                         plot_bgcolor='rgba(0,0,0,0)',
                         paper_bgcolor='rgba(0,0,0,0)'
                     )
