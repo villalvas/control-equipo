@@ -180,7 +180,6 @@ if df_raw is not None and not df_raw.empty:
     tab_normal, tab_feriados = st.tabs(["🔮 Operación Diaria (Normal)", "📈 Planificador de Feriados"])
 
     with tab_normal:
-        # --- ARQUITECTURA DE CONTENEDORES CON FILTRO A LA IZQUIERDA SÓLO EN PESTAÑA NORMAL ---
         col_sidebar, col_main_content = st.columns([1.6, 8.4])
         
         if "dia_sel_key" not in st.session_state: st.session_state["dia_sel_key"] = estado_global["filtros_persistentes"]["dia_sel"]
@@ -281,7 +280,6 @@ if df_raw is not None and not df_raw.empty:
                     p_local_calc = p_local
                     p_foraneo_calc = p_foraneo
 
-                # --- LÓGICA DE ARRASTRE MEJORADA ---
                 l_ant = p_local_calc if hr == 0 else (casos_locales[hr-1] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
                 f_ant1 = p_foraneo_calc if hr == 0 else (casos_foraneos[hr-1] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
                 f_ant2 = p_foraneo_calc if hr <= 1 else (casos_foraneos[hr-2] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
@@ -317,7 +315,6 @@ if df_raw is not None and not df_raw.empty:
                 })
 
         with col_main_content:
-            # --- FILA SUPERIOR CENTRAL: TABLA DE LOCALIDADES Y MATRIZ HORARIA ---
             col_mando_izq, col_mando_der = st.columns([4.2, 5.8])
             
             with col_mando_izq:
@@ -344,7 +341,6 @@ if df_raw is not None and not df_raw.empty:
                 else:
                     st.info("Sin asistencias.")
 
-            # --- FILA INFERIOR CENTRAL: CURVA LINEAL Y WAZE ---
             st.markdown("<div style='margin-top: 4px; border-top: 1px solid #ddd; padding-top: 2px;'></div>", unsafe_allow_html=True)
             col_grafico_full, col_resumen_waze = st.columns([6.8, 3.2])
             
@@ -406,10 +402,12 @@ if df_raw is not None and not df_raw.empty:
                             st.markdown(f"<span style='font-size:9px; color:#d32f2f; font-weight:500;'>• {incidente}</span>", unsafe_allow_html=True)
 
     with tab_feriados:
-        # --- DISEÑO TOTALMENTE LIMPIO SIN BARRA LATERAL ---
-        col_f_fer, col_c_fer = st.columns([3.5, 6.5])
+        # --- NUEVA ARQUITECTURA: CAMPOS DE CONTROL IZQUIERDA COMPLETOS ---
+        col_f_fer, col_c_fer = st.columns([1.6, 8.4])
+        
         with col_f_fer:
-            # Lista única de Feriados Nacionales de Ecuador 2026 sin duplicados
+            st.markdown("<h4 style='margin:0px; font-size:14px; color:#111;'>⚙️ Planificador</h4>", unsafe_allow_html=True)
+            
             calendario_feriados_2026 = {
                 "Año Nuevo (Retorno Ene 5)": {"fecha_datos_historicos": "5/1/2026", "tipo": "Retorno"},
                 "Carnaval (Lunes Feb 16)": {"fecha_datos_historicos": "16/2/2026", "tipo": "Éxodo"},
@@ -423,27 +421,39 @@ if df_raw is not None and not df_raw.empty:
                 "Independencia de Cuenca (Retorno Nov 4)": {"fecha_datos_historicos": "4/11/2026", "tipo": "Retorno"},
                 "Navidad (Retorno Dic 28)": {"fecha_datos_historicos": "28/12/2026", "tipo": "Retorno"}
             }
-            feriado_seleccionado = st.selectbox("📅 Seleccione Feriado Nacional:", list(calendario_feriados_2026.keys()))
-            servicio_feriado = st.selectbox("🎯 Servicio para Análisis de Feriado:", sorted(list(df_raw[col_servicio].dropna().unique())), index=0)
-        
+            feriado_seleccionado = st.selectbox("📅 Feriado:", list(calendario_feriados_2026.keys()), key="sb_feriado_p")
+            servicio_feriado = st.selectbox("🎯 Servicio:", sorted(list(df_raw[col_servicio].dropna().unique())), index=0, key="sb_servicio_p")
+            
+            provincia_feriado = st.selectbox("📍 Provincia:", ["Todas"] + df_raw[col_provincia].value_counts().index.tolist(), key="sb_provincia_p")
+            
+            if provincia_feriado != "Todas":
+                ciudades_f_disp = sorted(df_raw[df_raw[col_provincia] == provincia_feriado][col_ciudad].dropna().unique().tolist())
+                ciudad_feriado = st.multiselect("🏙️ Ciudades:", ciudades_f_disp, key="ms_ciudad_p")
+            else:
+                ciudad_feriado = st.multiselect("🏙️ Ciudades:", options=[], disabled=True, placeholder="Filtre Provincia", key="ms_ciudad_p_dis")
+
         with col_c_fer:
             meta_feriado = calendario_feriados_2026[feriado_seleccionado]
             fecha_buscar_str = meta_feriado["fecha_datos_historicos"]
             
-            # Filtrado estricto por fecha histórica y tipo de asistencia
+            # Filtrado base por fecha e histórico operativo
             df_data_feriado = df_raw[(df_raw[col_fecha] == fecha_buscar_str) & (df_raw[col_servicio] == servicio_feriado)].copy()
+            
+            # Aplicar filtros geográficos de la izquierda si se especifican
+            if provincia_feriado != "Todas":
+                df_data_feriado = df_data_feriado[df_data_feriado[col_provincia] == provincia_feriado]
+                if ciudad_feriado:
+                    df_data_feriado = df_data_feriado[df_data_feriado[col_ciudad].isin(ciudad_feriado)]
             
             st.markdown(f'<div class="banner-feriado">🇨🇪 Base Histórica Analizada: <b>{fecha_buscar_str}</b> ({meta_feriado["tipo"]})</div>', unsafe_allow_html=True)
             
             if not df_data_feriado.empty:
-                # Estandarización de columnas numéricas de tiempo
                 df_data_feriado[col_hora_agrupada] = pd.to_numeric(df_data_feriado[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
                 
-                # Agrupación y colapso de filas repetidas por Provincia, Ciudad y Hora
+                # Agrupación y colapso estricto por Provincia, Ciudad y Hora
                 df_agrupado = df_data_feriado.groupby([col_provincia, col_ciudad, col_hora_agrupada]).size().reset_index(name='HISTORICO_CASOS')
                 df_agrupado = df_agrupado.sort_values(by=[col_provincia, col_ciudad, col_hora_agrupada])
                 
-                # Cálculo de Grúas Requeridas por celda geográfica horaria basándose en el volumen operativo
                 registros_procesados = []
                 for idx, fila in df_agrupado.iterrows():
                     casos_reales = fila['HISTORICO_CASOS']
@@ -451,27 +461,29 @@ if df_raw is not None and not df_raw.empty:
                     ciu = fila[col_ciudad]
                     hora_int = fila[col_hora_agrupada]
                     
-                    # Identificar arrastres previos en la misma zona geográfica para dimensionar la flota
                     casos_previos = df_agrupado[
                         (df_agrupado[col_provincia] == prov) & 
                         (df_agrupado[col_ciudad] == ciu) & 
                         (df_agrupado[col_hora_agrupada] == (hora_int - 1))
                     ]['HISTORICO_CASOS'].sum()
                     
-                    # Cálculo predictivo de unidades requeridas
+                    # Cálculo predictivo basado en volumen local y arrastre logístico
                     unidades_calculadas = math.ceil(casos_reales + (0.4 * casos_previos))
                     if unidades_calculadas <= 0:
                         unidades_calculadas = 1
                         
                     registros_procesados.append({
+                        "HORA": f"{hora_int:02d}:00",
                         "PROVINCIA": prov,
                         "CIUDAD": ciu,
-                        "HORA": f"{hora_int:02d}:00",
                         "HISTÓRICO CASOS": casos_reales,
                         "GRÚAS REQUERIDAS": f"🚛 {unidades_calculadas} U."
                     })
                 
                 df_mostrar_feriados = pd.DataFrame(registros_procesados)
-                st.dataframe(df_mostrar_feriados, use_container_width=True, height=160, hide_index=True)
+                # Reordenamos las columnas colocando la hora como primer índice temporal de lectura
+                df_mostrar_feriados = df_mostrar_feriados[["HORA", "PROVINCIA", "CIUDAD", "HISTÓRICO CASOS", "GRÚAS REQUERIDAS"]]
+                
+                st.dataframe(df_mostrar_feriados, use_container_width=True, height=310, hide_index=True)
             else:
-                st.info("⚠️ No se registran asistencias históricas cargadas para la fecha seleccionada con ese tipo de servicio.")
+                st.info("⚠️ No se registran asistencias históricas cargadas para los criterios geográficos y de servicio seleccionados.")
