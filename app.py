@@ -313,51 +313,31 @@ if df_raw is not None and not df_raw.empty:
         tab_normal, tab_feriados = st.tabs(["🔮 Operación Diaria (Normal)", "📈 Planificador de Feriados"])
 
         with tab_normal:
-            # --- FILA SUPERIOR CENTRAL: LOCALIDADES AFECTADAS Y MATRIZ HORARIA ---
+            # --- FILA SUPERIOR CENTRAL: TABLA DE LOCALIDADES Y MATRIZ HORARIA ---
             col_mando_izq, col_mando_der = st.columns([4.2, 5.8])
             
             with col_mando_izq:
-                st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📍 Top Localidades Affected</span>", unsafe_allow_html=True)
+                st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📍 Top Localidades Afectadas</span>", unsafe_allow_html=True)
                 if len(df_filtrado) > 0:
                     if provincia_sel == "Todas":
                         df_top = df_filtrado.groupby(col_provincia).size().reset_index(name='Casos')
-                        df_top = df_top.rename(columns={col_provincia: 'Eje'})
+                        df_top = df_top.rename(columns={col_provincia: '📍 UBICACIÓN'})
                     else:
                         df_top = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos')
-                        df_top = df_top.rename(columns={col_ciudad: 'Eje'})
+                        df_top = df_top.rename(columns={col_ciudad: '📍 UBICACIÓN'})
                     
                     # Ordenar de Mayor a Menor (Top 5)
                     df_top = df_top.sort_values(by='Casos', ascending=False).head(5)
                     
-                    # Calcular el porcentaje total real respecto a la muestra filtrada completa
+                    # Calcular el porcentaje exacto para la tabla
                     total_general_casos = df_filtrado.shape[0]
                     if total_general_casos > 0:
-                        df_top['Etiqueta'] = df_top.apply(lambda r: f" {r['Casos']} ({int(round((r['Casos']/total_general_casos)*100, 0))}%) ", axis=1)
+                        df_top['%'] = (df_top['Casos'] / total_general_casos * 100).round(1).astype(str) + '%'
                     else:
-                        df_top['Etiqueta'] = df_top['Casos'].astype(str)
+                        df_top['%'] = '0%'
                     
-                    # CONFIGURACIÓN AUTOMÁTICA INMUNE AL ZOOM:
-                    # 'inside' posiciona las etiquetas de texto adentro de las barras y 'auto' maneja el contraste.
-                    fig_top = go.Figure(go.Bar(
-                        x=df_top['Casos'],
-                        y=df_top['Eje'],
-                        orientation='h',
-                        text=df_top['Etiqueta'],            
-                        textposition='inside',              # <--- Inmune al zoom: el texto vive dentro de la barra
-                        insidetextanchor='end',             # <--- Alineado perfectamente al extremo derecho de la barra
-                        marker_color='#444444',            
-                        textfont=dict(size=11, family="Arial", color="white") # Fuente clara y muy legible
-                    ))
-                    fig_top.update_layout(
-                        margin=dict(l=5, r=10, t=5, b=5),  
-                        height=140,
-                        xaxis=dict(showgrid=False, visible=False), 
-                        yaxis=dict(autorange="reversed", tickfont=dict(size=11)), 
-                        plot_bgcolor='rgba(0,0,0,0)',
-                        paper_bgcolor='rgba(0,0,0,0)',
-                        barmode='stack'
-                    )
-                    st.plotly_chart(fig_top, use_container_width=True, config={'displayModeBar': False})
+                    # RENDERIZADO COMO TABLA COMPACTA (Inmune a problemas de escala y visualización)
+                    st.dataframe(df_top, use_container_width=True, height=140, hide_index=True)
                 else:
                     st.info("Sin datos.")
 
