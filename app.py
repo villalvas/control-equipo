@@ -269,8 +269,8 @@ if df_raw is not None and not df_raw.empty:
         if len(df_filtrado) > 0 and col_hora_agrupada in df_filtrado.columns:
             df_horas_raw = df_filtrado.copy()
             
-            # Conversión temporal para extraer la hora exacta de formatos como HH:MM:SS
-            df_horas_raw[col_hora_agrupada] = pd.to_datetime(df_horas_raw[col_hora_agrupada], errors='coerce').dt.hour.fillna(-1).astype(int)
+            # --- SE RESTAURA LA EXTRACCIÓN DE LA HORA SEGÚN TU LÓGICA ORIGINAL ---
+            df_horas_raw[col_hora_agrupada] = pd.to_numeric(df_horas_raw[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
             
             casos_locales, casos_foraneos = [0] * 24, [0] * 24
             for hr in range(24):
@@ -336,14 +336,13 @@ if df_raw is not None and not df_raw.empty:
             with col_mando_izq:
                 st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📍 Top Localidades Afectadas</span>", unsafe_allow_html=True)
                 if len(df_filtrado) > 0:
-                    # --- CONFIGURACIÓN DE AGRUPACIÓN ---
                     col_agrupar = col_provincia if provincia_sel == "Todas" else col_ciudad
                     
                     df_top = df_filtrado.groupby(col_agrupar).agg(
                         Total_Casos=('SERVICIO', 'count')
                     ).reset_index()
                     
-                    # CORRECCIÓN: Cálculo de promedio entero absoluto redondeando a 0 decimales sin flotantes
+                    # Se mantiene el requerimiento de entero redondeado estricto sin decimales
                     df_top['📊 Prom/Día'] = (df_top['Total_Casos'] / num_fechas_reales).round(0).astype(int)
                     
                     df_top = df_top.rename(columns={col_agrupar: '📍 UBICACIÓN', 'Total_Casos': 'Casos'})
@@ -352,7 +351,6 @@ if df_raw is not None and not df_raw.empty:
                     total_general_casos = df_filtrado.shape[0]
                     df_top['%'] = (df_top['Casos'] / total_general_casos * 100).round(1).astype(str) + '%' if total_general_casos > 0 else '0%'
                     
-                    # Reordenar columnas para visualización final
                     df_top = df_top[['📍 UBICACIÓN', 'Casos', '📊 Prom/Día', '%']]
                     st.dataframe(df_top, use_container_width=True, height=140, hide_index=True)
                 else: st.info("Sin datos.")
@@ -485,7 +483,8 @@ if df_raw is not None and not df_raw.empty:
                 st.markdown(f'<div class="banner-feriado">📈 <b>Datos Históricos Reales:</b> Analizando Primer Día Laboral de Retorno del feriado del <b>{fecha_original}</b></div>', unsafe_allow_html=True)
             
             if not df_data_feriado.empty:
-                df_data_feriado[col_hora_agrupada] = pd.to_datetime(df_data_feriado[col_hora_agrupada], errors='coerce').dt.hour.fillna(-1).astype(int)
+                # --- SE RESTAURA LA EXTRACCIÓN DE LA HORA TAMBIÉN EN LA PESTAÑA DE FERIADOS ---
+                df_data_feriado[col_hora_agrupada] = pd.to_numeric(df_data_feriado[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
                 
                 df_neto_hora = df_data_feriado.groupby(col_hora_agrupada).size().reset_index(name='HISTORICO_CASOS')
                 df_neto_hora = df_neto_hora.sort_values(by=col_hora_agrupada)
