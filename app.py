@@ -321,7 +321,6 @@ if df_raw is not None and not df_raw.empty:
                 string_gruas = f"🚛 {gruas_necesarias} U." if es_remolque and (promedio_proyectado > 0 or gruas_necesarias > 0) else "-"
                 val_gruas_grafico = gruas_necesarias if es_remolque else 0
 
-                # --- EXPLICACIÓN ANALÍTICA EXPLICATIVA SOLICITADA ---
                 if promedio_base_calculado == 0 and gruas_necesarias == 0:
                     motivo_asesor = "Sin demanda"
                 else:
@@ -329,10 +328,8 @@ if df_raw is not None and not df_raw.empty:
                     if promedio_proyectado > 0:
                         if es_lluvia: explicaciones.append(f"{promedio_proyectado} nuevos por lluvia")
                         else: explicaciones.append(f"{promedio_proyectado} nuevos")
-                    
                     if gruas_necesarias > promedio_proyectado:
                         explicaciones.append("arrastre de unidad anterior")
-                    
                     motivo_asesor = " + ".join(explicaciones) if explicaciones else "Ok"
 
                 if promedio_base_calculado > 0 or string_gruas != "-":
@@ -343,33 +340,32 @@ if df_raw is not None and not df_raw.empty:
                 
                 data_grafico_lineas.append({
                     "Hora": hr, "Promedio Base": promedio_base_calculado,
-                    "Proyección Ajustada": promedio_proyectado, "Grúas Necesarias": val_gruas_grafico
+                    "Proyección Ajustada": promedio_proyectado, "Grúas Necesarias": val_grafico_gruas
                 })
 
-        # --- DISTRIBUCIÓN SOLICITADA: TOP LOCALIDADES A LA IZQUIERDA, MATRIZ A LA DERECHA ---
+        # --- SECCIÓN DE CONTENIDO ---
         with col_c:
+            # 1. Indicador métrico global en la parte superior
+            promedio_asistencias_dia = int(round(len(df_filtrado) / num_fechas_reales, 0))
+            st.metric(label=f"Promedio Total ({dia_sel.title()})", value=f"{promedio_asistencias_dia} Asist.")
+            
+            # 2. Bloque simétrico de Tablas: Perfectamente niveladas al mismo inicio horizontal
             col_mando_izq, col_mando_der = st.columns([3.5, 6.5])
             
-            # BLOQUE IZQUIERDO: TOP LOCALIDADES
             with col_mando_izq:
                 st.markdown("<span style='font-size:15px; font-weight:bold; color:#111;'>📍 Top Localidades</span>", unsafe_allow_html=True)
-                
-                promedio_asistencias_dia = int(round(len(df_filtrado) / num_fechas_reales, 0))
-                st.metric(label=f"Promedio Total ({dia_sel.title()})", value=f"{promedio_asistencias_dia} Asist.")
-                
                 if len(df_filtrado) > 0:
                     if provincia_sel == "Todas":
                         df_tp = df_filtrado.groupby(col_provincia).size().reset_index(name='Casos')
                         df_tp['P.'] = (df_tp['Casos'] / num_fechas_reales).round(0).astype(int)
-                        st.dataframe(df_tp.sort_values(by='Casos', ascending=False).head(5), use_container_width=True, height=140, hide_index=True)
+                        st.dataframe(df_tp.sort_values(by='Casos', ascending=False).head(5), use_container_width=True, height=215, hide_index=True)
                     else:
                         df_tc = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos')
                         df_tc['P.'] = (df_tc['Casos'] / num_fechas_reales).round(0).astype(int)
-                        st.dataframe(df_tc.sort_values(by='Casos', ascending=False).head(5), use_container_width=True, height=140, hide_index=True)
+                        st.dataframe(df_tc.sort_values(by='Casos', ascending=False).head(5), use_container_width=True, height=215, hide_index=True)
                 else:
                     st.info("Sin datos.")
 
-            # BLOQUE DERECHO: MATRIZ HORARIA DETALLADA (Alineación perfecta al mismo nivel horizontal)
             with col_mando_der:
                 st.markdown(f"<span style='font-size:15px; font-weight:bold; color:#111;'>⏰ Matriz Horaria Detallada: {dia_sel.title()}</span>", unsafe_allow_html=True)
                 if registros_tabla: 
