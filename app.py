@@ -391,27 +391,28 @@ if df_raw is not None and not df_raw.empty:
                         for incidente in estado_global["alertas_waze"][:1]:
                             st.markdown(f"<span style='font-size:9px; color:#d32f2f; font-weight:500;'>• {incidente}</span>", unsafe_allow_html=True)
 
-    # PESTAÑA 2: PLANIFICADOR DE FERIADOS (TOTALMENTE REDISEÑADO)
+    # PESTAÑA 2: PLANIFICADOR DE FERIADOS (REFACTORIZADO Y LIMPIO)
     with tab_feriados:
         col_f_fer, col_c_fer = st.columns([1.6, 8.4])
         
         with col_f_fer:
             st.markdown("<h4 style='margin:0px; font-size:14px; color:#111;'>⚙️ Planificador</h4>", unsafe_allow_html=True)
             
-            calendario_feriados_2026 = {
-                "Año Nuevo (Retorno Ene 5)": {"fecha_datos_historicos": "5/1/2026", "tipo": "Retorno"},
-                "Carnaval (Lunes Feb 16)": {"fecha_datos_historicos": "16/2/2026", "tipo": "Éxodo"},
-                "Carnaval (Retorno Feb 18)": {"fecha_datos_historicos": "18/2/2026", "tipo": "Retorno"},
-                "Viernes Santo (Retorno Abr 6)": {"fecha_datos_historicos": "6/4/2026", "tipo": "Retorno"},
-                "Día del Trabajo (Retorno May 4)": {"fecha_datos_historicos": "4/5/2026", "tipo": "Retorno"},
-                "Batalla de Pichincha (Retorno May 25)": {"fecha_datos_historicos": "25/5/2026", "tipo": "Retorno"},
-                "Primer Grito de Independencia (Retorno Ago 10)": {"fecha_datos_historicos": "10/8/2026", "tipo": "Retorno"},
-                "Independencia de Guayaquil (Retorno Oct 12)": {"fecha_datos_historicos": "12/10/2026", "tipo": "Retorno"},
-                "Día de los Difuntos (Nov 2)": {"fecha_datos_historicos": "2/11/2026", "tipo": "Éxodo"},
-                "Independencia de Cuenca (Retorno Nov 4)": {"fecha_datos_historicos": "4/11/2026", "tipo": "Retorno"},
-                "Navidad (Retorno Dic 28)": {"fecha_datos_historicos": "28/12/2026", "tipo": "Retorno"}
+            # Mapeo estructurado por tipo de feriado único asignando su fecha de primer día laboral (Retorno)
+            calendario_retornos_2026 = {
+                "Año Nuevo": "5/1/2026",
+                "Carnaval": "18/2/2026",
+                "Viernes Santo": "6/4/2026",
+                "Día del Trabajo": "4/5/2026",
+                "Batalla de Pichincha": "25/5/2026",
+                "Primer Grito de Independencia": "10/8/2026",
+                "Independencia de Guayaquil": "12/10/2026",
+                "Día de los Difuntos / Cuenca": "4/11/2026",
+                "Navidad": "28/12/2026"
             }
-            feriado_seleccionado = st.selectbox("📅 Feriado:", list(calendario_feriados_2026.keys()), key="sb_feriado_p")
+            
+            # Selector limpio sin duplicados visuales
+            feriado_seleccionado = st.selectbox("📅 Feriado Nacional:", list(calendario_retornos_2026.keys()), key="sb_feriado_unico")
             servicio_feriado = st.selectbox("🎯 Servicio:", sorted(list(df_raw[col_servicio].dropna().unique())), index=0, key="sb_servicio_p")
             
             provincia_feriado = st.selectbox("📍 Provincia:", ["Todas"] + df_raw[col_provincia].value_counts().index.tolist(), key="sb_provincia_p")
@@ -422,38 +423,36 @@ if df_raw is not None and not df_raw.empty:
                 ciudad_feriado = st.multiselect("🏙️ Ciudades:", options=[], disabled=True, placeholder="Filtre Provincia", key="ms_ciudad_p_dis")
 
         with col_c_fer:
-            meta_feriado = calendario_feriados_2026[feriado_seleccionado]
-            fecha_buscar_str = meta_feriado["fecha_datos_historicos"]
+            fecha_retorno_target = calendario_retornos_2026[feriado_seleccionado]
             
-            # Filtrado base por fecha e histórico operativo
-            df_data_feriado = df_raw[(df_raw[col_fecha] == fecha_buscar_str) & (df_raw[col_servicio] == servicio_feriado)].copy()
+            # Filtrado por el primer día laboral de retorno y tipo de asistencia
+            df_data_feriado = df_raw[(df_raw[col_fecha] == fecha_retorno_target) & (df_raw[col_servicio] == servicio_feriado)].copy()
             
-            # Aplicar filtros geográficos de la izquierda si se especifican
+            # Filtrado por locación (Provincia / Ciudad)
             if provincia_feriado != "Todas":
                 df_data_feriado = df_data_feriado[df_data_feriado[col_provincia] == provincia_feriado]
                 if ciudad_feriado:
                     df_data_feriado = df_data_feriado[df_data_feriado[col_ciudad].isin(ciudad_feriado)]
             
-            st.markdown(f'<div class="banner-feriado">🇨🇪 Base Histórica Analizada: <b>{fecha_buscar_str}</b> ({meta_feriado["tipo"]})</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="banner-feriado">📈 Analizando Primer Día Laboral de Retorno: <b>{fecha_retorno_target}</b></div>', unsafe_allow_html=True)
             
             if not df_data_feriado.empty:
                 df_data_feriado[col_hora_agrupada] = pd.to_numeric(df_data_feriado[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
                 
-                # --- COLLAPSE Y AGRUPACIÓN POR HORA NETO (Se eliminan Provincia/Ciudad de la tabla ya que están fijos a la izquierda) ---
+                # Consolidación neta por hora (Removiendo columnas duplicadas de Provincia y Ciudad de la tabla)
                 df_neto_hora = df_data_feriado.groupby(col_hora_agrupada).size().reset_index(name='HISTORICO_CASOS')
                 df_neto_hora = df_neto_hora.sort_values(by=col_hora_agrupada)
                 
                 registros_procesados = []
                 data_grafico_feriado = []
                 
-                # Inicializamos las 24 horas del día para rellenar vacíos si es necesario y mapear la curva
                 mapeo_casos = {row[col_hora_agrupada]: row['HISTORICO_CASOS'] for _, row in df_neto_hora.iterrows()}
                 
                 for hr in range(24):
                     casos_reales = mapeo_casos.get(hr, 0)
                     casos_previos = mapeo_casos.get(hr - 1, 0)
                     
-                    # Cálculo predictivo basado en volumen acumulado y arrastre logístico
+                    # Cálculo predictivo basado en la carga del retorno + arrastre operativo de la hora anterior
                     unidades_calculadas = math.ceil(casos_reales + (0.4 * casos_previos))
                     if casos_reales == 0 and unidades_calculadas <= 0:
                         unidades_calculadas = 0
@@ -478,23 +477,23 @@ if df_raw is not None and not df_raw.empty:
                 col_tab_izq, col_graf_der = st.columns([4.5, 5.5])
                 
                 with col_tab_izq:
-                    st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>⏰ Distribución Temporal de Carga</span>", unsafe_allow_html=True)
+                    st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>⏰ Distribución de Demanda y Flota Requerida</span>", unsafe_allow_html=True)
                     df_mostrar_feriados = pd.DataFrame(registros_procesados)
-                    st.dataframe(df_mostrar_feriados, use_container_width=True, height=200, hide_index=True)
+                    st.dataframe(df_mostrar_feriados, use_container_width=True, height=220, hide_index=True)
                 
                 with col_graf_der:
-                    st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📈 Curva de Comportamiento Crítico (Feriado)</span>", unsafe_allow_html=True)
+                    st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📈 Gráfico de Curva de Carga Operativa (Retorno)</span>", unsafe_allow_html=True)
                     if data_grafico_feriado:
                         df_gf = pd.DataFrame(data_grafico_feriado)
                         fig_feriado = go.Figure()
-                        fig_feriado.add_trace(go.Scatter(x=df_gf["Hora"], y=df_gf["Casos Históricos"], name="📊 Histórico Real", mode="lines+markers", line=dict(color="#2ca02c", width=2)))
-                        fig_feriado.add_trace(go.Scatter(x=df_gf["Hora"], y=df_gf["Grúas Proyectadas"], name="🚛 Grúas Planificadas", mode="lines+markers", line=dict(color="#d62728", width=2, dash="dot")))
+                        fig_feriado.add_trace(go.Scatter(x=df_gf["Hora"], y=df_gf["Casos Históricos"], name="📊 Histórico Real", mode="lines+markers", line=dict(color="#1f77b4", width=2)))
+                        fig_feriado.add_trace(go.Scatter(x=df_gf["Hora"], y=df_gf["Grúas Proyectadas"], name="🚛 Grúas Solicitadas", mode="lines+markers", line=dict(color="#d62728", width=2, dash="dot")))
                         fig_feriado.update_layout(
-                            xaxis=dict(tickmode="linear", tick0=0, dtick=2, title=dict(text="Hora", font=dict(size=9))),
+                            xaxis=dict(tickmode="linear", tick0=0, dtick=2, title=dict(text="Hora del Día", font=dict(size=9))),
                             yaxis=dict(title=dict(text="Cantidad", font=dict(size=9))),
-                            margin=dict(l=5, r=5, t=5, b=5), height=200, showlegend=True,
+                            margin=dict(l=5, r=5, t=5, b=5), height=220, showlegend=True,
                             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=9))
                         )
                         st.plotly_chart(fig_feriado, use_container_width=True, config={'displayModeBar': False})
             else:
-                st.info("⚠️ No se registran asistencias históricas cargadas para los criterios geográficos y de servicio seleccionados.")
+                st.info("⚠️ No existen registros históricos en la base para la fecha de retorno y filtros seleccionados.")
