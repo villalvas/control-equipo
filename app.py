@@ -409,7 +409,7 @@ if df_raw is not None and not df_raw.empty:
         # --- DISEÑO TOTALMENTE LIMPIO SIN BARRA LATERAL ---
         col_f_fer, col_c_fer = st.columns([3.5, 6.5])
         with col_f_fer:
-            # Lista completa y extendida de Feriados Nacionales de Ecuador 2026
+            # Lista única de Feriados Nacionales de Ecuador 2026 sin duplicados
             calendario_feriados_2026 = {
                 "Año Nuevo (Retorno Ene 5)": {"fecha_datos_historicos": "5/1/2026", "tipo": "Retorno"},
                 "Carnaval (Lunes Feb 16)": {"fecha_datos_historicos": "16/2/2026", "tipo": "Éxodo"},
@@ -429,10 +429,49 @@ if df_raw is not None and not df_raw.empty:
         with col_c_fer:
             meta_feriado = calendario_feriados_2026[feriado_seleccionado]
             fecha_buscar_str = meta_feriado["fecha_datos_historicos"]
-            df_data_feriado = df_raw[(df_raw[col_fecha] == fecha_buscar_str) & (df_raw[col_servicio] == servicio_feriado)]
+            
+            # Filtrado estricto por fecha histórica y tipo de asistencia
+            df_data_feriado = df_raw[(df_raw[col_fecha] == fecha_buscar_str) & (df_raw[col_servicio] == servicio_feriado)].copy()
             
             st.markdown(f'<div class="banner-feriado">🇨🇪 Base Histórica Analizada: <b>{fecha_buscar_str}</b> ({meta_feriado["tipo"]})</div>', unsafe_allow_html=True)
+            
             if not df_data_feriado.empty:
-                st.dataframe(df_data_feriado[[col_provincia, col_hora_agrupada]].head(5), use_container_width=True, height=130, hide_index=True)
+                # Estandarización de columnas numéricas de tiempo
+                df_data_feriado[col_hora_agrupada] = pd.to_numeric(df_data_feriado[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
+                
+                # Agrupación y colapso de filas repetidas por Provincia, Ciudad y Hora
+                df_agrupado = df_data_feriado.groupby([col_provincia, col_ciudad, col_hora_agrupada]).size().reset_index(name='HISTORICO_CASOS')
+                df_agrupado = df_agrupado.sort_values(by=[col_provincia, col_ciudad, col_hora_agrupada])
+                
+                # Cálculo de Grúas Requeridas por celda geográfica horaria basándose en el volumen operativo
+                registros_procesados = []
+                for idx, fila in df_agrupado.iterrows():
+                    casos_reales = fila['HISTORICO_CASOS']
+                    prov = fila[col_provincia]
+                    ciu = fila[col_ciudad]
+                    hora_int = fila[col_hora_agrupada]
+                    
+                    # Identificar arrastres previos en la misma zona geográfica para dimensionar la flota
+                    casos_previos = df_agrupado[
+                        (df_agrupado[col_provincia] == prov) & 
+                        (df_agrupado[col_ciudad] == ciu) & 
+                        (df_agrupado[col_hora_agrupada] == (hora_int - 1))
+                    ]['HISTORICO_CASOS'].sum()
+                    
+                    # Cálculo predictivo de unidades requeridas
+                    unidades_calculadas = math.ceil(casos_reales + (0.4 * casos_previos))
+                    if unidades_calculadas <= 0:
+                        unidades_calculadas = 1
+                        
+                    registros_procesados.append({
+                        "PROVINCIA": prov,
+                        "CIUDAD": ciu,
+                        "HORA": f"{hora_int:02d}:00",
+                        "HISTÓRICO CASOS": casos_reales,
+                        "GRÚAS REQUERIDAS": f"🚛 {unidades_calculadas} U."
+                    })
+                
+                df_mostrar_feriados = pd.DataFrame(registros_procesados)
+                st.dataframe(df_mostrar_feriados, use_container_width=True, height=160, hide_index=True)
             else:
-                st.caption("Sin registros históricos específicos cargados en el consolidado para este corte.")
+                st.info("⚠️ No se registran asistencias históricas cargadas para la fecha seleccionada con ese tipo de servicio.")
