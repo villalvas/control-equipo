@@ -177,7 +177,6 @@ if df_raw is not None and not df_raw.empty:
     df_raw[col_fecha] = df_raw[col_fecha].astype(str).str.strip().str.split().str[0]
 
     # --- ARQUITECTURA DE CONTENEDORES MAESTROS SIN SCROLL ---
-    # Columna Izquierda: Filtros fijos laterales | Columna Derecha: El centro de visualización completo
     col_sidebar, col_main_content = st.columns([1.6, 8.4])
     
     if "dia_sel_key" not in st.session_state: st.session_state["dia_sel_key"] = estado_global["filtros_persistentes"]["dia_sel"]
@@ -311,28 +310,46 @@ if df_raw is not None and not df_raw.empty:
             })
 
     with col_main_content:
-        # Pestañas de control de operación de baja altura
         tab_normal, tab_feriados = st.tabs(["🔮 Operación Diaria (Normal)", "📈 Planificador de Feriados"])
 
         with tab_normal:
-            # --- FILA SUPERIOR CENTRAL: LOCALIDADES AFECTADAS Y MATRIZ HORARIA DE LADO A LADO ---
-            col_mando_izq, col_mando_der = st.columns([3.8, 6.2])
+            # --- FILA SUPERIOR CENTRAL: LOCALIDADES AFECTADAS Y MATRIZ HORARIA ---
+            col_mando_izq, col_mando_der = st.columns([4.0, 6.0])
             
             with col_mando_izq:
                 st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📍 Top Localidades Affected</span>", unsafe_allow_html=True)
                 if len(df_filtrado) > 0:
+                    # Determinación de columna y agrupación
                     if provincia_sel == "Todas":
-                        df_tp = df_filtrado.groupby(col_provincia).size().reset_index(name='Casos')
-                        df_tp = df_tp.rename(columns={col_provincia: 'PROVINCIA'})
-                        df_tp['P.'] = (df_tp['Casos'] / num_fechas_reales).round(0).astype(int)
-                        df_tp = df_tp[['PROVINCIA', 'Casos']].sort_values(by='Casos', ascending=False).head(5)
-                        st.bar_chart(df_tp.set_index('PROVINCIA'), horizontal=True, height=140, use_container_width=True)
+                        df_top = df_filtrado.groupby(col_provincia).size().reset_index(name='Casos')
+                        df_top = df_top.rename(columns={col_provincia: 'Eje'})
                     else:
-                        df_tc = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos')
-                        df_tc = df_tc.rename(columns={col_ciudad: 'CIUDAD'})
-                        df_tc['P.'] = (df_tc['Casos'] / num_fechas_reales).round(0).astype(int)
-                        df_tc = df_tc[['CIUDAD', 'Casos']].sort_values(by='Casos', ascending=False).head(5)
-                        st.bar_chart(df_tc.set_index('CIUDAD'), horizontal=True, height=140, use_container_width=True)
+                        df_top = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos')
+                        df_top = df_top.rename(columns={col_ciudad: 'Eje'})
+                    
+                    # Ordenar estrictamente de Mayor a Menor para el Top 5
+                    df_top = df_top.sort_values(by='Casos', ascending=False).head(5)
+                    
+                    # Generación del gráfico horizontal mediante Plotly con etiquetas explícitas
+                    # Nota: Plotly grafica de abajo hacia arriba en barras horizontales, por ende invertimos el eje en el layout para mantener el mayor arriba.
+                    fig_top = go.Figure(go.Bar(
+                        x=df_top['Casos'],
+                        y=df_top['Eje'],
+                        orientation='h',
+                        text=df_top['Casos'],              # Muestra la cantidad directamente
+                        textposition='outside',            # Posiciona el número fuera de la barra
+                        marker_color='#444444',            # Tono oscuro ejecutivo idéntico al mock
+                        textfont=dict(size=11, fontfamily="Arial")
+                    ))
+                    fig_top.update_layout(
+                        margin=dict(l=5, r=40, t=5, b=5),  # Margen derecho amplio para el número
+                        height=140,
+                        xaxis=dict(showgrid=False, visible=False), # Ocultamos el eje X para ahorrar espacio
+                        yaxis=dict(autorange="reversed", font=dict(size=11)), # Forzado estricto de Mayor arriba
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)'
+                    )
+                    st.plotly_chart(fig_top, use_container_width=True, config={'displayModeBar': False})
                 else:
                     st.info("Sin datos.")
 
@@ -343,7 +360,7 @@ if df_raw is not None and not df_raw.empty:
                 else:
                     st.info("Sin asistencias.")
 
-            # --- FILA INFERIOR CENTRAL: CURVA LINEAL ORIGINAL + RESUMEN EJECUTIVO / WAZE ---
+            # --- FILA INFERIOR CENTRAL: CURVA LINEAL + RESUMEN EJECUTIVO / WAZE ---
             st.markdown("<div style='margin-top: 4px; border-top: 1px solid #ddd; padding-top: 2px;'></div>", unsafe_allow_html=True)
             
             col_grafico_full, col_resumen_waze = st.columns([6.8, 3.2])
@@ -360,19 +377,17 @@ if df_raw is not None and not df_raw.empty:
                         xaxis=dict(tickmode="linear", tick0=0, dtick=1, title=dict(text="Hora del Día", font=dict(size=10))),
                         yaxis=dict(title=dict(text="Unidades / Incidentes", font=dict(size=10))),
                         margin=dict(l=5, r=5, t=5, b=5),
-                        height=150,  # Altura exacta ideal para pantallas de control estáticas
+                        height=150,
                         showlegend=True,
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=9))
                     )
                     st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
             with col_resumen_waze:
-                # Módulo de métricas integradas de demanda
                 promedio_asistencias_dia = int(round(len(df_filtrado) / num_fechas_reales, 0))
                 st.markdown(f"<span style='font-size:11px; color:#555;'>Promedio ({dia_sel.title()})</span>", unsafe_allow_html=True)
                 st.markdown(f"<h3 style='margin:0px; padding:0px; font-size:28px; line-height:1;'>{promedio_asistencias_dia} Asist.</h3>", unsafe_allow_html=True)
                 
-                # Caja de escaneo vial compacta sin scroll
                 st.markdown("<span style='font-size:11px; font-weight:bold; color:#1e88e5; display:block; margin-top:4px;'>🚛 Alertas Waze Realtime</span>", unsafe_allow_html=True)
                 
                 c_w1, c_w2 = st.columns([4.5, 5.5])
@@ -410,9 +425,6 @@ if df_raw is not None and not df_raw.empty:
                         for incidente in estado_global["alertas_waze"][:1]:
                             st.markdown(f"<span style='font-size:9px; color:#d32f2f; font-weight:500;'>• {incidente}</span>", unsafe_allow_html=True)
 
-        # ==========================================
-        # PESTAÑA 2: PLANIFICADOR DE FERIADOS
-        # ==========================================
         with tab_feriados:
             col_f_fer, col_c_fer = st.columns([3.0, 7.0])
             with col_f_fer:
