@@ -7,7 +7,7 @@ import math
 import streamlit.components.v1 as components
 import plotly.graph_objects as go
 
-# 1. Configuración de pantalla completa para salas de control
+# 1. Configuración de pantalla completa y compacta para salas de control
 st.set_page_config(
     layout="wide", 
     page_title="Monitor de Proyecciones 2026 - Control de Flota",
@@ -27,7 +27,7 @@ components.html(
     width=0
 )
 
-# Estilos CSS optimizados para permitir crecimiento vertical ordenado sin scroll interno en tablas
+# Estilos CSS radicales para compactar todo el Dashboard en 1 sola pantalla sin scroll
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -36,41 +36,41 @@ st.markdown("""
     .stDataFrame [data-testid="stDataFrameDownloadButton"] {display: none;}
     button[title="View fullscreen"] {display: none;}
     
-    /* Configuración de márgenes limpios */
+    /* Forzado de márgenes cero para evitar scroll general */
     .block-container {
-        padding-top: 0.4rem !important;
-        padding-bottom: 0.4rem !important;
+        padding-top: 0.2rem !important;
+        padding-bottom: 0.1rem !important;
         padding-left: 0.8rem !important;
         padding-right: 0.8rem !important;
         margin-top: 0px !important;
     }
     
-    /* Celdas de tablas legibles y compactas */
+    /* Celdas de tablas ultra compactas */
     [data-testid="stTable"] td, [data-testid="stDataFrame"] td, div[data-testid="stDataFrame"] [role="gridcell"] {
         font-size: 11px !important;
         font-weight: 500 !important;
-        padding: 2px 4px !important;
+        padding: 1px 3px !important;
     }
     [data-testid="stTable"] th, [data-testid="stDataFrame"] th, div[data-testid="stDataFrame"] [role="columnheader"] {
         font-size: 11px !important;
         font-weight: bold !important;
-        padding: 3px 4px !important;
+        padding: 2px 3px !important;
     }
     
     .card-saldo {
         background-color: #f0f7f4;
         border: 1px solid #d2e7de;
-        padding: 4px;
+        padding: 2px 4px;
         border-radius: 4px;
         text-align: center;
-        margin-top: 2px;
+        margin-top: 1px;
     }
     .banner-feriado {
         background-color: #fff8e1;
         border-left: 5px solid #ffb300;
-        padding: 6px;
+        padding: 4px;
         border-radius: 4px;
-        margin-bottom: 6px;
+        margin-bottom: 4px;
         font-weight: 500;
         font-size: 11px;
     }
@@ -79,10 +79,11 @@ st.markdown("""
         padding-bottom: 0px !important;
         gap: 0px !important;
     }
-    /* Selectores de filtros de barra lateral */
+    /* Optimizar el espaciado de los selectores de filtros */
     div[data-testid="stSelectbox"] label, div[data-testid="stMultiSelect"] label {
         font-size: 11px !important;
         margin-bottom: 2px !important;
+        padding-bottom: 0px !important;
     }
     div[data-testid="stSelectbox"] > div, div[data-testid="stMultiSelect"] > div {
         padding: 0px !important;
@@ -115,7 +116,7 @@ estado_global = inicializar_memoria_inmune()
 
 # Título del Monitor Principal de Control
 st.markdown(f"<h2 style='margin:0px; padding:0px; font-size:26px;'>🔮 Proyección Horaria y Alerta de Flota</h2>", unsafe_allow_html=True)
-st.markdown(f"<p style='margin:0px 0px 8px 0px; font-size:11px; color:#555;'><b>Control Geoanalítico</b> | 🔄 Refresco automático en 15 min. (Última Actualización: {hora_estatica_str})</p>", unsafe_allow_html=True)
+st.markdown(f"<p style='margin:0px 0px 6px 0px; font-size:11px; color:#555;'><b>Control Geoanalítico</b> | 🔄 Refresco automático en 15 min. (Última Actualización: {hora_estatica_str})</p>", unsafe_allow_html=True)
 
 coordenadas_provincias = {
     'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
@@ -175,7 +176,7 @@ if df_raw is not None and not df_raw.empty:
     df_raw[col_cobertura] = df_raw[col_cobertura].astype(str).str.strip().str.upper() if col_cobertura in df_raw.columns else "LOCAL"
     df_raw[col_fecha] = df_raw[col_fecha].astype(str).str.strip().str.split().str[0]
 
-    # --- ARQUITECTURA DE CONTENEDORES MAESTROS ---
+    # --- ARQUITECTURA DE CONTENEDORES MAESTROS SIN SCROLL ---
     col_sidebar, col_main_content = st.columns([1.6, 8.4])
     
     if "dia_sel_key" not in st.session_state: st.session_state["dia_sel_key"] = estado_global["filtros_persistentes"]["dia_sel"]
@@ -276,11 +277,12 @@ if df_raw is not None and not df_raw.empty:
                 p_local_calc = p_local
                 p_foraneo_calc = p_foraneo
 
-            # --- ARRASTRE ATENUADO ---
+            # --- LÓGICA DE ARRASTRE MEJORADA (ATENUACIÓN DE CASCADA) ---
             l_ant = p_local_calc if hr == 0 else (casos_locales[hr-1] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
             f_ant1 = p_foraneo_calc if hr == 0 else (casos_foraneos[hr-1] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
             f_ant2 = p_foraneo_calc if hr <= 1 else (casos_foraneos[hr-2] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
             
+            # Si no hay demanda nueva en la hora actual, atenuamos fuertemente el residuo del pasado
             if promedio_proyectado == 0:
                 gruas_necesarias = math.ceil((0.1 * l_ant) + (0.2 * f_ant1) + (0.1 * f_ant2))
             else:
@@ -289,6 +291,7 @@ if df_raw is not None and not df_raw.empty:
             es_remolque = any(x in str(servicio_sel).upper() for x in ["REMOLQUE", "GRÚA", "GRUA", "TODOS"])
             string_gruas = f"🚛 {gruas_necesarias} U." if es_remolque and (promedio_proyectado > 0 or gruas_necesarias > 0) else "-"
 
+            # Ajuste de Diagnósticos dinámicos y coherentes
             if promedio_base_calculado == 0 and gruas_necesarias == 0:
                 motivo_asesor = "Sin demanda"
             else:
@@ -300,10 +303,11 @@ if df_raw is not None and not df_raw.empty:
                     explicaciones.append("arrastre ant.")
                 motivo_asesor = " + ".join(explicaciones) if explicaciones else "Ok"
 
-            registros_tabla.append({
-                "HORA": f"{hr:02d}:00", "🌤️ Clima": detalle_clima, "📊 Prom": promedio_base_calculado, 
-                "📈 Proy": etiqueta_proyeccion, "🚛 Grúas N.": string_gruas, "📋 Diagnóstico": motivo_asesor
-            })
+            if promedio_base_calculado > 0 or string_gruas != "-":
+                registros_tabla.append({
+                    "HORA": f"{hr:02d}:00", "🌤️ Clima": detalle_clima, "📊 Prom": promedio_base_calculado, 
+                    "📈 Proy": etiqueta_proyeccion, "🚛 Grúas N.": string_gruas, "📋 Diagnóstico": motivo_asesor
+                })
             
             data_grafico_lineas.append({
                 "Hora": hr, "Promedio Base": promedio_base_calculado,
@@ -314,8 +318,8 @@ if df_raw is not None and not df_raw.empty:
         tab_normal, tab_feriados = st.tabs(["🔮 Operación Diaria (Normal)", "📈 Planificador de Feriados"])
 
         with tab_normal:
-            # --- FILA SUPERIOR CONTENEDORA: TABLAS EXPANDIDAS PARA VER TODO HACIA ABAJO ---
-            col_mando_izq, col_mando_der, col_mando_waze = st.columns([3.2, 4.6, 2.2])
+            # --- FILA SUPERIOR CENTRAL: TABLA DE LOCALIDADES Y MATRIZ HORARIA ---
+            col_mando_izq, col_mando_der = st.columns([4.2, 5.8])
             
             with col_mando_izq:
                 st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📍 Top Localidades Afectadas</span>", unsafe_allow_html=True)
@@ -327,85 +331,93 @@ if df_raw is not None and not df_raw.empty:
                         df_top = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos')
                         df_top = df_top.rename(columns={col_ciudad: '📍 UBICACIÓN'})
                     
-                    df_top = df_top.sort_values(by='Casos', ascending=False)
-                    total_general_casos = df_filtrado.shape[0]
-                    df_top['%'] = (df_top['Casos'] / total_general_casos * 100).round(1).astype(str) + '%'
+                    df_top = df_top.sort_values(by='Casos', ascending=False).head(5)
                     
-                    # Se sube el height a 520 para desplegar la lista completa hacia abajo sin cortes
-                    st.dataframe(df_top, use_container_width=True, height=520, hide_index=True)
+                    total_general_casos = df_filtrado.shape[0]
+                    if total_general_casos > 0:
+                        df_top['%'] = (df_top['Casos'] / total_general_casos * 100).round(1).astype(str) + '%'
+                    else:
+                        df_top['%'] = '0%'
+                    
+                    st.dataframe(df_top, use_container_width=True, height=140, hide_index=True)
                 else:
                     st.info("Sin datos.")
 
             with col_mando_der:
-                st.markdown(f"<span style='font-size:12px; font-weight:bold; color:#111;'>⏰ Matriz Horaria Detallada de 24 Horas: {dia_sel.title()}</span>", unsafe_allow_html=True)
+                st.markdown(f"<span style='font-size:12px; font-weight:bold; color:#111;'>⏰ Matriz Horaria Detallada: {dia_sel.title()}</span>", unsafe_allow_html=True)
                 if registros_tabla: 
-                    # Se sube el height a 520 para que entren las 24 horas completas en la pantalla sin scroll interno
-                    st.dataframe(pd.DataFrame(registros_tabla), use_container_width=True, height=520, hide_index=True)
+                    st.dataframe(pd.DataFrame(registros_tabla), use_container_width=True, height=140, hide_index=True)
                 else:
                     st.info("Sin asistencias.")
 
-            with col_mando_waze:
+            # --- FILA INFERIOR CENTRAL: CURVA LINEAL (PROMEDIO Y PROYECCIÓN CLIMA SOLAMENTE) ---
+            st.markdown("<div style='margin-top: 4px; border-top: 1px solid #ddd; padding-top: 2px;'></div>", unsafe_allow_html=True)
+            
+            col_grafico_full, col_resumen_waze = st.columns([6.8, 3.2])
+            
+            with col_grafico_full:
+                st.markdown("<span style='font-size:13px; font-weight:bold; display:block;'>📈 Curva de Carga Operativa (24 Horas)</span>", unsafe_allow_html=True)
+                if data_grafico_lineas:
+                    df_gl = pd.DataFrame(data_grafico_lineas)
+                    fig_lineas = go.Figure()
+                    
+                    # Serie 1: Promedio Base Histórico
+                    fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Promedio Base"], name="📊 Promedio Base", mode="lines+markers", line=dict(color="#1f77b4", width=2)))
+                    
+                    # Serie 2: Proyección Ajustada por Clima
+                    fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Proyección Ajustada"], name="📈 Proyección por Clima", mode="lines+markers", line=dict(color="#ff7f0e", width=2, dash="dash")))
+                    
+                    fig_lineas.update_layout(
+                        xaxis=dict(tickmode="linear", tick0=0, dtick=1, title=dict(text="Hora del Día", font=dict(size=10))),
+                        yaxis=dict(title=dict(text="Incidentes / Asistencias", font=dict(size=10))),
+                        margin=dict(l=5, r=5, t=5, b=5),
+                        height=150,
+                        showlegend=True,
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=9))
+                    )
+                    st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
+
+            with col_resumen_waze:
                 promedio_asistencias_dia = int(round(len(df_filtrado) / num_fechas_reales, 0))
                 st.markdown(f"<span style='font-size:11px; color:#555;'>Promedio ({dia_sel.title()})</span>", unsafe_allow_html=True)
-                st.markdown(f"<h3 style='margin:0px; padding:0px; font-size:26px; line-height:1;'>{promedio_asistencias_dia} Asist.</h3>", unsafe_allow_html=True)
+                st.markdown(f"<h3 style='margin:0px; padding:0px; font-size:28px; line-height:1;'>{promedio_asistencias_dia} Asist.</h3>", unsafe_allow_html=True)
                 
-                st.markdown("<span style='font-size:11px; font-weight:bold; color:#1e88e5; display:block; margin-top:8px;'>🚛 Alertas Waze Realtime</span>", unsafe_allow_html=True)
+                st.markdown("<span style='font-size:11px; font-weight:bold; color:#1e88e5; display:block; margin-top:4px;'>🚛 Alertas Waze Realtime</span>", unsafe_allow_html=True)
                 
-                ejecutar_consulta = st.button("🔍 Escanear Mapa", use_container_width=True, key="btn_waze_comp")
-                if ejecutar_consulta and estado_global["creditos"] > 0:
-                    bbox_nacional_ecuador = {"bottom_left": "-5.0000,-81.0000", "top_right": "1.5000,-75.0000"}
-                    def consultar_alertas_waze_real(bbox_dict):
-                        api_key = "ak_823f13app2zd9qkia4z6vdi27ttb31z9a7v7pvlhnn878w3"
-                        try:
-                            url = "https://api.openwebninja.com/waze/alerts-and-jams"
-                            headers = {"X-API-Key": api_key}
-                            params = {"bottom_left": "-2.2500,-79.9500", "top_right": "-2.1000,-79.8000"} if provincia_sel == "Todas" else {"bottom_left": bbox_dict["bottom_left"], "top_right": bbox_dict["top_right"]}
-                            respuesta = requests.get(url, headers=headers, params=params, timeout=10).json()
-                            alertas = []
-                            if "alerts" in respuesta and respuesta["alerts"]:
-                                for item in respuesta["alerts"][:3]:
-                                    tipo = item.get("type", "TRÁFICO").replace("_", " ")
-                                    calle = item.get("street", "Vía pública")
-                                    alertas.append(f"⚠️ {tipo} en {calle[:12]}...")
-                            return alertas if alertas else ["✅ Flujo normal."]
-                        except: return ["⚠️ Error de conexión."]
+                c_w1, c_w2 = st.columns([4.5, 5.5])
+                with c_w1:
+                    ejecutar_consulta = st.button("🔍 Escanear Mapa", use_container_width=True, key="btn_waze_comp")
+                    if ejecutar_consulta and estado_global["creditos"] > 0:
+                        bbox_nacional_ecuador = {"bottom_left": "-5.0000,-81.0000", "top_right": "1.5000,-75.0000"}
+                        def consultar_alertas_waze_real(bbox_dict):
+                            api_key = "ak_823f13app2zd9qkia4z6vdi27ttb31z9a7v7pvlhnn878w3"
+                            try:
+                                url = "https://api.openwebninja.com/waze/alerts-and-jams"
+                                headers = {"X-API-Key": api_key}
+                                params = {"bottom_left": "-2.2500,-79.9500", "top_right": "-2.1000,-79.8000"} if provincia_sel == "Todas" else {"bottom_left": bbox_dict["bottom_left"], "top_right": bbox_dict["top_right"]}
+                                respuesta = requests.get(url, headers=headers, params=params, timeout=10).json()
+                                alertas = []
+                                if "alerts" in respuesta and respuesta["alerts"]:
+                                    for item in respuesta["alerts"][:2]:
+                                        tipo = item.get("type", "TRÁFICO").replace("_", " ")
+                                        calle = item.get("street", "Vía pública")
+                                        alertas.append(f"⚠️ {tipo} en {calle[:12]}...")
+                                return alertas if alertas else ["✅ Flujo normal."]
+                            except: return ["⚠️ Error de conexión."]
+                        
+                        estado_global["alertas_waze"] = consultar_alertas_waze_real(bbox_nacional_ecuador)
+                        estado_global["ultima_hora_waze"] = ahora_actual.strftime('%I:%M %p')
+                        estado_global["creditos"] -= 1
                     
-                    estado_global["alertas_waze"] = consultar_alertas_waze_real(bbox_nacional_ecuador)
-                    estado_global["ultima_hora_waze"] = ahora_actual.strftime('%I:%M %p')
-                    estado_global["creditos"] -= 1
+                    st.markdown(f'<div class="card-saldo"><span style="font-size:9px;color:#444;">Tk: <b>{estado_global["creditos"]}</b>/50</span></div>', unsafe_allow_html=True)
                 
-                st.markdown(f'<div class="card-saldo"><span style="font-size:10px;color:#444;">Tokens: <b>{estado_global["creditos"]}</b>/50</span></div>', unsafe_allow_html=True)
-                st.markdown(f"<span style='font-size:9px; color:#777; display:block; margin-top:4px;'>Último: {estado_global['ultima_hora_waze']}</span>", unsafe_allow_html=True)
-                
-                if not estado_global["alertas_waze"]: 
-                    st.markdown("<span style='font-size:10px; color:#999;'>• Requiere escaneo.</span>", unsafe_allow_html=True)
-                else:
-                    for incidente in estado_global["alertas_waze"]:
-                        st.markdown(f"<span style='font-size:10px; color:#d32f2f; font-weight:500;'>• {incidente}</span>", unsafe_allow_html=True)
-
-            # --- FILA INFERIOR INDEPENDIENTE: EL GRÁFICO SE BAJA AQUÍ EN ANCHO COMPLETO ---
-            st.markdown("<div style='margin-top: 12px; border-top: 2px solid #ddd; padding-top: 8px;'></div>", unsafe_allow_html=True)
-            
-            st.markdown("<span style='font-size:13px; font-weight:bold; display:block;'>📈 Curva de Carga Operativa (24 Horas)</span>", unsafe_allow_html=True)
-            if data_grafico_lineas:
-                df_gl = pd.DataFrame(data_grafico_lineas)
-                fig_lineas = go.Figure()
-                
-                # Serie 1: Promedio Base Histórico
-                fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Promedio Base"], name="📊 Promedio Base", mode="lines+markers", line=dict(color="#1f77b4", width=2)))
-                
-                # Serie 2: Proyección Ajustada por Clima
-                fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Proyección Ajustada"], name="📈 Proyección por Clima", mode="lines+markers", line=dict(color="#ff7f0e", width=2, dash="dash")))
-                
-                fig_lineas.update_layout(
-                    xaxis=dict(tickmode="linear", tick0=0, dtick=1, title=dict(text="Hora del Día", font=dict(size=11))),
-                    yaxis=dict(title=dict(text="Incidentes / Asistencias", font=dict(size=11))),
-                    margin=dict(l=10, r=10, t=10, b=10),
-                    height=200, # Altura optimizada para la base de la pantalla
-                    showlegend=True,
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10))
-                )
-                st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
+                with c_w2:
+                    st.markdown(f"<span style='font-size:9px; color:#777; display:block;'>Último: {estado_global['ultima_hora_waze']}</span>", unsafe_allow_html=True)
+                    if not estado_global["alertas_waze"]: 
+                        st.markdown("<span style='font-size:9px; color:#999;'>• Requiere escaneo.</span>", unsafe_allow_html=True)
+                    else:
+                        for incidente in estado_global["alertas_waze"][:1]:
+                            st.markdown(f"<span style='font-size:9px; color:#d32f2f; font-weight:500;'>• {incidente}</span>", unsafe_allow_html=True)
 
         with tab_feriados:
             col_f_fer, col_c_fer = st.columns([3.0, 7.0])
@@ -425,6 +437,6 @@ if df_raw is not None and not df_raw.empty:
                 
                 st.markdown(f'<div class="banner-feriado">🇨🇪 Base Histórica: <b>{fecha_buscar_str}</b> ({meta_feriado["tipo"]})</div>', unsafe_allow_html=True)
                 if not df_data_feriado.empty:
-                    st.dataframe(df_data_feriado[[col_provincia, col_hora_agrupada]].head(10), use_container_width=True, height=200, hide_index=True)
+                    st.dataframe(df_data_feriado[[col_provincia, col_hora_agrupada]].head(5), use_container_width=True, height=130, hide_index=True)
                 else:
                     st.caption("Sin registros históricos para este corte.")
