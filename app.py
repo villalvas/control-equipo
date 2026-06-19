@@ -109,9 +109,8 @@ hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
 @st.cache_resource
 def inicializar_memoria_inmune():
     return {
-        "creditos": 48,
-        "alertas_waze": [],
-        "ultima_hora_waze": "Nunca",
+        "historico_alertas": [], # Almacena diccionarios con claves: 'hora', 'provincia', 'texto'
+        "ultima_consulta_tomtom": "Nunca",
         "filtros_normal": {
             "dia_sel": "TODOS",
             "servicio_sel": "Todos",
@@ -128,6 +127,56 @@ def inicializar_memoria_inmune():
     }
 
 estado_global = inicializar_memoria_inmune()
+
+# --- MOTOR AUTOMÁTICO DE ENLACE DE TRÁFICO ONLINE (Ecuador) ---
+def actualizar_alertas_nacionales_tomtom():
+    # AGREGA TU KEY GRATUITA DE TOMTOM DEVELOPER AQUÍ
+    TOMTOM_API_KEY = "TU_API_KEY_DE_TOMTOM"
+    
+    if TOMTOM_API_KEY == "TU_API_KEY_DE_TOMTOM":
+        return
+        
+    # Rectángulo contenedor que encierra a todo el territorio de Ecuador
+    bbox_ecuador = "-81.0000,-5.0000,-75.0000,1.5000"
+    
+    try:
+        url = f"https://api.tomtom.com/traffic/services/4/incidentDetails/s3/{bbox_ecuador}/11/-1/json"
+        params = {"key": TOMTOM_API_KEY, "geometries": "false", "language": "es-ES"}
+        respuesta = requests.get(url, params=params, timeout=8).json()
+        
+        if "tm" in respuesta and "poi" in respuesta["tm"]:
+            for incidente in respuesta["tm"]["poi"]:
+                descripcion = incidente.get("d", "Incidente")
+                calle = incidente.get("f", "Vía")
+                magnitud = incidente.get("ic", 1) # 1: Bajo, 2: Medio, 3: Grave, 4: Cierre Total
+                
+                # Taggeo automático para filtrar por provincia de forma inteligente
+                prov_detectada = "TODAS"
+                listado_provincias = ['PICHINCHA', 'GUAYAS', 'AZUAY', 'MANABI', 'EL ORO', 'LOJA', 'LOS RIOS', 'SANTA ELENA', 'TUNGURAHUA']
+                for p in listado_provincias:
+                    if p in descripcion.upper() or p in calle.upper():
+                        prov_detectada = p
+                        break
+                
+                iconos = {1: "⚠️", 2: "🚗 Tráfico", 3: "💥 Choque", 4: "🚫 Vía Cerrada"}
+                txt_final = f"{iconos.get(magnitud, '⚠️')} | {calle}: {descripcion}"
+                h_reporte = datetime.now(zona_ecuador).strftime('%I:%M %p')
+                
+                if not any(x['texto'] == txt_final for x in estado_global["historico_alertas"]):
+                    estado_global["historico_alertas"].insert(0, {
+                        "hora": h_reporte,
+                        "provincia": prov_detectada,
+                        "texto": txt_final
+                    })
+            
+            # Mantener un tope para evitar sobrecarga visual
+            estado_global["historico_alertas"] = estado_global["historico_alertas"][:30]
+            estado_global["ultima_consulta_tomtom"] = datetime.now(zona_ecuador).strftime('%I:%M %p')
+    except:
+        pass
+
+# Se ejecuta en silencio de fondo con cada refresco
+actualizar_alertas_nacionales_tomtom()
 
 st.markdown(f"<h2 style='margin:0px; padding:0px; font-size:26px;'>🔮 Proyección Horaria y Alerta de Flota</h2>", unsafe_allow_html=True)
 st.markdown(f"<p style='margin:0px 0px 6px 0px; font-size:11px; color:#555;'><b>Control Geoanalítico</b> | 🔄 Memoria Inmune Activa (Última Actualización: {hora_estatica_str})</p>", unsafe_allow_html=True)
@@ -190,16 +239,8 @@ if df_raw is not None and not df_raw.empty:
     df_raw[col_cobertura] = df_raw[col_cobertura].astype(str).str.strip().str.upper() if col_cobertura in df_raw.columns else "LOCAL"
     df_raw[col_fecha] = df_raw[col_fecha].astype(str).str.strip().str.split().str[0]
 
-    # --- LIMPIEZA INTELIGENTE Y ROBUSTA DE LA COLUMNA DE HORAS ---
-    def extraer_hora_limpia(val):
-        val_str = str(val).strip().split('.')[0]
-        if ":" in val_str:
-            return int(val_str.split(":")[0])
-        try: return int(val_str)
-        except: return -1
-
     if col_hora_agrupada in df_raw.columns:
-        df_raw[col_hora_agrupada] = df_raw[col_hora_agrupada].apply(extraer_hora_limpia)
+        df_raw[col_hora_agrupada] = df_raw[col_hora_agrupada].apply(lambda val: int(str(val).strip().split(':')[0]) if ":" in str(val) else (int(str(val).split('.')[0]) if str(val).split('.')[0].isdigit() else -1))
 
     tab_normal, tab_feriados = st.tabs(["🔮 Operación Diaria (Normal)", "📈 Planificador de Feriados"])
 
@@ -246,14 +287,12 @@ if df_raw is not None and not df_raw.empty:
                 estado_sel = st.multiselect("📌 Estado:", options=estados_disponibles, key="estado_sel_key", on_change=guardar_estado_callback)
             else: estado_sel = []
 
-            # --- UBICACIÓN INMUNE E INMEDIATA DEL BOTÓN REBOOT EN EL SIDEBAR ---
             st.markdown("<div style='margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 10px;'></div>", unsafe_allow_html=True)
             if st.button("🔄 REBOOT APP", use_container_width=True, key="btn_reboot_sidebar"):
                 st.cache_data.clear()
                 st.cache_resource.clear()
                 st.rerun()
 
-        # --- CÁLCULO DE FECHAS GLOBALES ---
         if dia_sel.upper() == "TODOS":
             df_filtrado_dia = df_raw.copy()
             num_fechas_reales = df_raw[col_fecha].nunique() if col_fecha in df_raw.columns else 1
@@ -292,10 +331,8 @@ if df_raw is not None and not df_raw.empty:
                 df_b = df_horas_raw[df_horas_raw[col_hora_agrupada] == hr]
                 for _, fila in df_b.iterrows():
                     cobertura_str = str(fila[col_cobertura]).upper().strip() if col_cobertura in fila else "LOCAL"
-                    if "FOR" in cobertura_str: 
-                        casos_foraneos[hr] += 1
-                    else: 
-                        casos_locales[hr] += 1
+                    if "FOR" in cobertura_str: casos_foraneos[hr] += 1
+                    else: casos_locales[hr] += 1
 
             for hr in range(24):
                 p_local, p_foraneo = casos_locales[hr] / num_fechas_reales, casos_foraneos[hr] / num_fechas_reales
@@ -328,15 +365,13 @@ if df_raw is not None and not df_raw.empty:
                 es_remolque = any(x in str(servicio_sel).upper() for x in ["REMOLQUE", "GRÚA", "GRUA", "TODOS"])
                 string_gruas = f"🚛 {gruas_necesarias} U." if es_remolque and (promedio_proyectado > 0 or gruas_necesarias > 0) else "-"
 
-                if promedio_base_calculado == 0 and gruas_necesarias == 0:
-                    motivo_asesor = "Sin demanda"
+                if promedio_base_calculado == 0 and gruas_necesarias == 0: motivo_asesor = "Sin demanda"
                 else:
                     explicaciones = []
                     if promedio_proyectado > 0:
                         if es_lluvia: explicaciones.append(f"{promedio_proyectado} por lluvia")
                         else: explicaciones.append(f"{promedio_proyectado} nuevos")
-                    if gruas_necesarias > promedio_proyectado:
-                        explicaciones.append("arrastre ant.")
+                    if gruas_necesarias > promedio_proyectado: explicaciones.append("arrastre ant.")
                     motivo_asesor = " + ".join(explicaciones) if explicaciones else "Ok"
 
                 registros_tabla.append({
@@ -345,8 +380,7 @@ if df_raw is not None and not df_raw.empty:
                 })
                 
                 data_grafico_lineas.append({
-                    "Hora": hr, "Promedio Base": promedio_base_calculado,
-                    "Proyección Ajustada": promedio_proyectado
+                    "Hora": hr, "Promedio Base": promedio_base_calculado, "Proyección Ajustada": promedio_proyectado
                 })
 
         with col_main_content:
@@ -355,18 +389,12 @@ if df_raw is not None and not df_raw.empty:
                 st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📍 Top Localidades Afectadas</span>", unsafe_allow_html=True)
                 if len(df_filtrado) > 0:
                     col_agrupar = col_provincia if provincia_sel == "Todas" else col_ciudad
-                    
-                    df_top = df_filtrado.groupby(col_agrupar).agg(
-                        Total_Casos=('SERVICIO', 'count')
-                    ).reset_index()
-                    
-                    df_top['📊 Prom/Día'] = (df_top['Total_Casos'] / num_fechas_reales).round(1)
+                    df_top = df_filtrado.groupby(col_agrupar).agg(Total_Casos=('SERVICIO', 'count')).reset_index()
+                    df_top['📊 Prom/Día'] = (df_top['Total_Casos'] / num_fechas_reales).round(0).astype(int)
                     df_top = df_top.rename(columns={col_agrupar: '📍 UBICACIÓN', 'Total_Casos': 'Casos'})
                     df_top = df_top.sort_values(by='Casos', ascending=False).head(5)
-                    
                     total_general_casos = df_filtrado.shape[0]
                     df_top['%'] = (df_top['Casos'] / total_general_casos * 100).round(1).astype(str) + '%' if total_general_casos > 0 else '0%'
-                    
                     df_top = df_top[['📍 UBICACIÓN', 'Casos', '📊 Prom/Día', '%']]
                     st.dataframe(df_top, use_container_width=True, height=140, hide_index=True)
                 else: st.info("Sin datos.")
@@ -394,42 +422,39 @@ if df_raw is not None and not df_raw.empty:
                     )
                     st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
+            # =========================================================================
+            # ESTRUCTURA ORIGINAL RESPETADA: REEMPLAZO EXACTO DE LA LÓGICA DE ALERTA WAZE
+            # =========================================================================
             with col_resumen_waze:
-                promedio_asistencias_dia = round(len(df_filtrado) / num_fechas_reales, 1)
+                promedio_asistencias_dia = int(round(len(df_filtrado) / num_fechas_reales, 0))
                 st.markdown(f"<span style='font-size:11px; color:#555;'>Promedio ({dia_sel.title()})</span>", unsafe_allow_html=True)
                 st.markdown(f"<h3 style='margin:0px; padding:0px; font-size:28px; line-height:1;'>{promedio_asistencias_dia} Asist.</h3>", unsafe_allow_html=True)
-                st.markdown("<span style='font-size:11px; font-weight:bold; color:#1e88e5; display:block; margin-top:4px;'>🚛 Alertas Waze Realtime</span>", unsafe_allow_html=True)
                 
+                # Mantenemos el mismo estilo compacto del indicador de Alertas
+                st.markdown("<span style='font-size:11px; font-weight:bold; color:#1e88e5; display:block; margin-top:4px;'>🚛 Alertas Nacionales Realtime</span>", unsafe_allow_html=True)
+                
+                # Conservamos las mismas dos columnas pequeñas originales del layout de Waze para no alterar píxeles
                 c_w1, c_w2 = st.columns([4.5, 5.5])
                 with c_w1:
-                    ejecutar_consulta = st.button("🔍 Escanear Mapa", use_container_width=True, key="btn_waze_comp")
-                    if ejecutar_consulta and estado_global["creditos"] > 0:
-                        bbox_nacional_ecuador = {"bottom_left": "-5.0000,-81.0000", "top_right": "1.5000,-75.0000"}
-                        def consultar_alertas_waze_real(bbox_dict):
-                            api_key = "ak_823f13app2zd9qkia4z6vdi27ttb31z9a7v7pvlhnn878w3"
-                            try:
-                                url = "https://api.openwebninja.com/waze/alerts-and-jams"
-                                headers = {"X-API-Key": api_key}
-                                params = {"bottom_left": "-2.2500,-79.9500", "top_right": "-2.1000,-79.8000"} if provincia_sel == "Todas" else {"bottom_left": bbox_dict["bottom_left"], "top_right": bbox_dict["top_right"]}
-                                respuesta = requests.get(url, headers=headers, params=params, timeout=10).json()
-                                alertas = []
-                                if "alerts" in respuesta and respuesta["alerts"]:
-                                    for item in respuesta["alerts"][:2]:
-                                        tipo = item.get("type", "TRÁFICO").replace("_", " ")
-                                        calle = item.get("street", "Vía pública")
-                                        alertas.append(f"⚠️ {tipo} en {calle[:12]}...")
-                                return alertas if alertas else ["✅ Flujo normal."]
-                            except: return ["⚠️ Error de conexión."]
-                        estado_global["alertas_waze"] = consultar_alertas_waze_real(bbox_nacional_ecuador)
-                        estado_global["ultima_hora_waze"] = ahora_actual.strftime('%I:%M %p')
-                        estado_global["creditos"] -= 1
-                    st.markdown(f'<div class="card-saldo"><span style="font-size:9px;color:#444;">Tk: <b>{estado_global["creditos"]}</b>/50</span></div>', unsafe_allow_html=True)
-                with c_w2:
-                    st.markdown(f"<span style='font-size:9px; color:#777; display:block;'>Último: {estado_global['ultima_hora_waze']}</span>", unsafe_allow_html=True)
-                    if not estado_global["alertas_waze"]: st.markdown("<span style='font-size:9px; color:#999;'>• Requiere escaneo.</span>", unsafe_allow_html=True)
+                    # Mapeo por provincia para el feed
+                    if provincia_sel == "Todas":
+                        alertas_filtradas = estado_global["historico_alertas"]
+                        etiqueta_cobertura = "Global"
                     else:
-                        for incidente in estado_global["alertas_waze"][:1]:
-                            st.markdown(f"<span style='font-size:9px; color:#d32f2f; font-weight:500;'>• {incidente}</span>", unsafe_allow_html=True)
+                        alertas_filtradas = [x for x in estado_global["historico_alertas"] if x["provincia"] == provincia_sel.upper().strip()]
+                        etiqueta_cobertura = provincia_sel[:10]
+
+                    # Mantenemos la tarjeta de estado con el mismo formato visual CSS
+                    st.markdown(f'<div class="card-saldo"><span style="font-size:9px;color:#444;">Filtro: <b>{etiqueta_cobertura}</b></span></div>', unsafe_allow_html=True)
+                with c_w2:
+                    st.markdown(f"<span style='font-size:9px; color:#777; display:block;'>Actualizado: {estado_global['ultima_consulta_tomtom']}</span>", unsafe_allow_html=True)
+                
+                # Contenedor de visualización para listar los incidentes detectados de forma nativa
+                if not alertas_filtradas:
+                    st.markdown("<span style='font-size:9px; color:#999;'>• Rutas estables en la red nacional.</span>", unsafe_allow_html=True)
+                else:
+                    for incidente in alertas_filtradas[:2]: # Mostramos los 2 incidentes críticos en la misma caja
+                        st.markdown(f"<span style='font-size:9px; color:#d32f2f; font-weight:500; display:block; line-height:1.2;'>• {incidente['texto'][:35]}...</span>", unsafe_allow_html=True)
 
     # ==========================================
     # PESTAÑA 2: PLANIFICADOR DE FERIADOS
@@ -452,7 +477,6 @@ if df_raw is not None and not df_raw.empty:
 
         with col_f_fer:
             st.markdown("<h4 style='margin:0px; font-size:14px; color:#111;'>⚙️ Planificador</h4>", unsafe_allow_html=True)
-            
             config_maestra_feriados = {
                 "Carnaval": {"fecha": "18/2/2026", "dias": 4, "espejo": None},
                 "Año Nuevo": {"fecha": "5/1/2026", "dias": 3, "espejo": None},
@@ -464,7 +488,6 @@ if df_raw is not None and not df_raw.empty:
                 "Día de los Difuntos / Cuenca": {"fecha": "4/11/2026", "dias": 4, "espejo": "Carnaval"},
                 "Navidad": {"fecha": "28/12/2026", "dias": 3, "espejo": "Año Nuevo"}
             }
-            
             feriado_seleccionado = st.selectbox("📅 Feriado Nacional:", list(config_maestra_feriados.keys()), key="feriado_sel_key", on_change=guardar_feriado_callback)
             servicio_feriado = st.selectbox("🎯 Servicio:", sorted(list(df_raw[col_servicio].dropna().unique())), key="servicio_fer_key", on_change=guardar_servicio_fer_callback)
             
@@ -490,8 +513,7 @@ if df_raw is not None and not df_raw.empty:
                 
             if provincia_feriado != "Todas" and not df_data_feriado.empty:
                 df_data_feriado = df_data_feriado[df_data_feriado[col_provincia] == provincia_feriado]
-                if ciudad_feriado:
-                    df_data_feriado = df_data_feriado[df_data_feriado[col_ciudad].isin(ciudad_feriado)]
+                if ciudad_feriado: df_data_feriado = df_data_feriado[df_data_feriado[col_ciudad].isin(ciudad_feriado)]
             
             if es_simulado:
                 st.markdown(f'<div class="banner-similitud">🔮 <b>Proyección por Similitud Activa:</b> Calculando retornos para <b>{feriado_seleccionado} ({fecha_original})</b> usando comportamiento espejo de <b>{feriado_espejo} ({meta_feriado["dias"]} días de descanso)</b></div>', unsafe_allow_html=True)
@@ -509,33 +531,18 @@ if df_raw is not None and not df_raw.empty:
                 for hr in range(24):
                     casos_reales = mapeo_casos.get(hr, 0)
                     casos_previos = mapeo_casos.get(hr - 1, 0)
-                    
                     unidades_calculadas = math.ceil(casos_reales + (0.4 * casos_previos))
-                    if casos_reales == 0 and unidades_calculadas <= 0:
-                        unidades_calculadas = 0
-                    elif unidades_calculadas <= 0:
-                        unidades_calculadas = 1
+                    if casos_reales == 0 and unidades_calculadas <= 0: unidades_calculadas = 0
+                    elif unidades_calculadas <= 0: unidades_calculadas = 1
                         
                     string_gruas = f"🚛 {unidades_calculadas} U." if unidades_calculadas > 0 else "-"
-                    
-                    registros_processed.append({
-                        "HORA": f"{hr:02d}:00",
-                        "HISTÓRICO CASOS": casos_reales,
-                        "GRÚAS REQUERIDAS": string_gruas
-                    })
-                    
-                    data_grafico_feriado.append({
-                        "Hora": hr,
-                        "Casos Históricos": casos_reales,
-                        "Grúas Proyectadas": unidades_calculadas
-                    })
+                    registros_processed.append({"HORA": f"{hr:02d}:00", "HISTÓRICO CASOS": casos_reales, "GRÚAS REQUERIDAS": string_gruas})
+                    data_grafico_feriado.append({"Hora": hr, "Casos Históricos": casos_reales, "Grúas Proyectadas": unidades_calculadas})
                 
                 col_tab_izq, col_graf_der = st.columns([4.5, 5.5])
-                
                 with col_tab_izq:
                     st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>⏰ Distribución de Demanda y Flota Requerida</span>", unsafe_allow_html=True)
-                    df_mostrar_feriados = pd.DataFrame(registros_processed)
-                    st.dataframe(df_mostrar_feriados, use_container_width=True, height=220, hide_index=True)
+                    st.dataframe(pd.DataFrame(registros_processed), use_container_width=True, height=220, hide_index=True)
                 
                 with col_graf_der:
                     st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📈 Gráfico de Curva de Carga Operativa (Retorno)</span>", unsafe_allow_html=True)
