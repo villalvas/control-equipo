@@ -14,7 +14,6 @@ st.set_page_config(
 )
 
 # --- RECARGA NATIVA FORZADA DE VENTANA CADA 15 MINUTOS (900 SEGUNDOS) ---
-# Nota: Si deseas cambiar el tiempo a 5 minutos, reemplaza el 900000 por 300000
 components.html(
     """
     <script>
@@ -219,14 +218,14 @@ if df_raw is not None and not df_raw.empty:
     if col_ciudad in df_raw.columns: df_raw[col_ciudad] = df_raw[col_ciudad].astype(str).str.strip()
     df_raw[col_cobertura] = df_raw[col_cobertura].astype(str).str.strip().str.upper() if col_cobertura in df_raw.columns else "LOCAL"
 
-    # --- LIMPIEZA DE FECHAS SEGURO (Previene NameError y homologa formatos D/M/AAAA) ---
+    # --- LIMPIEZA DE FECHAS SEGURO (Extrae solo D/M/AAAA sin horas) ---
     df_raw[col_fecha] = df_raw[col_fecha].astype(str).str.strip().str.split().str[0]
 
     # --- ENRUTAMIENTO POR PESTAÑAS ---
     tab_normal, tab_feriados = st.tabs(["🔮 Operación Diaria (Normal)", "📈 Planificador de Feriados Nacionales"])
 
     # ==========================================
-    # PESTAÑA 1: OPERACIÓN NORMAL
+    # PESTAÑA 1: OPERACIÓN NORMAL (Con lógica de +20% por Lluvia)
     # ==========================================
     with tab_normal:
         st.write("### 🎛️ Panel de Filtros de Operación")
@@ -325,19 +324,47 @@ if df_raw is not None and not df_raw.empty:
                     
                     clima_info = diccionario_clima.get(hr, {"Detalle": "☁️ Nublado (N/A)", "Estado": "Normal"})
                     detalle_clima = clima_info["Detalle"] if provincia_sel != "Todas" else "🌍 Filtre Provincia"
+                    es_lluvia = clima_info["Estado"] == "Lluvia"
 
-                    l_ant = p_local if hr == 0 else (casos_locales[hr-1] / num_fechas_reales)
-                    f_ant1 = p_foraneo if hr == 0 else (casos_foraneos[hr-1] / num_fechas_reales)
-                    f_ant2 = p_foraneo if hr <= 1 else (casos_foraneos[hr-2] / num_fechas_reales)
+                    # --- LÓGICA DE NEGOCIO: MULTIPLICADOR +20% POR LLUVIA ---
+                    if es_lluvia and promedio_base_calculado > 0:
+                        promedio_proyectado = math.ceil(promedio_base_calculado * 1.20)
+                        etiqueta_proyeccion = f"{promedio_proyectado} (🌧️ +20%)"
+                        # Ponderamos local y foráneo para recalcular las grúas necesarias bajo lluvia
+                        p_local_calc = p_local * 1.20
+                        p_foraneo_calc = p_foraneo * 1.20
+                    else:
+                        promedio_proyectado = promedio_base_calculado
+                        etiqueta_proyeccion = f"{promedio_proyectado} (Normal)"
+                        p_local_calc = p_local
+                        p_foraneo_calc = p_foraneo
+
+                    l_ant = p_local_calc if hr == 0 else (casos_locales[hr-1] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
+                    f_ant1 = p_foraneo_calc if hr == 0 else (casos_foraneos[hr-1] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
+                    f_ant2 = p_foraneo_calc if hr <= 1 else (casos_foraneos[hr-2] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
                     
-                    gruas_necesarias = math.ceil((p_local + (0.5 * l_ant)) + (p_foraneo + f_ant1 + f_ant2))
+                    gruas_necesarias = math.ceil((p_local_calc + (0.5 * l_ant)) + (p_foraneo_calc + f_ant1 + f_ant2))
                     es_remolque = any(x in str(servicio_sel).upper() for x in ["REMOLQUE", "GRÚA", "GRUA", "TODOS"])
                     
-                    string_gruas = f"🚛 {gruas_necesarias} U." if es_remolque and (promedio_base_calculado > 0 or gruas_necesarias > 0) else "-"
-                    motivo_asesor = "Normal" if string_gruas == "-" else (f"🟢 Para los {promedio_base_calculado} casos." if gruas_necesarias == promedio_base_calculado else f"⏳ {promedio_base_calculado} nuevos + arrastre.")
+                    string_gruas = f"🚛 {gruas_necesarias} U." if es_remolque and (promedio_proyectado > 0 or gruas_necesarias > 0) else "-"
+                    
+                    if string_gruas == "-":
+                        motivo_asesor = "Normal"
+                    else:
+                        if es_lluvia:
+                            motivo_asesor = f"🌧️ Afectación climática + arrastre."
+                        else:
+                            motivo_asesor = f"🟢 Para los {promedio_proyectado} casos." if gruas_necesarias == promedio_proyectado else f"⏳ {promedio_proyectado} nuevos + arrastre."
 
                     if promedio_base_calculado > 0 or string_gruas != "-":
-                        registros_tabla.append({"HORA": f"{hr:02d}:00", "🌤️ Clima Online": detalle_clima, "📊 Promed": promedio_base_calculado, "📈 Proyección": f"{promedio_base_calculado} (Normal)", "🚛 Grúas N.": string_gruas, "📋 ¿Por qué?": motivo_asesor})
+                        registros_tabla.append({
+                            "HORA": f"{hr:02d}:00", 
+                            "🌤️ Clima Online": detalle_clima, 
+                            "📊 Promed": promedio_base_calculado, 
+                            "📈 Proyección": etiqueta_proyeccion, 
+                            "🚛 Grúas N.": string_gruas, 
+                            "📋 ¿Por qué?": motivo_asesor
+                        })
 
                 if registros_tabla: st.dataframe(pd.DataFrame(registros_tabla), use_container_width=True, hide_index=True)
 
@@ -361,14 +388,13 @@ if df_raw is not None and not df_raw.empty:
 
 
     # ==========================================
-    # PESTAÑA 2: PLANIFICADOR DE FERIADOS NACIONALES (Sincronizado con Formato de Data Real D/M/AAAA)
+    # PESTAÑA 2: PLANIFICADOR DE FERIADOS NACIONALES (Fechas Homologadas D/M/AAAA)
     # ==========================================
     with tab_feriados:
         st.write("### 🏖️ Analizador de Tendencias y Retornos de Feriados Nacionales")
         
         c_fer1, c_fer2 = st.columns([4, 4])
         with c_fer1:
-            # Diccionario ajustado con las fechas en formato exacto D/M/AAAA que constan en tu base de datos
             calendario_feriados_2026 = {
                 "Año Nuevo (Retorno Enero 5)": {
                     "fecha_datos_historicos": "5/1/2026", "tipo": "Data Real (Retorno de Año Nuevo)"
@@ -406,7 +432,6 @@ if df_raw is not None and not df_raw.empty:
         meta_feriado = calendario_feriados_2026[feriado_seleccionado]
         fecha_buscar_str = meta_feriado["fecha_datos_historicos"]
         
-        # Filtrado directo sin transformaciones que puedan alterar los strings originales de la base
         df_data_feriado = df_raw[(df_raw[col_fecha] == fecha_buscar_str) & (df_raw[col_servicio] == servicio_feriado)]
         
         st.markdown(f"""
