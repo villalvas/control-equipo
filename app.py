@@ -6,7 +6,6 @@ from zoneinfo import ZoneInfo
 import math
 import streamlit.components.v1 as components
 import plotly.graph_objects as go
-import plotly.express as px
 
 # 1. Configuración de pantalla ultra ancha para el monitor de control
 st.set_page_config(
@@ -186,15 +185,6 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
     except: return {}
 
 @st.cache_data(ttl=900)
-def obtener_clima_actual_rapido(lat, lon):
-    try:
-        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true&timezone=auto"
-        res = requests.get(url, timeout=3).json()
-        code, temp = res['current_weather']['weathercode'], res['current_weather']['temperature']
-        return f"🌧️ Lluvia ({temp}°C)" if code in [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99] else f"☁️ Nublado ({temp}°C)"
-    except: return "🌍 N/A"
-
-@st.cache_data(ttl=900)
 def cargar_datos_vía_gviz():
     try:
         url_base = "https://docs.google.com/spreadsheets/d/1UWQy9XJy8UOdef1IcXWDt2Nmn7hTnsQLHby_3BhpJnc/edit"
@@ -220,7 +210,6 @@ if df_raw is not None and not df_raw.empty:
     if col_ciudad in df_raw.columns: df_raw[col_ciudad] = df_raw[col_ciudad].astype(str).str.strip()
     df_raw[col_cobertura] = df_raw[col_cobertura].astype(str).str.strip().str.upper() if col_cobertura in df_raw.columns else "LOCAL"
 
-    # Limpieza básica de fechas para el planificador
     df_raw[col_fecha] = df_raw[col_fecha].astype(str).str.strip().str.split().str[0]
 
     # --- PESTAÑAS DEL TABLERO ---
@@ -275,7 +264,6 @@ if df_raw is not None and not df_raw.empty:
             df_filtrado = df_filtrado[df_filtrado[col_provincia] == provincia_sel]
             if ciudad_sel: df_filtrado = df_filtrado[df_filtrado[col_ciudad].isin(ciudad_sel)]
 
-        hora_actual_num = ahora_actual.hour
         provincia_key_busqueda = provincia_sel.upper().strip()
         
         if provincia_sel != "Todas" and provincia_key_busqueda in coordenadas_provincias:
@@ -283,7 +271,6 @@ if df_raw is not None and not df_raw.empty:
             diccionario_clima = obtener_clima_horario_futuro(lat_c, lon_c, fecha_target_str)
         else:
             diccionario_clima = {}
-            lat_c, lon_c = -0.2298, -78.5249
 
         # --- PROCESAMIENTO MATRIZ Y GRÁFICOS ---
         registros_tabla = []
@@ -308,7 +295,6 @@ if df_raw is not None and not df_raw.empty:
                 detalle_clima = clima_info["Detalle"] if provincia_sel != "Todas" else "🌍 Filtre Provincia"
                 es_lluvia = clima_info["Estado"] == "Lluvia"
 
-                # Lógica del +20% por lluvia aplicada de forma nativa a la proyección
                 if es_lluvia and promedio_base_calculado > 0:
                     promedio_proyectado = math.ceil(promedio_base_calculado * 1.20)
                     etiqueta_proyeccion = f"{promedio_proyectado} (🌧️ +20%)"
@@ -353,7 +339,7 @@ if df_raw is not None and not df_raw.empty:
                 })
 
         # =====================================================================
-        # ARQUITECTURA VISUAL COMPACTA (DISTRIBUCIÓN LADO A LADO - ZERO-SCROLL)
+        # ARQUITECTURA VISUAL COMPACTA (GRÁFICA IZQUIERDA Y MÉTRICAS A LA DERECHA)
         # =====================================================================
         st.write("### 📊 Centro de Mando Analítico")
         col_principal_izq, col_principal_der = st.columns([6.3, 3.7])
@@ -374,65 +360,45 @@ if df_raw is not None and not df_raw.empty:
                     yaxis=dict(title="Unidades / Casos"),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10)),
                     margin=dict(l=10, r=10, t=10, b=10),
-                    height=180,  # Altura ultra compacta
+                    height=180,  
                     showlegend=True
                 )
                 st.plotly_chart(fig_lineas, use_container_width=True)
             else:
                 st.info("Filtre datos válidos para inicializar la curva.")
 
-            # Matriz Horaria integrada debajo de su gráfico respectivo
             st.markdown(f"##### ⏰ Matriz Horaria Detallada: {dia_sel.title()}")
             if registros_tabla: 
-                # Forzado de altura estricta para evitar desborde vertical
+                # Forzado de altura estricta ajustado para balancear la vista completa lateral
                 st.dataframe(pd.DataFrame(registros_tabla), use_container_width=True, height=270, hide_index=True)
             else:
                 st.info("No se registraron asistencias que coincidan con los filtros.")
 
         # ---------------------------------------------------------------------
-        # BLOQUE DERECHO: Distribución Geográfica, Resumen y Bloque Waze
+        # BLOQUE DERECHO: Resúmenes de Carga por Zonas y Alertas de Carreteras
         # ---------------------------------------------------------------------
         with col_principal_der:
-            st.markdown("##### 🗺️ Distribución Geográfica de Carga")
-            if len(df_filtrado) > 0:
-                if provincia_sel == "Todas":
-                    df_g_bar = df_filtrado.groupby(col_provincia).size().reset_index(name='Casos')
-                    df_g_bar['Promed.'] = (df_g_bar['Casos'] / num_fechas_reales).round(1)
-                    df_g_bar = df_g_bar.sort_values(by='Promed.', ascending=True).tail(4)
-                    eje_x_y_labels = {"x": "Promed.", "y": col_provincia}
-                else:
-                    df_g_bar = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos')
-                    df_g_bar['Promed.'] = (df_g_bar['Casos'] / num_fechas_reales).round(1)
-                    df_g_bar = df_g_bar.sort_values(by='Promed.', ascending=True).tail(4)
-                    eje_x_y_labels = {"x": "Promed.", "y": col_ciudad}
-
-                fig_barras = px.bar(df_g_bar, x=eje_x_y_labels["x"], y=eje_x_y_labels["y"], orientation='h', labels={"Promed.": "Prom."}, color_discrete_sequence=["#7f7f7f"])
-                fig_barras.update_layout(
-                    margin=dict(l=10, r=10, t=10, b=10),
-                    height=130,  # Sincronizado con el bloque opuesto
-                    xaxis=dict(title="Promedio"),
-                    yaxis=dict(title="")
-                )
-                st.plotly_chart(fig_barras, use_container_width=True)
-            else:
-                st.info("Sin datos geográficos.")
-
-            # Sub-bloque métrico + Waze integrado en columnas inferiores derechas
-            sub_c1, sub_c2 = st.columns([4.5, 5.5])
+            st.markdown("##### 📍 Resumen Ejecutivo de Demanda")
+            
+            # Se subdivide equitativamente el espacio lateral para métricas/tablas y alertas
+            sub_c1, sub_c2 = st.columns([5.0, 5.0])
             
             with sub_c1:
                 promedio_asistencias_dia = int(round(len(df_filtrado) / num_fechas_reales, 0))
                 st.metric(label=f"Promedio ({dia_sel.title()})", value=f"{promedio_asistencias_dia} Asist.")
                 
+                st.markdown("<span style='font-size:12px; font-weight:bold; color:#555;'>Top Localidades Afectadas</span>", unsafe_allow_html=True)
                 if len(df_filtrado) > 0:
                     if provincia_sel == "Todas":
                         df_tp = df_filtrado.groupby(col_provincia).size().reset_index(name='Casos')
                         df_tp['Prom.'] = (df_tp['Casos'] / num_fechas_reales).round(0).astype(int)
-                        st.dataframe(df_tp.sort_values(by='Casos', ascending=False).head(3), use_container_width=True, height=130, hide_index=True)
+                        st.dataframe(df_tp.sort_values(by='Casos', ascending=False).head(5), use_container_width=True, height=195, hide_index=True)
                     else:
                         df_tc = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos')
                         df_tc['Prom.'] = (df_tc['Casos'] / num_fechas_reales).round(0).astype(int)
-                        st.dataframe(df_tc.sort_values(by='Casos', ascending=False).head(3), use_container_width=True, height=130, hide_index=True)
+                        st.dataframe(df_tc.sort_values(by='Casos', ascending=False).head(5), use_container_width=True, height=195, hide_index=True)
+                else:
+                    st.caption("Sin datos históricos acumulados.")
 
             with sub_c2:
                 st.markdown("<span style='font-size:13px; font-weight:bold;'>🚛 Alertas Nacionales Waze</span>", unsafe_allow_html=True)
@@ -445,14 +411,15 @@ if df_raw is not None and not df_raw.empty:
                 
                 st.markdown(f"<span style='font-size:11px; color:#666;'>Último: {estado_global['ultima_hora_waze']}</span>", unsafe_allow_html=True)
                 
+                # Caja de visualización de incidentes estructurada
                 if not estado_global["alertas_waze"]: 
                     st.caption("💡 Requiere escaneo manual.")
                 else:
-                    for incidente in estado_global["alertas_waze"][:2]:
+                    for incidente in estado_global["alertas_waze"][:4]:
                         if "✅" in incidente: st.caption(f"🍏 {incidente[:35]}...")
                         else: st.caption(f"🍎 {incidente[:35]}...")
                         
-                st.markdown(f'<div class="card-saldo"><span style="font-size:9px;color:#555;display:block;">🔑 CRÉDITOS: <b>{estado_global["creditos"]}</b> / 50</span></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="card-saldo" style="margin-top:15px;"><span style="font-size:11px;color:#555;display:block;">🔑 CRÉDITOS DISPONIBLES:<br><b>{estado_global["creditos"]}</b> / 50</span></div>', unsafe_allow_html=True)
 
 
     # ==========================================
