@@ -106,19 +106,25 @@ zona_ecuador = ZoneInfo("America/Guayaquil")
 ahora_actual = datetime.now(zona_ecuador)
 hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
 
-# --- MEMORIA SERVIDOR ALTA DISPONIBILIDAD ---
+# --- MEMORIA SERVIDOR ALTA DISPONIBILIDAD (INMUNE A REFRESCAMIENTOS) ---
 @st.cache_resource
 def inicializar_memoria_inmune():
     return {
         "creditos": 48,
         "alertas_waze": [],
         "ultima_hora_waze": "Nunca",
-        "filtros_persistentes": {
+        "filtros_normal": {
             "dia_sel": "TODOS",
             "servicio_sel": "Todos",
             "provincia_sel": "Todas",
             "ciudad_sel": [],
             "estado_sel": []
+        },
+        "filtros_feriados": {
+            "feriado_sel": "Carnaval",
+            "servicio_sel": "REMOLQUE PESADO",
+            "provincia_sel": "Todas",
+            "ciudad_sel": []
         }
     }
 
@@ -126,7 +132,7 @@ estado_global = inicializar_memoria_inmune()
 
 # Título del Monitor Principal de Control
 st.markdown(f"<h2 style='margin:0px; padding:0px; font-size:26px;'>🔮 Proyección Horaria y Alerta de Flota</h2>", unsafe_allow_html=True)
-st.markdown(f"<p style='margin:0px 0px 6px 0px; font-size:11px; color:#555;'><b>Control Geoanalítico</b> | 🔄 Refresco automático en 15 min. (Última Actualización: {hora_estatica_str})</p>", unsafe_allow_html=True)
+st.markdown(f"<p style='margin:0px 0px 6px 0px; font-size:11px; color:#555;'><b>Control Geoanalítico</b> | 🔄 Memoria Inmune Activa (Última Actualización: {hora_estatica_str})</p>", unsafe_allow_html=True)
 
 coordenadas_provincias = {
     'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
@@ -189,24 +195,27 @@ if df_raw is not None and not df_raw.empty:
     # --- PESTAÑAS PRINCIPALES DE ENTRADA ---
     tab_normal, tab_feriados = st.tabs(["🔮 Operación Diaria (Normal)", "📈 Planificador de Feriados"])
 
+    # ==========================================
     # PESTAÑA 1: OPERACIÓN NORMAL
+    # ==========================================
     with tab_normal:
         col_sidebar, col_main_content = st.columns([1.6, 8.4])
         
-        if "dia_sel_key" not in st.session_state: st.session_state["dia_sel_key"] = estado_global["filtros_persistentes"]["dia_sel"]
-        if "servicio_sel_key" not in st.session_state: st.session_state["servicio_sel_key"] = estado_global["filtros_persistentes"]["servicio_sel"]
-        if "provincia_sel_key" not in st.session_state: st.session_state["provincia_sel_key"] = estado_global["filtros_persistentes"]["provincia_sel"]
-        if "ciudad_sel_key" not in st.session_state: st.session_state["ciudad_sel_key"] = estado_global["filtros_persistentes"]["ciudad_sel"]
-        if "estado_sel_key" not in st.session_state: st.session_state["estado_sel_key"] = estado_global["filtros_persistentes"]["estado_sel"]
+        # Sincronización Inmune Operación Normal
+        if "dia_sel_key" not in st.session_state: st.session_state["dia_sel_key"] = estado_global["filtros_normal"]["dia_sel"]
+        if "servicio_sel_key" not in st.session_state: st.session_state["servicio_sel_key"] = estado_global["filtros_normal"]["servicio_sel"]
+        if "provincia_sel_key" not in st.session_state: st.session_state["provincia_sel_key"] = estado_global["filtros_normal"]["provincia_sel"]
+        if "ciudad_sel_key" not in st.session_state: st.session_state["ciudad_sel_key"] = estado_global["filtros_normal"]["ciudad_sel"]
+        if "estado_sel_key" not in st.session_state: st.session_state["estado_sel_key"] = estado_global["filtros_normal"]["estado_sel"]
 
-        def guardar_dia_callback(): estado_global["filtros_persistentes"]["dia_sel"] = st.session_state["dia_sel_key"]
-        def guardar_servicio_callback(): estado_global["filtros_persistentes"]["servicio_sel"] = st.session_state["servicio_sel_key"]
+        def guardar_dia_callback(): estado_global["filtros_normal"]["dia_sel"] = st.session_state["dia_sel_key"]
+        def guardar_servicio_callback(): estado_global["filtros_normal"]["servicio_sel"] = st.session_state["servicio_sel_key"]
         def guardar_provincia_callback():
-            estado_global["filtros_persistentes"]["provincia_sel"] = st.session_state["provincia_sel_key"]
-            estado_global["filtros_persistentes"]["ciudad_sel"] = []
+            estado_global["filtros_normal"]["provincia_sel"] = st.session_state["provincia_sel_key"]
+            estado_global["filtros_normal"]["ciudad_sel"] = []
             st.session_state["ciudad_sel_key"] = []
-        def guardar_ciudad_callback(): estado_global["filtros_persistentes"]["ciudad_sel"] = st.session_state["ciudad_sel_key"]
-        def guardar_estado_callback(): estado_global["filtros_persistentes"]["estado_sel"] = st.session_state["estado_sel_key"]
+        def guardar_ciudad_callback(): estado_global["filtros_normal"]["ciudad_sel"] = st.session_state["ciudad_sel_key"]
+        def guardar_estado_callback(): estado_global["filtros_normal"]["estado_sel"] = st.session_state["estado_sel_key"]
 
         with col_sidebar:
             st.markdown("<h4 style='margin:0px; font-size:14px; color:#111;'>⚙️ Filtros</h4>", unsafe_allow_html=True)
@@ -401,34 +410,48 @@ if df_raw is not None and not df_raw.empty:
                         for incidente in estado_global["alertas_waze"][:1]:
                             st.markdown(f"<span style='font-size:9px; color:#d32f2f; font-weight:500;'>• {incidente}</span>", unsafe_allow_html=True)
 
-    # PESTAÑA 2: PLANIFICADOR DE FERIADOS (CON INTELIGENCIA DE PROYECCION POR SIMILITUD)
+    # ==========================================
+    # PESTAÑA 2: PLANIFICADOR DE FERIADOS (CON MEMORIA COMPLETA)
+    # ==========================================
     with tab_feriados:
         col_f_fer, col_c_fer = st.columns([1.6, 8.4])
         
+        # Sincronización Inmune Pestaña de Feriados
+        if "feriado_sel_key" not in st.session_state: st.session_state["feriado_sel_key"] = estado_global["filtros_feriados"]["feriado_sel"]
+        if "servicio_fer_key" not in st.session_state: st.session_state["servicio_fer_key"] = estado_global["filtros_feriados"]["servicio_sel"]
+        if "provincia_fer_key" not in st.session_state: st.session_state["provincia_fer_key"] = estado_global["filtros_feriados"]["provincia_sel"]
+        if "ciudad_fer_key" not in st.session_state: st.session_state["ciudad_fer_key"] = estado_global["filtros_feriados"]["ciudad_sel"]
+
+        def guardar_feriado_callback(): estado_global["filtros_feriados"]["feriado_sel"] = st.session_state["feriado_sel_key"]
+        def guardar_servicio_fer_callback(): estado_global["filtros_feriados"]["servicio_sel"] = st.session_state["servicio_fer_key"]
+        def guardar_provincia_fer_callback():
+            estado_global["filtros_feriados"]["provincia_sel"] = st.session_state["provincia_fer_key"]
+            estado_global["filtros_feriados"]["ciudad_sel"] = []
+            st.session_state["ciudad_fer_key"] = []
+        def guardar_ciudad_fer_callback(): estado_global["filtros_feriados"]["ciudad_sel"] = st.session_state["ciudad_fer_key"]
+
         with col_f_fer:
             st.markdown("<h4 style='margin:0px; font-size:14px; color:#111;'>⚙️ Planificador</h4>", unsafe_allow_html=True)
             
-            # Calendario maestro con días de descanso y mapeo de similitud inteligente
             config_maestra_feriados = {
-                "Año Nuevo": {"fecha": "5/1/2026", "dias": 3, "espejo": None},
                 "Carnaval": {"fecha": "18/2/2026", "dias": 4, "espejo": None},
+                "Año Nuevo": {"fecha": "5/1/2026", "dias": 3, "espejo": None},
                 "Viernes Santo": {"fecha": "6/4/2026", "dias": 3, "espejo": None},
                 "Día del Trabajo": {"fecha": "4/5/2026", "dias": 3, "espejo": None},
                 "Batalla de Pichincha": {"fecha": "25/5/2026", "dias": 3, "espejo": None},
-                # --- Feriados Futuros (Proyectados por similitud de días) ---
                 "Primer Grito de Independencia": {"fecha": "10/8/2026", "dias": 3, "espejo": "Batalla de Pichincha"},
                 "Independencia de Guayaquil": {"fecha": "12/10/2026", "dias": 3, "espejo": "Batalla de Pichincha"},
                 "Día de los Difuntos / Cuenca": {"fecha": "4/11/2026", "dias": 4, "espejo": "Carnaval"},
                 "Navidad": {"fecha": "28/12/2026", "dias": 3, "espejo": "Año Nuevo"}
             }
             
-            feriado_seleccionado = st.selectbox("📅 Feriado Nacional:", list(config_maestra_feriados.keys()), key="sb_feriado_unico")
-            servicio_feriado = st.selectbox("🎯 Servicio:", sorted(list(df_raw[col_servicio].dropna().unique())), index=0, key="sb_servicio_p")
+            feriado_seleccionado = st.selectbox("📅 Feriado Nacional:", list(config_maestra_feriados.keys()), key="feriado_sel_key", on_change=guardar_feriado_callback)
+            servicio_feriado = st.selectbox("🎯 Servicio:", sorted(list(df_raw[col_servicio].dropna().unique())), key="servicio_fer_key", on_change=guardar_servicio_fer_callback)
             
-            provincia_feriado = st.selectbox("📍 Provincia:", ["Todas"] + df_raw[col_provincia].value_counts().index.tolist(), key="sb_provincia_p")
+            provincia_feriado = st.selectbox("📍 Provincia:", ["Todas"] + df_raw[col_provincia].value_counts().index.tolist(), key="provincia_fer_key", on_change=guardar_provincia_fer_callback)
             if provincia_feriado != "Todas":
                 ciudades_f_disp = sorted(df_raw[df_raw[col_provincia] == provincia_feriado][col_ciudad].dropna().unique().tolist())
-                ciudad_feriado = st.multiselect("🏙️ Ciudades:", ciudades_f_disp, key="ms_ciudad_p")
+                ciudad_feriado = st.multiselect("🏙️ Ciudades:", ciudades_f_disp, key="ciudad_fer_key", on_change=guardar_ciudad_fer_callback)
             else:
                 ciudad_feriado = st.multiselect("🏙️ Ciudades:", options=[], disabled=True, placeholder="Filtre Provincia", key="ms_ciudad_p_dis")
 
@@ -437,23 +460,19 @@ if df_raw is not None and not df_raw.empty:
             fecha_original = meta_feriado["fecha"]
             feriado_espejo = meta_feriado["espejo"]
             
-            # Paso 1: Intentar buscar data real en la base
             df_data_feriado = df_raw[(df_raw[col_fecha] == fecha_original) & (df_raw[col_servicio] == servicio_feriado)].copy()
             es_simulado = False
             
-            # Paso 2: Si está vacío (feriados posteriores a mayo), activar motor de similitud
             if df_data_feriado.empty and feriado_espejo is not None:
                 fecha_espejo = config_maestra_feriados[feriado_espejo]["fecha"]
                 df_data_feriado = df_raw[(df_raw[col_fecha] == fecha_espejo) & (df_raw[col_servicio] == servicio_feriado)].copy()
                 es_simulado = True
                 
-            # Aplicar segmentación geográfica sobre la data obtenida
             if provincia_feriado != "Todas" and not df_data_feriado.empty:
                 df_data_feriado = df_data_feriado[df_data_feriado[col_provincia] == provincia_feriado]
                 if ciudad_feriado:
                     df_data_feriado = df_data_feriado[df_data_feriado[col_ciudad].isin(ciudad_feriado)]
             
-            # Renderizado de Banner Dinámico según el origen de la Proyección
             if es_simulado:
                 st.markdown(f'<div class="banner-similitud">🔮 <b>Proyección por Similitud Activa:</b> Calculando retornos para <b>{feriado_seleccionado} ({fecha_original})</b> usando comportamiento espejo de <b>{feriado_espejo} ({meta_feriado["dias"]} días de descanso)</b></div>', unsafe_allow_html=True)
             else:
@@ -465,7 +484,7 @@ if df_raw is not None and not df_raw.empty:
                 df_neto_hora = df_data_feriado.groupby(col_hora_agrupada).size().reset_index(name='HISTORICO_CASOS')
                 df_neto_hora = df_neto_hora.sort_values(by=col_hora_agrupada)
                 
-                registros_procesados = []
+                registros_processed = []
                 data_grafico_feriado = []
                 mapeo_casos = {row[col_hora_agrupada]: row['HISTORICO_CASOS'] for _, row in df_neto_hora.iterrows()}
                 
@@ -473,7 +492,6 @@ if df_raw is not None and not df_raw.empty:
                     casos_reales = mapeo_casos.get(hr, 0)
                     casos_previos = mapeo_casos.get(hr - 1, 0)
                     
-                    # Algoritmo de Flota de Retorno: Casos de la hora + 40% de arrastre rezagado de la hora anterior
                     unidades_calculadas = math.ceil(casos_reales + (0.4 * casos_previos))
                     if casos_reales == 0 and unidades_calculadas <= 0:
                         unidades_calculadas = 0
@@ -483,7 +501,7 @@ if df_raw is not None and not df_raw.empty:
                     string_gruas = f"🚛 {unidades_calculadas} U." if unidades_calculadas > 0 else "-"
                     
                     if casos_reales > 0 or unidades_calculadas > 0:
-                        registros_procesados.append({
+                        registros_processed.append({
                             "HORA": f"{hr:02d}:00",
                             "HISTÓRICO CASOS": casos_reales,
                             "GRÚAS REQUERIDAS": string_gruas
@@ -499,7 +517,7 @@ if df_raw is not None and not df_raw.empty:
                 
                 with col_tab_izq:
                     st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>⏰ Distribución de Demanda y Flota Requerida</span>", unsafe_allow_html=True)
-                    df_mostrar_feriados = pd.DataFrame(registros_procesados)
+                    df_mostrar_feriados = pd.DataFrame(registros_processed)
                     st.dataframe(df_mostrar_feriados, use_container_width=True, height=220, hide_index=True)
                 
                 with col_graf_der:
