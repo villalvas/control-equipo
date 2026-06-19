@@ -146,18 +146,6 @@ coordenadas_provincias = {
 
 diccionario_dias = {"LUNES": 0, "MARTES": 1, "MIÉRCOLES": 2, "MIERCOLES": 2, "JUEVES": 3, "VIERNES": 4, "SÁBADO": 5, "SABADO": 5, "DOMINGO": 6}
 
-# Mapeo de Retornos de Feriados Nacionales 2026
-calendario_feriados_2026 = {
-    "Retorno Año Nuevo (Enero 5)": {"fecha_origen": "2026-01-05", "tipo": "Real (Año Nuevo)"},
-    "Retorno Carnaval (Febrero 18)": {"fecha_origen": "2026-02-18", "tipo": "Real (4 Días Largo)"},
-    "Retorno Viernes Santo (Abril 6)": {"fecha_origen": "2026-04-06", "tipo": "Real (Fin de semana largo)"},
-    "Retorno Día del Trabajo (Mayo 4)": {"fecha_origen": "2026-05-04", "tipo": "Real (Fin de semana largo)"},
-    "🔮 [Proyección] Retorno Primer Grito de Independencia (Agosto 11)": {"fecha_origen": "2026-05-04", "tipo": "Simulado (Basado en Feriado de Mayo)"},
-    "🔮 [Proyección] Retorno Independencia de Guayaquil (Octubre 12)": {"fecha_origen": "2026-04-06", "tipo": "Simulado (Basado en Feriado de Abril)"},
-    "🔮 [Proyección] Retorno Difuntos y Cuenca (Noviembre 5)": {"fecha_origen": "2026-02-18", "tipo": "Simulado (Basado en Feriado de Carnaval)"},
-    "🔮 [Proyección] Retorno Navidad (Diciembre 28)": {"fecha_origen": "2026-01-05", "tipo": "Simulado (Basado en Feriado de Año Nuevo)"}
-}
-
 # Conectores API de Clima y Waze
 def consultar_alertas_waze_real(bbox_dict):
     api_key = "ak_823f13app2zd9qkia4z6vdi27ttb31z9a7v7pvlhnn878w3"
@@ -369,37 +357,46 @@ if df_raw is not None and not df_raw.empty:
 
 
     # ==========================================
-    # PESTAÑA 2: PLANIFICADOR DE FERIADOS
+    # PESTAÑA 2: PLANIFICADOR DE FERIADOS (REPARADO)
     # ==========================================
     with tab_feriados:
         st.write("### 🏖️ Analizador de Tendencias y Retornos de Feriados Nacionales")
         
         c_fer1, c_fer2 = st.columns([4, 4])
         with c_fer1:
-            feriado_seleccionado = st.selectbox("📅 Seleccione el Feriado a Analizar (Calendario 2026):", list(calendario_feriados_2026.keys()))
+            # Mapeo estructurado de forma idéntica al formato D/M/YYYY de tu base de datos del 2026
+            calendario_feriados_2026 = {
+                "Retorno Año Nuevo (Enero 2)": {"fecha_formato": "2/1/2026", "tipo": "Año Nuevo"},
+                "Retorno Carnaval (Febrero 17/18)": {"fecha_formato": "18/2/2026", "tipo": "Carnaval (Fin de semana largo)"},
+                "Retorno Viernes Santo (Abril 3)": {"fecha_formato": "3/4/2026", "tipo": "Viernes Santo"},
+                "Retorno Día del Trabajo (Mayo 1)": {"fecha_formato": "1/5/2026", "tipo": "Día del Trabajo"},
+                "🔮 [Proyección] Batalla de Pichincha (Mayo 24)": {"fecha_formato": "24/5/2026", "tipo": "Feriado Nacional"},
+                "🔮 [Proyección] Primer Grito de Independencia (Agosto 10)": {"fecha_formato": "10/8/2026", "tipo": "Feriado Nacional"},
+                "🔮 [Proyección] Independencia de Guayaquil (Octubre 9)": {"fecha_formato": "9/10/2026", "tipo": "Feriado Nacional"},
+                "🔮 [Proyección] Día de Difuntos y Cuenca (Noviembre 3)": {"fecha_formato": "3/11/2026", "tipo": "Feriado Nacional"},
+                "🔮 [Proyección] Retorno Navidad (Diciembre 25)": {"fecha_formato": "25/12/2026", "tipo": "Feriado Nacional"}
+            }
+            
+            feriado_seleccionado = st.selectbox("📅 Seleccione el Feriado a Analizar:", list(calendario_feriados_2026.keys()))
         with c_fer2:
             servicio_feriado = st.selectbox("🎯 Filtrar Servicio para Feriado:", sorted(list(df_raw[col_servicio].dropna().unique())), index=0)
 
         meta_feriado = calendario_feriados_2026[feriado_seleccionado]
-        fecha_analisis = meta_feriado["fecha_origen"]
+        fecha_buscar_str = meta_feriado["fecha_formato"]
         
-        # --- NUEVA LÓGICA DE DETECCIÓN INTELEGENTE DE FORMATOS DE FECHA ---
-        # Convertimos la columna de texto a un objeto datetime puro para evitar colisiones de strings (DD/MM/AAAA vs AAAA-MM-DD)
-        df_raw["FECHA_DATETIME"] = pd.to_datetime(df_raw[col_fecha], errors='coerce')
-        fecha_analisis_dt = pd.to_datetime(fecha_analisis).date()
-        
-        # Filtrado optimizado por fecha absoluta y servicio
-        df_data_feriado = df_raw[(df_raw["FECHA_DATETIME"].dt.date == fecha_analisis_dt) & (df_raw[col_servicio] == servicio_feriado)]
+        # Limpieza por texto plano para blindar la coincidencia exacta de strings sin distorsión de formato
+        df_raw[col_fecha] = df_raw[col_fecha].astype(str).str.strip()
+        df_data_feriado = df_raw[(df_raw[col_fecha] == fecha_buscar_str) & (df_raw[col_servicio] == servicio_feriado)]
         
         st.markdown(f"""
             <div class="banner-feriado">
-                ℹ️ <b>Métrica de Origen:</b> Analizando el día de retorno real <b>{fecha_analisis}</b> | 
-                <b>Estructura de Simulación:</b> {meta_feriado['tipo']}.
+                ℹ️ <b>Estructura de Simulación:</b> Real ({meta_feriado['tipo']}) | 
+                <b>Buscando Cadena de Fecha:</b> {fecha_buscar_str}
             </div>
         """, unsafe_allow_html=True)
 
         if df_data_feriado.empty:
-            st.warning(f"⚠️ No se encontraron registros de asistencias para el servicio '{servicio_feriado}' en la fecha histórica {fecha_analisis} (Enero-Mayo 2026). Pruebe cambiando de servicio.")
+            st.warning(f"⚠️ No se encontraron registros de asistencias para el servicio '{servicio_feriado}' en la fecha histórica {fecha_buscar_str}. Pruebe cambiando de servicio.")
         else:
             col_f_izq, col_f_der = st.columns([4, 8])
             
