@@ -299,15 +299,27 @@ if df_raw is not None and not df_raw.empty:
                 string_gruas = f"🚛 {gruas_necesarias} U." if es_remolque and (promedio_proyectado > 0 or gruas_necesarias > 0) else "-"
                 val_gruas_grafico = gruas_necesarias if es_remolque else 0
 
-                if string_gruas == "-": motivo_asesor = "Normal"
+                # --- EXPLICACIÓN ANALÍTICA DETALLADA DEL DIAGNÓSTICO ---
+                if promedio_base_calculado == 0 and gruas_necesarias == 0:
+                    motivo_asesor = "Sin demanda"
                 else:
-                    if es_lluvia: motivo_asesor = f"🌧️ Clima"
-                    else: motivo_asesor = f"🟢 Ok {promedio_proyectado}" if gruas_necesarias == promedio_proyectado else f"⏳ Arr."
+                    explicaciones = []
+                    if promedio_proyectado > 0:
+                        if es_lluvia:
+                            explicaciones.append(f"{promedio_proyectado} nuevos por lluvia")
+                        else:
+                            explicaciones.append(f"{promedio_proyectado} nuevos")
+                    
+                    # Si las grúas necesarias superan los casos nuevos de la hora, es por el arrastre de cola
+                    if gruas_necesarias > promedio_proyectado:
+                        explicaciones.append("arrastre de unidad anterior")
+                    
+                    motivo_asesor = " + ".join(explicaciones) if explicaciones else "Ok"
 
                 if promedio_base_calculado > 0 or string_gruas != "-":
                     registros_tabla.append({
                         "HORA": f"{hr:02d}:00", "🌤️ Clima": detalle_clima, "📊 Prom": promedio_base_calculado, 
-                        "📈 Proy": etiqueta_proyeccion, "🚛 Grúas": string_gruas, "📋 Diagnóstico": motivo_asesor
+                        "📈 Proy": etiqueta_proyeccion, "🚛 Grúas N.": string_gruas, "📋 Diagnóstico": motivo_asesor
                     })
                 
                 data_grafico_lineas.append({
@@ -315,15 +327,15 @@ if df_raw is not None and not df_raw.empty:
                     "Proyección Ajustada": promedio_proyectado, "Grúas Necesarias": val_gruas_grafico
                 })
 
-        # --- ESTRUCTURACIÓN DEL CONTENIDO ELEVADO ---
+        # --- ESTRUCTURACIÓN VANGUARDISTA ALINEADA AL TOPE ---
         with col_c:
             col_izq_mando, col_der_mando = st.columns([6.2, 3.8])
             
-            # --- SECCIÓN SUPERIOR: TABLAS Y ALERTAS EN EL TOPE ---
+            # AMBAS TABLAS ALINEADAS EXACTAMENTE A LA MISMA ALTURA DESDE EL INICIO
             with col_izq_mando:
                 st.markdown(f"##### ⏰ Matriz Horaria Detallada: {dia_sel.title()}")
                 if registros_tabla: 
-                    st.dataframe(pd.DataFrame(registros_tabla), use_container_width=True, height=200, hide_index=True)
+                    st.dataframe(pd.DataFrame(registros_tabla), use_container_width=True, height=215, hide_index=True)
                 else:
                     st.info("Sin asistencias.")
 
@@ -345,7 +357,6 @@ if df_raw is not None and not df_raw.empty:
                             df_tc['P.'] = (df_tc['Casos'] / num_fechas_reales).round(0).astype(int)
                             st.dataframe(df_tc.sort_values(by='Casos', ascending=False).head(4), use_container_width=True, height=125, hide_index=True)
 
-                # UBICACIÓN SOLICITADA: ALERTAS WAZE SUPERIOR DERECHA
                 with sub_c2:
                     st.markdown("<span style='font-size:12px; font-weight:bold; color:#1e88e5;'>🚛 Alertas Waze Realtime</span>", unsafe_allow_html=True)
                     ejecutar_consulta = st.button("🔍 Escanear Mapa", use_container_width=True)
@@ -365,7 +376,7 @@ if df_raw is not None and not df_raw.empty:
                             
                     st.markdown(f'<div class="card-saldo"><span style="font-size:10px;color:#555;display:block;">Tokens: <b>{estado_global["creditos"]}</b> / 50</span></div>', unsafe_allow_html=True)
 
-            # --- SECCIÓN INFERIOR: EL GRÁFICO SE DESPLAZA ABAJO ---
+            # --- SECCIÓN INFERIOR: EL GRÁFICO ---
             st.markdown("---")
             st.markdown("##### 📈 Curva de Carga Operativa (24 Horas)")
             if data_grafico_lineas:
@@ -377,7 +388,7 @@ if df_raw is not None and not df_raw.empty:
                 fig_lineas.update_layout(
                     xaxis=dict(tickmode="linear", tick0=0, dtick=1),
                     margin=dict(l=10, r=10, t=5, b=5),
-                    height=150,  
+                    height=145,  
                     showlegend=True,
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10))
                 )
