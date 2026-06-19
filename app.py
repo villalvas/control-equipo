@@ -179,6 +179,7 @@ if df_raw is not None and not df_raw.empty:
     # --- PESTAÑAS PRINCIPALES DE ENTRADA ---
     tab_normal, tab_feriados = st.tabs(["🔮 Operación Diaria (Normal)", "📈 Planificador de Feriados"])
 
+    # PESTAÑA 1: OPERACIÓN NORMAL
     with tab_normal:
         col_sidebar, col_main_content = st.columns([1.6, 8.4])
         
@@ -219,7 +220,6 @@ if df_raw is not None and not df_raw.empty:
                 estado_sel = st.multiselect("📌 Estado:", options=estados_disponibles, key="estado_sel_key", on_change=guardar_estado_callback)
             else: estado_sel = []
 
-        # --- PROCESAMIENTO OPERACIÓN DIARIA ---
         if dia_sel.upper() == "TODOS":
             df_filtrado_dia = df_raw.copy()
             num_fechas_reales = df_filtrado_dia[col_fecha].nunique() if col_fecha in df_filtrado_dia.columns else 1
@@ -316,7 +316,6 @@ if df_raw is not None and not df_raw.empty:
 
         with col_main_content:
             col_mando_izq, col_mando_der = st.columns([4.2, 5.8])
-            
             with col_mando_izq:
                 st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📍 Top Localidades Afectadas</span>", unsafe_allow_html=True)
                 if len(df_filtrado) > 0:
@@ -326,20 +325,16 @@ if df_raw is not None and not df_raw.empty:
                     else:
                         df_top = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos')
                         df_top = df_top.rename(columns={col_ciudad: '📍 UBICACIÓN'})
-                    
                     df_top = df_top.sort_values(by='Casos', ascending=False).head(5)
                     total_general_casos = df_filtrado.shape[0]
                     df_top['%'] = (df_top['Casos'] / total_general_casos * 100).round(1).astype(str) + '%' if total_general_casos > 0 else '0%'
                     st.dataframe(df_top, use_container_width=True, height=140, hide_index=True)
-                else:
-                    st.info("Sin datos.")
+                else: st.info("Sin datos.")
 
             with col_mando_der:
                 st.markdown(f"<span style='font-size:12px; font-weight:bold; color:#111;'>⏰ Matriz Horaria Detallada: {dia_sel.title()}</span>", unsafe_allow_html=True)
-                if registros_tabla: 
-                    st.dataframe(pd.DataFrame(registros_tabla), use_container_width=True, height=140, hide_index=True)
-                else:
-                    st.info("Sin asistencias.")
+                if registros_tabla: st.dataframe(pd.DataFrame(registros_tabla), use_container_width=True, height=140, hide_index=True)
+                else: st.info("Sin asistencias.")
 
             st.markdown("<div style='margin-top: 4px; border-top: 1px solid #ddd; padding-top: 2px;'></div>", unsafe_allow_html=True)
             col_grafico_full, col_resumen_waze = st.columns([6.8, 3.2])
@@ -354,9 +349,7 @@ if df_raw is not None and not df_raw.empty:
                     fig_lineas.update_layout(
                         xaxis=dict(tickmode="linear", tick0=0, dtick=1, title=dict(text="Hora del Día", font=dict(size=10))),
                         yaxis=dict(title=dict(text="Incidentes / Asistencias", font=dict(size=10))),
-                        margin=dict(l=5, r=5, t=5, b=5),
-                        height=150,
-                        showlegend=True,
+                        margin=dict(l=5, r=5, t=5, b=5), height=150, showlegend=True,
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=9))
                     )
                     st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
@@ -387,22 +380,19 @@ if df_raw is not None and not df_raw.empty:
                                         alertas.append(f"⚠️ {tipo} en {calle[:12]}...")
                                 return alertas if alertas else ["✅ Flujo normal."]
                             except: return ["⚠️ Error de conexión."]
-                        
                         estado_global["alertas_waze"] = consultar_alertas_waze_real(bbox_nacional_ecuador)
                         estado_global["ultima_hora_waze"] = ahora_actual.strftime('%I:%M %p')
                         estado_global["creditos"] -= 1
                     st.markdown(f'<div class="card-saldo"><span style="font-size:9px;color:#444;">Tk: <b>{estado_global["creditos"]}</b>/50</span></div>', unsafe_allow_html=True)
-                
                 with c_w2:
                     st.markdown(f"<span style='font-size:9px; color:#777; display:block;'>Último: {estado_global['ultima_hora_waze']}</span>", unsafe_allow_html=True)
-                    if not estado_global["alertas_waze"]: 
-                        st.markdown("<span style='font-size:9px; color:#999;'>• Requiere escaneo.</span>", unsafe_allow_html=True)
+                    if not estado_global["alertas_waze"]: st.markdown("<span style='font-size:9px; color:#999;'>• Requiere escaneo.</span>", unsafe_allow_html=True)
                     else:
                         for incidente in estado_global["alertas_waze"][:1]:
                             st.markdown(f"<span style='font-size:9px; color:#d32f2f; font-weight:500;'>• {incidente}</span>", unsafe_allow_html=True)
 
+    # PESTAÑA 2: PLANIFICADOR DE FERIADOS (TOTALMENTE REDISEÑADO)
     with tab_feriados:
-        # --- NUEVA ARQUITECTURA: CAMPOS DE CONTROL IZQUIERDA COMPLETOS ---
         col_f_fer, col_c_fer = st.columns([1.6, 8.4])
         
         with col_f_fer:
@@ -425,7 +415,6 @@ if df_raw is not None and not df_raw.empty:
             servicio_feriado = st.selectbox("🎯 Servicio:", sorted(list(df_raw[col_servicio].dropna().unique())), index=0, key="sb_servicio_p")
             
             provincia_feriado = st.selectbox("📍 Provincia:", ["Todas"] + df_raw[col_provincia].value_counts().index.tolist(), key="sb_provincia_p")
-            
             if provincia_feriado != "Todas":
                 ciudades_f_disp = sorted(df_raw[df_raw[col_provincia] == provincia_feriado][col_ciudad].dropna().unique().tolist())
                 ciudad_feriado = st.multiselect("🏙️ Ciudades:", ciudades_f_disp, key="ms_ciudad_p")
@@ -450,40 +439,62 @@ if df_raw is not None and not df_raw.empty:
             if not df_data_feriado.empty:
                 df_data_feriado[col_hora_agrupada] = pd.to_numeric(df_data_feriado[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
                 
-                # Agrupación y colapso estricto por Provincia, Ciudad y Hora
-                df_agrupado = df_data_feriado.groupby([col_provincia, col_ciudad, col_hora_agrupada]).size().reset_index(name='HISTORICO_CASOS')
-                df_agrupado = df_agrupado.sort_values(by=[col_provincia, col_ciudad, col_hora_agrupada])
+                # --- COLLAPSE Y AGRUPACIÓN POR HORA NETO (Se eliminan Provincia/Ciudad de la tabla ya que están fijos a la izquierda) ---
+                df_neto_hora = df_data_feriado.groupby(col_hora_agrupada).size().reset_index(name='HISTORICO_CASOS')
+                df_neto_hora = df_neto_hora.sort_values(by=col_hora_agrupada)
                 
                 registros_procesados = []
-                for idx, fila in df_agrupado.iterrows():
-                    casos_reales = fila['HISTORICO_CASOS']
-                    prov = fila[col_provincia]
-                    ciu = fila[col_ciudad]
-                    hora_int = fila[col_hora_agrupada]
+                data_grafico_feriado = []
+                
+                # Inicializamos las 24 horas del día para rellenar vacíos si es necesario y mapear la curva
+                mapeo_casos = {row[col_hora_agrupada]: row['HISTORICO_CASOS'] for _, row in df_neto_hora.iterrows()}
+                
+                for hr in range(24):
+                    casos_reales = mapeo_casos.get(hr, 0)
+                    casos_previos = mapeo_casos.get(hr - 1, 0)
                     
-                    casos_previos = df_agrupado[
-                        (df_agrupado[col_provincia] == prov) & 
-                        (df_agrupado[col_ciudad] == ciu) & 
-                        (df_agrupado[col_hora_agrupada] == (hora_int - 1))
-                    ]['HISTORICO_CASOS'].sum()
-                    
-                    # Cálculo predictivo basado en volumen local y arrastre logístico
+                    # Cálculo predictivo basado en volumen acumulado y arrastre logístico
                     unidades_calculadas = math.ceil(casos_reales + (0.4 * casos_previos))
-                    if unidades_calculadas <= 0:
+                    if casos_reales == 0 and unidades_calculadas <= 0:
+                        unidades_calculadas = 0
+                    elif unidades_calculadas <= 0:
                         unidades_calculadas = 1
                         
-                    registros_procesados.append({
-                        "HORA": f"{hora_int:02d}:00",
-                        "PROVINCIA": prov,
-                        "CIUDAD": ciu,
-                        "HISTÓRICO CASOS": casos_reales,
-                        "GRÚAS REQUERIDAS": f"🚛 {unidades_calculadas} U."
+                    string_gruas = f"🚛 {unidades_calculadas} U." if unidades_calculadas > 0 else "-"
+                    
+                    if casos_reales > 0 or unidades_calculadas > 0:
+                        registros_procesados.append({
+                            "HORA": f"{hr:02d}:00",
+                            "HISTÓRICO CASOS": casos_reales,
+                            "GRÚAS REQUERIDAS": string_gruas
+                        })
+                    
+                    data_grafico_feriado.append({
+                        "Hora": hr,
+                        "Casos Históricos": casos_reales,
+                        "Grúas Proyectadas": unidades_calculadas
                     })
                 
-                df_mostrar_feriados = pd.DataFrame(registros_procesados)
-                # Reordenamos las columnas colocando la hora como primer índice temporal de lectura
-                df_mostrar_feriados = df_mostrar_feriados[["HORA", "PROVINCIA", "CIUDAD", "HISTÓRICO CASOS", "GRÚAS REQUERIDAS"]]
+                col_tab_izq, col_graf_der = st.columns([4.5, 5.5])
                 
-                st.dataframe(df_mostrar_feriados, use_container_width=True, height=310, hide_index=True)
+                with col_tab_izq:
+                    st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>⏰ Distribución Temporal de Carga</span>", unsafe_allow_html=True)
+                    df_mostrar_feriados = pd.DataFrame(registros_procesados)
+                    st.dataframe(df_mostrar_feriados, use_container_width=True, height=200, hide_index=True)
+                
+                with col_graf_der:
+                    st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📈 Curva de Comportamiento Crítico (Feriado)</span>", unsafe_allow_html=True)
+                    if data_grafico_feriado:
+                        df_gf = pd.DataFrame(data_grafico_feriado)
+                        fig_feriado = go.Figure()
+                        fig_feriado.add_trace(go.Scatter(x=df_gf["Hora"], y=df_gf["Casos Históricos"], name="📊 Histórico Real", mode="lines+markers", line=dict(color="#2ca02c", width=2)))
+                        fig_feriado.add_trace(go.Scatter(x=df_gf["Hora"], y=df_gf["Grúas Proyectadas"], name="🚛 Grúas Planificadas", mode="lines+markers", line=dict(color="#d62728", width=2, dash="dot")))
+                        fig_feriado.update_layout(
+                            xaxis=dict(tickmode="linear", tick0=0, dtick=2, title=dict(text="Hora", font=dict(size=9))),
+                            yaxis=dict(title=dict(text="Cantidad", font=dict(size=9))),
+                            margin=dict(l=5, r=5, t=5, b=5), height=200, showlegend=True,
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=9))
+                        )
+                        st.plotly_chart(fig_feriado, use_container_width=True, config={'displayModeBar': False})
             else:
                 st.info("⚠️ No se registran asistencias históricas cargadas para los criterios geográficos y de servicio seleccionados.")
