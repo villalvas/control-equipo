@@ -87,7 +87,7 @@ ahora_actual = datetime.now(zona_ecuador)
 hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
 
 st.title("🔮 Monitor de Proyección Horaria y Alerta Temprana de Flota")
-st.markdown(f"**Centro de Control Geoanalítico** | 🔄 Próximo refresco automático en 5 min. **(Última Actualización: {hora_estatica_str})**")
+st.markdown(f"**Centro de Control Geoanalítico** | 🔄 Próximo refresco automático en 5 min. **(Última Actualización del Tablero: {hora_estatica_str})**")
 
 # --- MEMORIA SERVIDOR ALTA DISPONIBILIDAD (Inmune a refresh de navegador) ---
 @st.cache_resource
@@ -107,7 +107,7 @@ def inicializar_memoria_inmune():
 
 estado_global = inicializar_memoria_inmune()
 
-# Precarga de estados persistentes
+# Precarga de estados persistentes en st.session_state
 if "dia_sel_key" not in st.session_state:
     st.session_state["dia_sel_key"] = estado_global["filtros_persistentes"]["dia_sel"]
 if "servicio_sel_key" not in st.session_state:
@@ -119,7 +119,7 @@ if "ciudad_sel_key" not in st.session_state:
 if "estado_sel_key" not in st.session_state:
     st.session_state["estado_sel_key"] = estado_global["filtros_persistentes"]["estado_sel"]
 
-# Funciones callbacks de resguardo
+# Funciones callbacks de resguardo inmediato
 def guardar_dia_callback(): estado_global["filtros_persistentes"]["dia_sel"] = st.session_state["dia_sel_key"]
 def guardar_servicio_callback(): estado_global["filtros_persistentes"]["servicio_sel"] = st.session_state["servicio_sel_key"]
 def guardar_provincia_callback():
@@ -146,7 +146,7 @@ coordenadas_provincias = {
 
 diccionario_dias = {"LUNES": 0, "MARTES": 1, "MIÉRCOLES": 2, "MIERCOLES": 2, "JUEVES": 3, "VIERNES": 4, "SÁBADO": 5, "SABADO": 5, "DOMINGO": 6}
 
-# Mapeo Maquillado de Retornos de Feriados 2026 (Análisis de tendencias)
+# Mapeo de Retornos de Feriados Nacionales 2026
 calendario_feriados_2026 = {
     "Retorno Año Nuevo (Enero 5)": {"fecha_origen": "2026-01-05", "tipo": "Real (Año Nuevo)"},
     "Retorno Carnaval (Febrero 18)": {"fecha_origen": "2026-02-18", "tipo": "Real (4 Días Largo)"},
@@ -230,7 +230,7 @@ if df_raw is not None and not df_raw.empty:
     if col_ciudad in df_raw.columns: df_raw[col_ciudad] = df_raw[col_ciudad].astype(str).str.strip()
     df_raw[col_cobertura] = df_raw[col_cobertura].astype(str).str.strip().str.upper() if col_cobertura in df_raw.columns else "LOCAL"
 
-    # --- DISEÑO DE PESTAÑAS DEL MONITOR ---
+    # --- ENRUTAMIENTO POR PESTAÑAS ---
     tab_normal, tab_feriados = st.tabs(["🔮 Operación Diaria (Normal)", "📈 Planificador de Feriados Nacionales"])
 
     # ==========================================
@@ -262,7 +262,6 @@ if df_raw is not None and not df_raw.empty:
                 estado_sel = st.multiselect("📌 Filtrar por Estado:", options=estados_disponibles, key="estado_sel_key", on_change=guardar_estado_callback)
             else: estado_sel = []
 
-        # Procesamiento Operación Normal
         if dia_sel.upper() == "TODOS":
             df_dia_especifico = df_raw.copy()
             num_fechas_reales = df_dia_especifico[col_fecha].nunique() if col_fecha in df_dia_especifico.columns else 1
@@ -368,13 +367,13 @@ if df_raw is not None and not df_raw.empty:
                     
             st.markdown(f'<div class="card-saldo"><span style="font-size:11px;color:#555;font-weight:bold;display:block;">🔑 CRÉDITOS DISPONIBLES</span><span style="font-size:24px;color:#2e7d32;font-weight:800;">{estado_global["creditos"]}</span><span style="font-size:13px;color:#777;"> / 50 Restantes</span></div>', unsafe_allow_html=True)
 
+
     # ==========================================
-    # PESTAÑA 2: PLANIFICADOR DE FERIADOS (NUEVA)
+    # PESTAÑA 2: PLANIFICADOR DE FERIADOS (CORREGIDO)
     # ==========================================
     with tab_feriados:
         st.write("### 🏖️ Analizador de Tendencias y Retornos de Feriados Nacionales")
         
-        # Filtros simplificados para el feriado
         c_fer1, c_fer2 = st.columns([4, 4])
         with c_fer1:
             feriado_seleccionado = st.selectbox("📅 Seleccione el Feriado a Analizar (Calendario 2026):", list(calendario_feriados_2026.keys()))
@@ -384,9 +383,9 @@ if df_raw is not None and not df_raw.empty:
         meta_feriado = calendario_feriados_2026[feriado_seleccionado]
         fecha_analisis = meta_feriado["fecha_origen"]
         
-        # Extraer data de la fecha mapeada
-        df_raw[col_fecha_limpia] = df_raw[col_fecha].astype(str).str.split().str[0]
-        df_data_feriado = df_raw[(df_raw[col_fecha_limpia] == fecha_analisis) & (df_raw[col_servicio] == servicio_feriado)]
+        # --- BLINDAJE DE ERROR POR STRING DIRECTO ---
+        df_raw["FECHA_LIMPIA"] = df_raw[col_fecha].astype(str).str.split().str[0]
+        df_data_feriado = df_raw[(df_raw["FECHA_LIMPIA"] == fecha_analisis) & (df_raw[col_servicio] == servicio_feriado)]
         
         st.markdown(f"""
             <div class="banner-feriado">
@@ -404,7 +403,6 @@ if df_raw is not None and not df_raw.empty:
                 total_casos_feriado = len(df_data_feriado)
                 st.metric(label="📊 Volumen Total de Asistencias en Retorno", value=f"{total_casos_feriado} Casos")
                 
-                # Top Provincias críticas durante el retorno
                 st.write("##### 📍 Provincias con Mayor Carga de Retorno")
                 df_prov_feriado = df_data_feriado.groupby(col_provincia).size().reset_index(name='Casos').sort_values(by='Casos', ascending=False)
                 st.dataframe(df_prov_feriado, use_container_width=True, hide_index=True)
@@ -412,7 +410,6 @@ if df_raw is not None and not df_raw.empty:
             with col_f_der:
                 st.write(f"### ⏰ Matriz Horaria y Flota Crítica de Retorno")
                 
-                # Inicialización de horas
                 df_data_feriado[col_hora_agrupada] = pd.to_numeric(df_data_feriado[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
                 casos_loc_f, casos_for_f = [0] * 24, [0] * 24
                 
@@ -427,7 +424,6 @@ if df_raw is not None and not df_raw.empty:
                     c_loc, c_for = casos_loc_f[hr], casos_for_f[hr]
                     total_hora = c_loc + c_for
                     
-                    # Cálculo de arrastre estricto para retorno de feriado (Sin promedios, volumen neto real de ese día)
                     l_ant = casos_loc_f[hr-1] if hr > 0 else c_loc
                     f_ant1 = casos_for_f[hr-1] if hr > 0 else c_for
                     f_ant2 = casos_for_f[hr-2] if hr > 1 else c_for
@@ -435,7 +431,6 @@ if df_raw is not None and not df_raw.empty:
                     gruas_feriado = math.ceil((c_loc + (0.5 * l_ant)) + (c_for + f_ant1 + f_ant2))
                     
                     if total_hora > 0 or gruas_feriado > 0:
-                        # Identificación del pico crítico
                         alerta_pico = "🔥 PICO CRÍTICO" if total_hora >= 4 else "Normal"
                         tabla_feriado_reporte.append({
                             "HORA": f"{hr:02d}:00",
