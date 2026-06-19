@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import math
 import streamlit.components.v1 as components
+import plotly.graph_objects as go
+import plotly.express as px
 
 # 1. Configuración de pantalla ultra ancha para el monitor de control
 st.set_page_config(
@@ -107,7 +109,7 @@ def inicializar_memoria_inmune():
 
 estado_global = inicializar_memoria_inmune()
 
-# Precarga de estados persistentes en st.session_state
+# Precarga de estados de st.session_state
 if "dia_sel_key" not in st.session_state:
     st.session_state["dia_sel_key"] = estado_global["filtros_persistentes"]["dia_sel"]
 if "servicio_sel_key" not in st.session_state:
@@ -218,14 +220,14 @@ if df_raw is not None and not df_raw.empty:
     if col_ciudad in df_raw.columns: df_raw[col_ciudad] = df_raw[col_ciudad].astype(str).str.strip()
     df_raw[col_cobertura] = df_raw[col_cobertura].astype(str).str.strip().str.upper() if col_cobertura in df_raw.columns else "LOCAL"
 
-    # --- LIMPIEZA DE FECHAS SEGURO (Extrae solo D/M/AAAA sin horas) ---
+    # --- LIMPIEZA DE FECHAS SEGURO ---
     df_raw[col_fecha] = df_raw[col_fecha].astype(str).str.strip().str.split().str[0]
 
     # --- ENRUTAMIENTO POR PESTAÑAS ---
     tab_normal, tab_feriados = st.tabs(["🔮 Operación Diaria (Normal)", "📈 Planificador de Feriados Nacionales"])
 
     # ==========================================
-    # PESTAÑA 1: OPERACIÓN NORMAL (Con lógica de +20% por Lluvia)
+    # PESTAÑA 1: OPERACIÓN NORMAL (Con Gráficos Interactivos)
     # ==========================================
     with tab_normal:
         st.write("### 🎛️ Panel de Filtros de Operación")
@@ -283,90 +285,149 @@ if df_raw is not None and not df_raw.empty:
             diccionario_clima = {}
             lat_c, lon_c = -0.2298, -78.5249
 
-        col_izq, col_cen, col_der = st.columns([3.4, 6.1, 2.5])
+        # --- PROCESAMIENTO PREVIO PARA MATRIZ Y GRÁFICOS ---
+        registros_tabla = []
+        data_grafico_lineas = []
+
+        if len(df_filtrado) > 0 and col_hora_agrupada in df_filtrado.columns:
+            df_horas_raw = df_filtrado.copy()
+            df_horas_raw[col_hora_agrupada] = pd.to_numeric(df_horas_raw[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
+            
+            casos_locales, casos_foraneos = [0] * 24, [0] * 24
+            for hr in range(24):
+                df_b = df_horas_raw[df_horas_raw[col_hora_agrupada] == hr]
+                for _, fila in df_b.iterrows():
+                    if "FOR" in str(fila[col_cobertura]).upper(): casos_foraneos[hr] += 1
+                    else: casos_locales[hr] += 1
+
+            for hr in range(24):
+                p_local, p_foraneo = casos_locales[hr] / num_fechas_reales, casos_foraneos[hr] / num_fechas_reales
+                promedio_base_calculado = int(round(p_local + p_foraneo, 0))
+                
+                clima_info = diccionario_clima.get(hr, {"Detalle": "☁️ Nublado (N/A)", "Estado": "Normal"})
+                detalle_clima = clima_info["Detalle"] if provincia_sel != "Todas" else "🌍 Filtre Provincia"
+                es_lluvia = clima_info["Estado"] == "Lluvia"
+
+                # --- MULTIPLICADOR DEL +20% POR LLUVIA ---
+                if es_lluvia and promedio_base_calculado > 0:
+                    promedio_proyectado = math.ceil(promedio_base_calculado * 1.20)
+                    etiqueta_proyeccion = f"{promedio_proyectado} (🌧️ +20%)"
+                    p_local_calc = p_local * 1.20
+                    p_foraneo_calc = p_foraneo * 1.20
+                else:
+                    promedio_proyectado = promedio_base_calculado
+                    etiqueta_proyeccion = f"{promedio_proyectado} (Normal)"
+                    p_local_calc = p_local
+                    p_foraneo_calc = p_foraneo
+
+                l_ant = p_local_calc if hr == 0 else (casos_locales[hr-1] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
+                f_ant1 = p_foraneo_calc if hr == 0 else (casos_foraneos[hr-1] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
+                f_ant2 = p_foraneo_calc if hr <= 1 else (casos_foraneos[hr-2] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
+                
+                gruas_necesarias = math.ceil((p_local_calc + (0.5 * l_ant)) + (p_foraneo_calc + f_ant1 + f_ant2))
+                es_remolque = any(x in str(servicio_sel).upper() for x in ["REMOLQUE", "GRÚA", "GRUA", "TODOS"])
+                
+                string_gruas = f"🚛 {gruas_necesarias} U." if es_remolque and (promedio_proyectado > 0 or gruas_necesarias > 0) else "-"
+                val_gruas_grafico = gruas_necesarias if es_remolque else 0
+
+                if string_gruas == "-": motivo_asesor = "Normal"
+                else:
+                    if es_lluvia: motivo_asesor = f"🌧️ Afectación climática + arrastre."
+                    else: motivo_asesor = f"🟢 Para los {promedio_proyectado} casos." if gruas_necesarias == promedio_proyectado else f"⏳ {promedio_proyectado} nuevos + arrastre."
+
+                if promedio_base_calculado > 0 or string_gruas != "-":
+                    registros_tabla.append({
+                        "HORA": f"{hr:02d}:00", 
+                        "🌤️ Clima Online": detalle_clima, 
+                        "📊 Promed": promedio_base_calculado, 
+                        "📈 Proyección": etiqueta_proyeccion, 
+                        "🚛 Grúas N.": string_gruas, 
+                        "📋 ¿Por qué?": motivo_asesor
+                    })
+                
+                data_grafico_lineas.append({
+                    "Hora": hr,
+                    "Promedio Base": promedio_base_calculado,
+                    "Proyección Ajustada": promedio_proyectado,
+                    "Grúas Necesarias": val_gruas_grafico
+                })
+
+        # ==========================================
+        # NUEVA SECCIÓN DE ANÁLISIS OPERATIVO VISUAL
+        # ==========================================
+        st.write("### 📊 Centro de Mando Visual e Interactivo")
+        g_col1, g_col2 = st.columns([7, 3])
+
+        with g_col1:
+            if data_grafico_lineas:
+                df_gl = pd.DataFrame(data_grafico_lineas)
+                fig_lineas = go.Figure()
+                fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Promedio Base"], name="📊 Promedio Base", mode="lines+markers", line=dict(color="#1f77b4", width=2)))
+                fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Proyección Ajustada"], name="📈 Proyección (+20% Lluvia)", mode="lines+markers", line=dict(color="#ff7f0e", width=2.5, dash="dash")))
+                fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Grúas Necesarias"], name="🚛 Grúas Requeridas", mode="lines+markers", line=dict(color="#2ca02c", width=3)))
+                fig_lineas.update_layout(
+                    title=f"Curva de Carga Operativa de las 24 Horas ({dia_sel.title()})",
+                    xaxis=dict(title="Hora del Día", tickmode="linear", tick0=0, dtick=1),
+                    yaxis=dict(title="Cantidad de Incidentes / Unidades"),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    height=280
+                )
+                st.plotly_chart(fig_lineas, use_container_width=True)
+            else:
+                st.info("Filtre datos válidos para inicializar la curva horaria.")
+
+        with g_col2:
+            if len(df_filtrado) > 0:
+                if provincia_sel == "Todas":
+                    df_g_bar = df_filtrado.groupby(col_provincia).size().reset_index(name='Casos')
+                    df_g_bar['Promed.'] = (df_g_bar['Casos'] / num_fechas_reales).round(1)
+                    df_g_bar = df_g_bar.sort_values(by='Promed.', ascending=True).tail(5)
+                    eje_x_y_labels = {"x": "Promed.", "y": col_provincia, "title": "Top 5 Provincias Críticas"}
+                else:
+                    df_g_bar = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos')
+                    df_g_bar['Promed.'] = (df_g_bar['Casos'] / num_fechas_reales).round(1)
+                    df_g_bar = df_g_bar.sort_values(by='Promed.', ascending=True).tail(5)
+                    eje_x_y_labels = {"x": "Promed.", "y": col_ciudad, "title": f"Top Ciudades: {provincia_sel.title()}"}
+
+                fig_barras = px.bar(df_g_bar, x=eje_x_y_labels["x"], y=eje_x_y_labels["y"], orientation='h', labels={"Promed.": "Promedio Asist."}, color_discrete_sequence=["#7f7f7f"])
+                fig_barras.update_layout(
+                    title=eje_x_y_labels["title"],
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    height=280
+                )
+                st.plotly_chart(fig_barras, use_container_width=True)
+            else:
+                st.info("Sin datos para barras.")
+
+        # --- SECCIÓN TABULAR Y ALERTAS BAJO LOS GRAFICOS ---
+        col_izq, col_cen, col_der = st.columns([2.5, 7, 2.5])
         
         with col_izq:
             promedio_asistencias_dia = int(round(len(df_filtrado) / num_fechas_reales, 0))
-            st.write(f"##### 📋 Promedio Demanda ({dia_sel.title()})")
-            st.metric(label="", value=f"{promedio_asistencias_dia} Asist.")
+            st.write(f"##### 📋 Resumen Demanda")
+            st.metric(label=f"Promedio ({dia_sel.title()})", value=f"{promedio_asistencias_dia} Asist.")
             
             if len(df_filtrado) > 0:
                 if provincia_sel == "Todas":
-                    st.write("##### 📋 Demanda Provincias")
+                    st.write("##### 📋 Tabla Macro Provincias")
                     df_tp = df_filtrado.groupby(col_provincia).size().reset_index(name='Casos')
                     df_tp['Prom.'] = (df_tp['Casos'] / num_fechas_reales).round(0).astype(int)
                     df_tp['Clima Online'] = [obtener_clima_actual_rapido(coordenadas_provincias[p][0], coordenadas_provincias[p][1]) if p in coordenadas_provincias else "🌍 N/A" for p in df_tp[col_provincia]]
                     st.dataframe(df_tp.sort_values(by='Casos', ascending=False), use_container_width=True, hide_index=True)
                 else:
-                    st.write(f"##### 📋 Ciudades: {provincia_sel.title()}")
+                    st.write(f"##### 📋 Detalle Ciudades")
                     df_tc = df_filtrado.groupby(col_ciudad).size().reset_index(name='Casos')
                     df_tc['Prom.'] = (df_tc['Casos'] / num_fechas_reales).round(0).astype(int)
                     df_tc['Clima Online'] = obtener_clima_actual_rapido(lat_c, lon_c)
                     st.dataframe(df_tc.sort_values(by='Casos', ascending=False), use_container_width=True, hide_index=True)
 
         with col_cen:
-            st.write(f"### ⏰ Matriz Horaria y Flota Simplificada: {dia_sel.title()}")
-            if len(df_filtrado) > 0 and col_hora_agrupada in df_filtrado.columns:
-                df_horas_raw = df_filtrado.copy()
-                df_horas_raw[col_hora_agrupada] = pd.to_numeric(df_horas_raw[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
-                
-                casos_locales, casos_foraneos = [0] * 24, [0] * 24
-                for hr in range(24):
-                    df_b = df_horas_raw[df_horas_raw[col_hora_agrupada] == hr]
-                    for _, fila in df_b.iterrows():
-                        if "FOR" in str(fila[col_cobertura]).upper(): casos_foraneos[hr] += 1
-                        else: casos_locales[hr] += 1
-
-                registros_tabla = []
-                for hr in range(24):
-                    p_local, p_foraneo = casos_locales[hr] / num_fechas_reales, casos_foraneos[hr] / num_fechas_reales
-                    promedio_base_calculado = int(round(p_local + p_foraneo, 0))
-                    
-                    clima_info = diccionario_clima.get(hr, {"Detalle": "☁️ Nublado (N/A)", "Estado": "Normal"})
-                    detalle_clima = clima_info["Detalle"] if provincia_sel != "Todas" else "🌍 Filtre Provincia"
-                    es_lluvia = clima_info["Estado"] == "Lluvia"
-
-                    # --- LÓGICA DE NEGOCIO: MULTIPLICADOR +20% POR LLUVIA ---
-                    if es_lluvia and promedio_base_calculado > 0:
-                        promedio_proyectado = math.ceil(promedio_base_calculado * 1.20)
-                        etiqueta_proyeccion = f"{promedio_proyectado} (🌧️ +20%)"
-                        # Ponderamos local y foráneo para recalcular las grúas necesarias bajo lluvia
-                        p_local_calc = p_local * 1.20
-                        p_foraneo_calc = p_foraneo * 1.20
-                    else:
-                        promedio_proyectado = promedio_base_calculado
-                        etiqueta_proyeccion = f"{promedio_proyectado} (Normal)"
-                        p_local_calc = p_local
-                        p_foraneo_calc = p_foraneo
-
-                    l_ant = p_local_calc if hr == 0 else (casos_locales[hr-1] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
-                    f_ant1 = p_foraneo_calc if hr == 0 else (casos_foraneos[hr-1] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
-                    f_ant2 = p_foraneo_calc if hr <= 1 else (casos_foraneos[hr-2] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
-                    
-                    gruas_necesarias = math.ceil((p_local_calc + (0.5 * l_ant)) + (p_foraneo_calc + f_ant1 + f_ant2))
-                    es_remolque = any(x in str(servicio_sel).upper() for x in ["REMOLQUE", "GRÚA", "GRUA", "TODOS"])
-                    
-                    string_gruas = f"🚛 {gruas_necesarias} U." if es_remolque and (promedio_proyectado > 0 or gruas_necesarias > 0) else "-"
-                    
-                    if string_gruas == "-":
-                        motivo_asesor = "Normal"
-                    else:
-                        if es_lluvia:
-                            motivo_asesor = f"🌧️ Afectación climática + arrastre."
-                        else:
-                            motivo_asesor = f"🟢 Para los {promedio_proyectado} casos." if gruas_necesarias == promedio_proyectado else f"⏳ {promedio_proyectado} nuevos + arrastre."
-
-                    if promedio_base_calculado > 0 or string_gruas != "-":
-                        registros_tabla.append({
-                            "HORA": f"{hr:02d}:00", 
-                            "🌤️ Clima Online": detalle_clima, 
-                            "📊 Promed": promedio_base_calculado, 
-                            "📈 Proyección": etiqueta_proyeccion, 
-                            "🚛 Grúas N.": string_gruas, 
-                            "📋 ¿Por qué?": motivo_asesor
-                        })
-
-                if registros_tabla: st.dataframe(pd.DataFrame(registros_tabla), use_container_width=True, hide_index=True)
+            st.write(f"### ⏰ Matriz Horaria Detallada: {dia_sel.title()}")
+            if registros_tabla: 
+                st.dataframe(pd.DataFrame(registros_tabla), use_container_width=True, height=450, hide_index=True)
+            else:
+                st.info("No se registraron asistencias que coincidan con los filtros seleccionados.")
 
         with col_der:
             st.write("##### 🚛 Alertas Nacionales Waze")
@@ -388,7 +449,7 @@ if df_raw is not None and not df_raw.empty:
 
 
     # ==========================================
-    # PESTAÑA 2: PLANIFICADOR DE FERIADOS NACIONALES (Fechas Homologadas D/M/AAAA)
+    # PESTAÑA 2: PLANIFICADOR DE FERIADOS NACIONALES
     # ==========================================
     with tab_feriados:
         st.write("### 🏖️ Analizador de Tendencias y Retornos de Feriados Nacionales")
@@ -396,35 +457,16 @@ if df_raw is not None and not df_raw.empty:
         c_fer1, c_fer2 = st.columns([4, 4])
         with c_fer1:
             calendario_feriados_2026 = {
-                "Año Nuevo (Retorno Enero 5)": {
-                    "fecha_datos_historicos": "5/1/2026", "tipo": "Data Real (Retorno de Año Nuevo)"
-                },
-                "Carnaval (Retorno Febrero 18)": {
-                    "fecha_datos_historicos": "18/2/2026", "tipo": "Data Real (Retorno de Carnaval - Fin de semana de 4 días)"
-                },
-                "Viernes Santo (Retorno Abril 6)": {
-                    "fecha_datos_historicos": "6/4/2026", "tipo": "Data Real (Retorno de Viernes Santo)"
-                },
-                "Día del Trabajo (Retorno Mayo 4)": {
-                    "fecha_datos_historicos": "4/5/2026", "tipo": "Data Real (Retorno Día del Trabajo)"
-                },
-                "Batalla del Pichincha (Retorno Mayo 25)": {
-                    "fecha_datos_historicos": "25/5/2026", "tipo": "Data Real (Retorno Batalla del Pichincha)"
-                },
-                "🔮 [Proyección] Primer Grito de Independencia (Agosto 10)": {
-                    "fecha_datos_historicos": "25/5/2026", "tipo": "Modelo Simulado (Espejo Retorno Fin de Semana Largo de Mayo)"
-                },
-                "🔮 [Proyección] Independencia de Guayaquil (Octubre 12)": {
-                    "fecha_datos_historicos": "6/4/2026", "tipo": "Modelo Simulado (Espejo Retorno Fin de Semana Largo de Abril)"
-                },
-                "🔮 [Proyección] Día de Difuntos e Ind. de Cuenca (Noviembre 3)": {
-                    "fecha_datos_historicos": "18/2/2026", "tipo": "Modelo Simulado (Espejo de Carnaval - Feriado de 4 días)"
-                },
-                "🔮 [Proyección] Navidad (Diciembre 28)": {
-                    "fecha_datos_historicos": "5/1/2026", "tipo": "Modelo Simulado (Espejo Retorno Fin de Semana Largo de Año Nuevo)"
-                }
+                "Año Nuevo (Retorno Enero 5)": {"fecha_datos_historicos": "5/1/2026", "tipo": "Data Real (Retorno de Año Nuevo)"},
+                "Carnaval (Retorno Febrero 18)": {"fecha_datos_historicos": "18/2/2026", "tipo": "Data Real (Retorno de Carnaval - Fin de semana de 4 días)"},
+                "Viernes Santo (Retorno Abril 6)": {"fecha_datos_historicos": "6/4/2026", "tipo": "Data Real (Retorno de Viernes Santo)"},
+                "Día del Trabajo (Retorno Mayo 4)": {"fecha_datos_historicos": "4/5/2026", "tipo": "Data Real (Retorno Día del Trabajo)"},
+                "Batalla del Pichincha (Retorno Mayo 25)": {"fecha_datos_historicos": "25/5/2026", "tipo": "Data Real (Retorno Batalla del Pichincha)"},
+                "🔮 [Proyección] Primer Grito de Independencia (Agosto 10)": {"fecha_datos_historicos": "25/5/2026", "tipo": "Modelo Simulado (Espejo Retorno Fin de Semana Largo de Mayo)"},
+                "🔮 [Proyección] Independencia de Guayaquil (Octubre 12)": {"fecha_datos_historicos": "6/4/2026", "tipo": "Modelo Simulado (Espejo Retorno Fin de Semana Largo de Abril)"},
+                "🔮 [Proyección] Día de Difuntos e Ind. de Cuenca (Noviembre 3)": {"fecha_datos_historicos": "18/2/2026", "tipo": "Modelo Simulado (Espejo de Carnaval - Feriado de 4 días)"},
+                "🔮 [Proyección] Navidad (Diciembre 28)": {"fecha_datos_historicos": "5/1/2026", "tipo": "Modelo Simulado (Espejo Retorno Fin de Semana Largo de Año Nuevo)"}
             }
-            
             feriado_seleccionado = st.selectbox("📅 Seleccione el Feriado Nacional a Analizar:", list(calendario_feriados_2026.keys()))
         with c_fer2:
             servicio_feriado = st.selectbox("🎯 Filtrar Servicio para Feriado:", sorted(list(df_raw[col_servicio].dropna().unique())), index=0)
