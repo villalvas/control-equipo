@@ -122,7 +122,7 @@ def inicializar_memoria_inmune():
         },
         "filtros_feriados": {
             "feriado_sel": "Carnaval",
-            "servicio_sel": "REMOLQUE PESADO",
+            "servicio_sel": "REMOLQUE DE AUTOMOVIL ( GRUA )",
             "provincia_sel": "Todas",
             "ciudad_sel": []
         }
@@ -271,6 +271,10 @@ if df_raw is not None and not df_raw.empty:
 
         if len(df_filtrado) > 0 and col_hora_agrupada in df_filtrado.columns:
             df_horas_raw = df_filtrado.copy()
+            
+            # --- PARCHE DE EXTRACCIÓN ULTRA-FLEXIBLE DE HORA (Pestaña 1) ---
+            df_horas_raw[col_hora_agrupada] = df_horas_raw[col_hora_agrupada].astype(str).str.strip()
+            df_horas_raw[col_hora_agrupada] = df_horas_raw[col_hora_agrupada].apply(lambda x: x.split(':')[0] if ':' in x else x)
             df_horas_raw[col_hora_agrupada] = pd.to_numeric(df_horas_raw[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
             
             casos_locales, casos_foraneos = [0] * 24, [0] * 24
@@ -322,11 +326,10 @@ if df_raw is not None and not df_raw.empty:
                         explicaciones.append("arrastre ant.")
                     motivo_asesor = " + ".join(explicaciones) if explicaciones else "Ok"
 
-                if promedio_base_calculado > 0 or string_gruas != "-":
-                    registros_tabla.append({
-                        "HORA": f"{hr:02d}:00", "🌤️ Clima": detalle_clima, "📊 Prom": promedio_base_calculado, 
-                        "📈 Proy": etiqueta_proyeccion, "🚛 Grúas N.": string_gruas, "📋 Diagnóstico": motivo_asesor
-                    })
+                registros_tabla.append({
+                    "HORA": f"{hr:02d}:00", "🌤️ Clima": detalle_clima, "📊 Prom": promedio_base_calculado, 
+                    "📈 Proy": etiqueta_proyeccion, "🚛 Grúas N.": string_gruas, "📋 Diagnóstico": motivo_asesor
+                })
                 
                 data_grafico_lineas.append({
                     "Hora": hr, "Promedio Base": promedio_base_calculado,
@@ -411,7 +414,7 @@ if df_raw is not None and not df_raw.empty:
                             st.markdown(f"<span style='font-size:9px; color:#d32f2f; font-weight:500;'>• {incidente}</span>", unsafe_allow_html=True)
 
     # ==========================================
-    # PESTAÑA 2: PLANIFICADOR DE FERIADOS (CON MEMORIA COMPLETA)
+    # PESTAÑA 2: PLANIFICADOR DE FERIADOS
     # ==========================================
     with tab_feriados:
         col_f_fer, col_c_fer = st.columns([1.6, 8.4])
@@ -479,6 +482,9 @@ if df_raw is not None and not df_raw.empty:
                 st.markdown(f'<div class="banner-feriado">📈 <b>Datos Históricos Reales:</b> Analizando Primer Día Laboral de Retorno del feriado del <b>{fecha_original}</b></div>', unsafe_allow_html=True)
             
             if not df_data_feriado.empty:
+                # --- PARCHE DE EXTRACCIÓN ULTRA-FLEXIBLE DE HORA (Pestaña 2: Feriados) ---
+                df_data_feriado[col_hora_agrupada] = df_data_feriado[col_hora_agrupada].astype(str).str.strip()
+                df_data_feriado[col_hora_agrupada] = df_data_feriado[col_hora_agrupada].apply(lambda x: x.split(':')[0] if ':' in x else x)
                 df_data_feriado[col_hora_agrupada] = pd.to_numeric(df_data_feriado[col_hora_agrupada], errors='coerce').fillna(-1).astype(int)
                 
                 df_neto_hora = df_data_feriado.groupby(col_hora_agrupada).size().reset_index(name='HISTORICO_CASOS')
@@ -500,12 +506,11 @@ if df_raw is not None and not df_raw.empty:
                         
                     string_gruas = f"🚛 {unidades_calculadas} U." if unidades_calculadas > 0 else "-"
                     
-                    if casos_reales > 0 or unidades_calculadas > 0:
-                        registros_processed.append({
-                            "HORA": f"{hr:02d}:00",
-                            "HISTÓRICO CASOS": casos_reales,
-                            "GRÚAS REQUERIDAS": string_gruas
-                        })
+                    registros_processed.append({
+                        "HORA": f"{hr:02d}:00",
+                        "HISTÓRICO CASOS": casos_reales,
+                        "GRÚAS REQUERIDAS": string_gruas
+                    })
                     
                     data_grafico_feriado.append({
                         "Hora": hr,
@@ -535,6 +540,6 @@ if df_raw is not None and not df_raw.empty:
                         )
                         st.plotly_chart(fig_feriado, use_container_width=True, config={'displayModeBar': False})
             else:
-                st.info("⚠️ No existen registros históricos base suficientes para modelar esta locación geográfica.")
+                st.warning("⚠️ No existen registros históricos en la base para la fecha de retorno y filtros seleccionados.")
 else:
     st.error("❌ No se pudo conectar con el servidor de datos de Google Sheets o la estructura de columnas es incorrecta.")
