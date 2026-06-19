@@ -314,7 +314,7 @@ if df_raw is not None and not df_raw.empty:
 
         with tab_normal:
             # --- FILA SUPERIOR CENTRAL: LOCALIDADES AFECTADAS Y MATRIZ HORARIA ---
-            col_mando_izq, col_mando_der = st.columns([4.0, 6.0])
+            col_mando_izq, col_mando_der = st.columns([4.2, 5.8])
             
             with col_mando_izq:
                 st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📍 Top Localidades Affected</span>", unsafe_allow_html=True)
@@ -329,18 +329,24 @@ if df_raw is not None and not df_raw.empty:
                     # Ordenar estrictamente de Mayor a Menor para el Top 5
                     df_top = df_top.sort_values(by='Casos', ascending=False).head(5)
                     
-                    # CORRECCIÓN EXPLICITA: Se reemplaza 'fontfamily' por 'family' para evitar el ValueError de Plotly
+                    # Calcular el porcentaje respecto a la suma del Top 5 para armar la etiqueta
+                    total_top_casos = df_top['Casos'].sum()
+                    if total_top_casos > 0:
+                        df_top['Etiqueta'] = df_top.apply(lambda r: f"{r['Casos']} ({int(round((r['Casos']/total_top_casos)*100, 0))}%)", axis=1)
+                    else:
+                        df_top['Etiqueta'] = df_top['Casos'].astype(str)
+                    
                     fig_top = go.Figure(go.Bar(
                         x=df_top['Casos'],
                         y=df_top['Eje'],
                         orientation='h',
-                        text=df_top['Casos'],              
+                        text=df_top['Etiqueta'],            
                         textposition='outside',            
                         marker_color='#444444',            
-                        textfont=dict(size=11, family="Arial")  # <--- CORREGIDO AQUÍ
+                        textfont=dict(size=10, family="Arial")  
                     ))
                     fig_top.update_layout(
-                        margin=dict(l=5, r=40, t=5, b=5),  
+                        margin=dict(l=5, r=80, t=5, b=5),  # r=80 da el espacio necesario al 100% de zoom para evitar cortes
                         height=140,
                         xaxis=dict(showgrid=False, visible=False), 
                         yaxis=dict(autorange="reversed", tickfont=dict(size=11)), 
