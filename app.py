@@ -128,33 +128,28 @@ def inicializar_memoria_inmune():
 
 estado_global = inicializar_memoria_inmune()
 
-# --- FUNCIÓN DE CONSULTA MANUAL CORREGIDA CON DIAGNÓSTICO DE ERRORES ---
+# --- FUNCIÓN DE CONSULTA MANUAL CON DIAGNÓSTICO DE ERRORES ---
 def ejecutar_consulta_tomtom():
-    # AGREGA TU KEY REAL DE TOMTOM DEVELOPER AQUÍ
+    # CLAVE DE API INTEGRADA EXITOSAMENTE
     TOMTOM_API_KEY = "BYGu8JyIsbquMfeU4Cj9P0HidHyxRbE8"
     
-    # Validación inteligente: Si no se ha configurado la clave, avisa explícitamente en lugar de colgarse
-    if TOMTOM_API_KEY == "TU_API_KEY_DE_TOMTOM" or TOMTOM_API_KEY.strip() == "":
-        estado_global["ultima_consulta_tomtom"] = "⚠️ Falta configurar API Key real"
-        return
-        
     bbox_ecuador = "-81.0000,-5.0000,-75.0000,1.5000"
     try:
         url = f"https://api.tomtom.com/traffic/services/4/incidentDetails/s3/{bbox_ecuador}/11/-1/json"
         params = {"key": TOMTOM_API_KEY, "geometries": "false", "language": "es-ES"}
         
-        # Petición HTTP con límite de 8 segundos para evitar congelar la pantalla de control
+        # Petición HTTP con límite de 8 segundos para evitar colgar la pantalla
         respuesta_raw = requests.get(url, params=params, timeout=8)
         
         # --- FILTRO Y DIAGNÓSTICO DETALLADO DE ESTADOS HTTP ---
         if respuesta_raw.status_code == 401:
-            estado_global["ultima_consulta_tomtom"] = "❌ Error 401: API Key Inválida / Incorrecta"
+            estado_global["ultima_consulta_tomtom"] = "❌ Error 401: API Key Inválida"
             return
         elif respuesta_raw.status_code == 403:
-            estado_global["ultima_consulta_tomtom"] = "❌ Error 403: Cuota Excedida o Clave Bloqueada"
+            estado_global["ultima_consulta_tomtom"] = "❌ Error 403: Cuota Excedida / Bloqueada"
             return
         elif respuesta_raw.status_code != 200:
-            estado_global["ultima_consulta_tomtom"] = f"❌ Error HTTP {respuesta_raw.status_code} de TomTom"
+            estado_global["ultima_consulta_tomtom"] = f"❌ Error HTTP {respuesta_raw.status_code}"
             return
             
         respuesta = respuesta_raw.json()
@@ -187,13 +182,13 @@ def ejecutar_consulta_tomtom():
             
             estado_global["historico_alertas"] = estado_global["historico_alertas"][:30]
         
-        # Si la consulta fue exitosa, guardamos la hora exacta
+        # Guardar la hora exacta del éxito de la petición manual
         estado_global["ultima_consulta_tomtom"] = datetime.now(zona_ecuador).strftime('%I:%M:%S %p')
         
     except requests.exceptions.Timeout:
-        estado_global["ultima_consulta_tomtom"] = "❌ Error: Tiempo de espera agotado (Servidor lento)"
+        estado_global["ultima_consulta_tomtom"] = "❌ Error: Tiempo de espera agotado"
     except requests.exceptions.ConnectionError:
-        estado_global["ultima_consulta_tomtom"] = "❌ Error: Sin conexión a Internet / Servidor caído"
+        estado_global["ultima_consulta_tomtom"] = "❌ Error: Sin conexión a Internet"
     except Exception as e:
         estado_global["ultima_consulta_tomtom"] = f"❌ Error inesperado: {str(e)}"
 
@@ -440,7 +435,7 @@ if df_raw is not None and not df_raw.empty:
                     st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
             # =========================================================================
-            # CAJA INFERIOR DERECHA: SECCIÓN MANUAL DE TRÁFICO REALTIME
+            # SECCIÓN DE ALERTAS EN TIEMPO REAL (TOMTOM DESDE CLIC MANUAL)
             # =========================================================================
             with col_resumen_waze:
                 promedio_asistencias_dia = int(round(len(df_filtrado) / num_fechas_reales, 0))
@@ -460,22 +455,22 @@ if df_raw is not None and not df_raw.empty:
 
                     st.markdown(f'<div class="card-saldo"><span style="font-size:9px;color:#444;">Filtro: <b>{etiqueta_cobertura}</b></span></div>', unsafe_allow_html=True)
                 with c_w2:
-                    # Muestra el estado exacto (Error o fecha/hora del último clic manual)
+                    # Diagnóstico unificado en tiempo real (Error u Hora de consulta manual)
                     st.markdown(f"<span style='font-size:9px; color:#777; display:block;'><b>Estado:</b> {estado_global['ultima_consulta_tomtom']}</span>", unsafe_allow_html=True)
                 
-                # Despliegue de los incidentes si existen
+                # Despliegue de los incidentes detectados
                 if not alertas_filtradas:
-                    st.markdown("<span style='font-size:9px; color:#999; display:block; margin-bottom:2px;'>• No hay alertas cargadas en esta provincia.</span>", unsafe_allow_html=True)
+                    st.markdown("<span style='font-size:9px; color:#999; display:block; margin-bottom:2px;'>• Rutas estables en la red nacional.</span>", unsafe_allow_html=True)
                 else:
                     for incidente in alertas_filtradas[:2]:
                         st.markdown(f"<span style='font-size:9px; color:#d32f2f; font-weight:500; display:block; line-height:1.2;'>• {incidente['texto'][:35]}...</span>", unsafe_allow_html=True)
                 
-                # BOTÓN MANUAL: Única forma de activar la llamada a TomTom
+                # BOTÓN MANUAL TOTALMENTE OPERATIVO
                 if st.button("🔄 CONSULTAR ALERTAS MANUALMENTE", use_container_width=True, key="btn_manual_tomtom"):
                     ejecutar_consulta_tomtom()
                     st.rerun()
 
-    # Planificador de feriados (Sin cambios en su estructura)
+    # Planificador de feriados (Sin modificaciones estructurales)
     with tab_feriados:
         col_f_fer, col_c_fer = st.columns([1.6, 8.4])
         
