@@ -110,7 +110,7 @@ hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
 def inicializar_memoria_inmune():
     return {
         "historico_alertas": [], 
-        "ultima_consulta_tomtom": "Nunca",
+        "ultima_consulta_tomtom": "Nunca consultado (Manual)",
         "filtros_normal": {
             "dia_sel": "TODOS",
             "servicio_sel": "Todos",
@@ -128,20 +128,36 @@ def inicializar_memoria_inmune():
 
 estado_global = inicializar_memoria_inmune()
 
-# --- FUNCIÓN DE CONSULTA REAL (TOMTOM) ---
+# --- FUNCIÓN DE CONSULTA MANUAL CORREGIDA CON DIAGNÓSTICO DE ERRORES ---
 def ejecutar_consulta_tomtom():
-    # AGREGA TU KEY GRATUITA DE TOMTOM DEVELOPER AQUÍ
+    # AGREGA TU KEY REAL DE TOMTOM DEVELOPER AQUÍ
     TOMTOM_API_KEY = "TU_API_KEY_DE_TOMTOM"
     
-    if TOMTOM_API_KEY == "TU_API_KEY_DE_TOMTOM":
-        estado_global["ultima_consulta_tomtom"] = datetime.now(zona_ecuador).strftime('%I:%M:%S %p')
+    # Validación inteligente: Si no se ha configurado la clave, avisa explícitamente en lugar de colgarse
+    if TOMTOM_API_KEY == "TU_API_KEY_DE_TOMTOM" or TOMTOM_API_KEY.strip() == "":
+        estado_global["ultima_consulta_tomtom"] = "⚠️ Falta configurar API Key real"
         return
         
     bbox_ecuador = "-81.0000,-5.0000,-75.0000,1.5000"
     try:
         url = f"https://api.tomtom.com/traffic/services/4/incidentDetails/s3/{bbox_ecuador}/11/-1/json"
         params = {"key": TOMTOM_API_KEY, "geometries": "false", "language": "es-ES"}
-        respuesta = requests.get(url, params=params, timeout=8).json()
+        
+        # Petición HTTP con límite de 8 segundos para evitar congelar la pantalla de control
+        respuesta_raw = requests.get(url, params=params, timeout=8)
+        
+        # --- FILTRO Y DIAGNÓSTICO DETALLADO DE ESTADOS HTTP ---
+        if respuesta_raw.status_code == 401:
+            estado_global["ultima_consulta_tomtom"] = "❌ Error 401: API Key Inválida / Incorrecta"
+            return
+        elif respuesta_raw.status_code == 403:
+            estado_global["ultima_consulta_tomtom"] = "❌ Error 403: Cuota Excedida o Clave Bloqueada"
+            return
+        elif respuesta_raw.status_code != 200:
+            estado_global["ultima_consulta_tomtom"] = f"❌ Error HTTP {respuesta_raw.status_code} de TomTom"
+            return
+            
+        respuesta = respuesta_raw.json()
         
         if "tm" in respuesta and "poi" in respuesta["tm"]:
             # Limpiar historial previo para la consulta manual fresca
@@ -170,9 +186,17 @@ def ejecutar_consulta_tomtom():
                 })
             
             estado_global["historico_alertas"] = estado_global["historico_alertas"][:30]
+        
+        # Si la consulta fue exitosa, guardamos la hora exacta
         estado_global["ultima_consulta_tomtom"] = datetime.now(zona_ecuador).strftime('%I:%M:%S %p')
-    except:
-        pass
+        
+    except requests.exceptions.Timeout:
+        estado_global["ultima_consulta_tomtom"] = "❌ Error: Tiempo de espera agotado (Servidor lento)"
+    except requests.exceptions.ConnectionError:
+        estado_global["ultima_consulta_tomtom"] = "❌ Error: Sin conexión a Internet / Servidor caído"
+    except Exception as e:
+        estado_global["ultima_consulta_tomtom"] = f"❌ Error inesperado: {str(e)}"
+
 
 st.markdown(f"<h2 style='margin:0px; padding:0px; font-size:26px;'>🔮 Proyección Horaria y Alerta de Flota</h2>", unsafe_allow_html=True)
 st.markdown(f"<p style='margin:0px 0px 6px 0px; font-size:11px; color:#555;'><b>Control Geoanalítico</b> | 🔄 Memoria Inmune Activa (Última Actualización: {hora_estatica_str})</p>", unsafe_allow_html=True)
@@ -416,7 +440,7 @@ if df_raw is not None and not df_raw.empty:
                     st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
             # =========================================================================
-            # CAJA INFERIOR DERECHA: BOTÓN MANUAL PARA ADQUIRIR ALERTAS REALTIME 
+            # CAJA INFERIOR DERECHA: SECCIÓN MANUAL DE TRÁFICO REALTIME
             # =========================================================================
             with col_resumen_waze:
                 promedio_asistencias_dia = int(round(len(df_filtrado) / num_fechas_reales, 0))
@@ -436,16 +460,17 @@ if df_raw is not None and not df_raw.empty:
 
                     st.markdown(f'<div class="card-saldo"><span style="font-size:9px;color:#444;">Filtro: <b>{etiqueta_cobertura}</b></span></div>', unsafe_allow_html=True)
                 with c_w2:
-                    st.markdown(f"<span style='font-size:9px; color:#777; display:block;'>Último: {estado_global['ultima_consulta_tomtom']}</span>", unsafe_allow_html=True)
+                    # Muestra el estado exacto (Error o fecha/hora del último clic manual)
+                    st.markdown(f"<span style='font-size:9px; color:#777; display:block;'><b>Estado:</b> {estado_global['ultima_consulta_tomtom']}</span>", unsafe_allow_html=True)
                 
                 # Despliegue de los incidentes si existen
                 if not alertas_filtradas:
-                    st.markdown("<span style='font-size:9px; color:#999; display:block; margin-bottom:2px;'>• Rutas estables en la red nacional.</span>", unsafe_allow_html=True)
+                    st.markdown("<span style='font-size:9px; color:#999; display:block; margin-bottom:2px;'>• No hay alertas cargadas en esta provincia.</span>", unsafe_allow_html=True)
                 else:
                     for incidente in alertas_filtradas[:2]:
                         st.markdown(f"<span style='font-size:9px; color:#d32f2f; font-weight:500; display:block; line-height:1.2;'>• {incidente['texto'][:35]}...</span>", unsafe_allow_html=True)
                 
-                # BOTÓN MANUAL EXACTAMENTE ABAJO DE LA CAJA ORIGINAL
+                # BOTÓN MANUAL: Única forma de activar la llamada a TomTom
                 if st.button("🔄 CONSULTAR ALERTAS MANUALMENTE", use_container_width=True, key="btn_manual_tomtom"):
                     ejecutar_consulta_tomtom()
                     st.rerun()
@@ -535,22 +560,3 @@ if df_raw is not None and not df_raw.empty:
                 with col_tab_izq:
                     st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>⏰ Distribución de Demanda y Flota Requerida</span>", unsafe_allow_html=True)
                     st.dataframe(pd.DataFrame(registros_processed), use_container_width=True, height=220, hide_index=True)
-                
-                with col_graf_der:
-                    st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📈 Gráfico de Curva de Carga Operativa (Retorno)</span>", unsafe_allow_html=True)
-                    if data_grafico_feriado:
-                        df_gf = pd.DataFrame(data_grafico_feriado)
-                        fig_feriado = go.Figure()
-                        fig_feriado.add_trace(go.Scatter(x=df_gf["Hora"], y=df_gf["Casos Históricos"], name="📊 Histórico Base", mode="lines+markers", line=dict(color="#1f77b4", width=2)))
-                        fig_feriado.add_trace(go.Scatter(x=df_gf["Hora"], y=df_gf["Grúas Proyectadas"], name="🚛 Grúas Solicitadas", mode="lines+markers", line=dict(color="#d62728", width=2, dash="dot")))
-                        fig_feriado.update_layout(
-                            xaxis=dict(tickmode="linear", tick0=0, dtick=2, title=dict(text="Hora del Día", font=dict(size=9))),
-                            yaxis=dict(title=dict(text="Cantidad", font=dict(size=9))),
-                            margin=dict(l=5, r=5, t=5, b=5), height=220, showlegend=True,
-                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=9))
-                        )
-                        st.plotly_chart(fig_feriado, use_container_width=True, config={'displayModeBar': False})
-            else:
-                st.warning("⚠️ No existen registros históricos en la base para la fecha de retorno y filtros seleccionados.")
-else:
-    st.error("❌ No se pudo conectar con el servidor de datos de Google Sheets o la estructura de columnas es incorrecta.")
