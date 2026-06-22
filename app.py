@@ -128,21 +128,29 @@ def inicializar_memoria_inmune():
 
 estado_global = inicializar_memoria_inmune()
 
-# --- FUNCIÓN DE CONSULTA MANUAL CON DIAGNÓSTICO DE ERRORES ---
+# --- FUNCIÓN DE CONSULTA MANUAL CORREGIDA (EVITA ERROR 400) ---
 def ejecutar_consulta_tomtom():
-    # CLAVE DE API INTEGRADA EXITOSAMENTE
+    # CLAVE DE API INTEGRADA
     TOMTOM_API_KEY = "BYGu8JyIsbquMfeU4Cj9P0HidHyxRbE8"
     
-    bbox_ecuador = "-81.0000,-5.0000,-75.0000,1.5000"
+    # Formato numérico limpio y estricto requerido por TomTom
+    bbox_ecuador = "-81.0,-5.0,-75.0,1.5"
     try:
         url = f"https://api.tomtom.com/traffic/services/4/incidentDetails/s3/{bbox_ecuador}/11/-1/json"
-        params = {"key": TOMTOM_API_KEY, "geometries": "false", "language": "es-ES"}
+        params = {
+            "key": TOMTOM_API_KEY, 
+            "geometries": "false", 
+            "language": "es-ES"
+        }
         
-        # Petición HTTP con límite de 8 segundos para evitar colgar la pantalla
+        # Petición HTTP con límite de 8 segundos
         respuesta_raw = requests.get(url, params=params, timeout=8)
         
         # --- FILTRO Y DIAGNÓSTICO DETALLADO DE ESTADOS HTTP ---
-        if respuesta_raw.status_code == 401:
+        if respuesta_raw.status_code == 400:
+            estado_global["ultima_consulta_tomtom"] = "❌ Error 400: Petición Incorrecta (Revisar Parámetros)"
+            return
+        elif respuesta_raw.status_code == 401:
             estado_global["ultima_consulta_tomtom"] = "❌ Error 401: API Key Inválida"
             return
         elif respuesta_raw.status_code == 403:
@@ -455,10 +463,10 @@ if df_raw is not None and not df_raw.empty:
 
                     st.markdown(f'<div class="card-saldo"><span style="font-size:9px;color:#444;">Filtro: <b>{etiqueta_cobertura}</b></span></div>', unsafe_allow_html=True)
                 with c_w2:
-                    # Diagnóstico unificado en tiempo real (Error u Hora de consulta manual)
+                    # Diagnóstico en vivo
                     st.markdown(f"<span style='font-size:9px; color:#777; display:block;'><b>Estado:</b> {estado_global['ultima_consulta_tomtom']}</span>", unsafe_allow_html=True)
                 
-                # Despliegue de los incidentes detectados
+                # Despliegue de incidentes
                 if not alertas_filtradas:
                     st.markdown("<span style='font-size:9px; color:#999; display:block; margin-bottom:2px;'>• Rutas estables en la red nacional.</span>", unsafe_allow_html=True)
                 else:
