@@ -105,6 +105,18 @@ zona_ecuador = ZoneInfo("America/Guayaquil")
 ahora_actual = datetime.now(zona_ecuador)
 hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
 
+coordenadas_provincias = {
+    'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
+    'MANABI': [-1.0543, -80.4544], 'EL ORO': [-3.2581, -79.9553], 'LOJA': [-3.9931, -79.2042], 
+    'TUNGURAHUA': [-1.2491, -78.6168], 'CHIMBORAZO': [-1.6743, -78.6483], 'ESMERALDAS': [0.9682, -79.6517], 
+    'LOS RIOS': [-1.4558, -79.4622], 'SANTO DOMINGO DE LOS TSACHILAS': [-0.2530, -79.1754], 
+    'SANTA ELENA': [-2.2262, -80.8584], 'IMBABURA': [0.3517, -78.1223], 'COTOPAXI': [-0.9352, -78.6155], 
+    'CARCHI': [0.7384, -77.7289], 'SUCUMBIOS': [0.0847, -76.8828], 'ORELLANA': [-0.5665, -76.9872], 
+    'NAPO': [-0.9902, -77.8129], 'PASTAZA': [-1.4870, -77.9954], 'MORONA SANTIAGO': [-2.3087, -78.1114], 
+    'ZAMORA CHINCHIPE': [-4.0692, -78.9566], 'GALAPAGOS': [-0.7402, -90.3119], 'BOLIVAR': [-1.5910, -79.0022], 
+    'CANAR': [-2.5518, -78.9392]
+}
+
 # --- MEMORIA SERVIDOR ALTA DISPONIBILIDAD ---
 @st.cache_resource
 def inicializar_memoria_inmune():
@@ -128,35 +140,40 @@ def inicializar_memoria_inmune():
 
 estado_global = inicializar_memoria_inmune()
 
-# --- FUNCIÓN DE CONSULTA MANUAL CON ENDPOINT SEGURO V5 (PREVIENE ERROR 400) ---
-def ejecutar_consulta_tomtom():
-    # CLAVE DE API INTEGRADA
+# --- FUNCIÓN DE CONSULTA DINÁMICA CON BBOX ACORDADO (<10,000 km²) ---
+def ejecutar_consulta_tomtom(provincia_activa):
     TOMTOM_API_KEY = "BYGu8JyIsbquMfeU4Cj9P0HidHyxRbE8"
     
-    # Bounding Box delimitada para cubrir el territorio continental de Ecuador
-    bbox_ecuador = "-81.5,-5.0,-75.0,1.5"
+    # Resolver centro geográfico para no exceder el límite de área de la API de TomTom
+    prov_key = provincia_activa.upper().strip()
+    if prov_key in coordenadas_provincias:
+        lat, lon = coordenadas_provincias[prov_key]
+    else:
+        lat, lon = -0.2298, -78.5249  # Centro por defecto en Pichincha
+        
+    # Crear un Bounding Box de +-0.4 grados (~80km x 80km = 6,400 km²), completamente seguro
+    min_lon = round(lon - 0.4, 4)
+    min_lat = round(lat - 0.4, 4)
+    max_lon = round(lon + 0.4, 4)
+    max_lat = round(lat + 0.4, 4)
+    bbox_dinamico = f"{min_lon},{min_lat},{max_lon},{max_lat}"
+    
     try:
-        # Migración al endpoint estandarizado v5 de Incidentes de Tráfico
         url = "https://api.tomtom.com/traffic/services/5/incidentDetails"
         params = {
             "key": TOMTOM_API_KEY,
-            "bbox": bbox_ecuador,
+            "bbox": bbox_dinamico,
             "fields": "{incidents{type,geometry{type,coordinates},properties{id,iconCategory,magnitudeOfDelay,events{description,code},startTime,endTime,from,to,length,delay,roadNumbers}}}",
             "language": "es-ES"
         }
         
-        # Llamada HTTP controlada
         respuesta_raw = requests.get(url, params=params, timeout=8)
         
-        # --- FILTRO Y DIAGNÓSTICO DETALLADO DE ESTADOS HTTP ---
         if respuesta_raw.status_code == 400:
-            estado_global["ultima_consulta_tomtom"] = "❌ Error 400: Parámetros rechazados por el servidor"
+            estado_global["ultima_consulta_tomtom"] = "❌ Error 400: Parámetros o BBox excedido"
             return
         elif respuesta_raw.status_code == 401:
             estado_global["ultima_consulta_tomtom"] = "❌ Error 401: API Key Inválida"
-            return
-        elif respuesta_raw.status_code == 403:
-            estado_global["ultima_consulta_tomtom"] = "❌ Error 403: Cuota Excedida / Sin Permisos"
             return
         elif respuesta_raw.status_code != 200:
             estado_global["ultima_consulta_tomtom"] = f"❌ Error HTTP {respuesta_raw.status_code}"
@@ -164,31 +181,21 @@ def ejecutar_consulta_tomtom():
             
         respuesta = respuesta_raw.json()
         
-        # Procesamiento adaptado a la respuesta de la API v5
         if "incidents" in respuesta:
             estado_global["historico_alertas"] = []
-            
             for incidente in respuesta["incidents"]:
                 propiedades = incidente.get("properties", {})
                 eventos = propiedades.get("events", [])
                 
-                # Extraer descripción del evento de tráfico
                 descripcion = eventos[0].get("description", "Incidente reportado") if eventos else "Retención vial"
                 calle_desde = propiedades.get("from", "Vía Secundaria")
                 calle_hasta = propiedades.get("to", "")
                 calle = f"{calle_desde} -> {calle_hasta}" if calle_hasta else calle_desde
-                
                 magnitud = propiedades.get("iconCategory", 1)
                 
-                # Clasificador geográfico para el filtrado del Dashboard
-                prov_detectada = "TODAS"
-                listado_provincias = ['PICHINCHA', 'GUAYAS', 'AZUAY', 'MANABI', 'EL ORO', 'LOJA', 'LOS RIOS', 'SANTA ELENA', 'TUNGURAHUA']
-                for p in listado_provincias:
-                    if p in descripcion.upper() or p in calle.upper():
-                        prov_detectada = p
-                        break
+                # Clasificador de procedencia
+                prov_detectada = prov_key if prov_key != "TODAS" else "PICHINCHA"
                 
-                # Mapeo de íconos según categoría oficial de TomTom
                 iconos = {0: "⚠️", 1: "💥 Choque", 2: "🚫 Vía Cerrada", 3: "🚧 Obras", 4: "🚗 Tráfico", 5: "🌧️ Clima"}
                 txt_final = f"{iconos.get(magnitud, '⚠️')} | {calle}: {descripcion}"
                 h_reporte = datetime.now(zona_ecuador).strftime('%I:%M %p')
@@ -199,34 +206,15 @@ def ejecutar_consulta_tomtom():
                     "texto": txt_final
                 })
             
-            # Limitar almacenamiento en memoria para conservar rendimiento visual
             estado_global["historico_alertas"] = estado_global["historico_alertas"][:30]
         
-        # Registro del éxito de la llamada con estampa de tiempo
         estado_global["ultima_consulta_tomtom"] = datetime.now(zona_ecuador).strftime('%I:%M:%S %p')
         
-    except requests.exceptions.Timeout:
-        estado_global["ultima_consulta_tomtom"] = "❌ Error: Tiempo de espera agotado"
-    except requests.exceptions.ConnectionError:
-        estado_global["ultima_consulta_tomtom"] = "❌ Error: Sin conexión a Internet"
     except Exception as e:
-        estado_global["ultima_consulta_tomtom"] = f"❌ Error inesperado: {str(e)}"
-
+        estado_global["ultima_consulta_tomtom"] = f"❌ Error: {str(e)}"
 
 st.markdown(f"<h2 style='margin:0px; padding:0px; font-size:26px;'>🔮 Proyección Horaria y Alerta de Flota</h2>", unsafe_allow_html=True)
 st.markdown(f"<p style='margin:0px 0px 6px 0px; font-size:11px; color:#555;'><b>Control Geoanalítico</b> | 🔄 Memoria Inmune Activa (Última Actualización: {hora_estatica_str})</p>", unsafe_allow_html=True)
-
-coordenadas_provincias = {
-    'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
-    'MANABI': [-1.0543, -80.4544], 'EL ORO': [-3.2581, -79.9553], 'LOJA': [-3.9931, -79.2042], 
-    'TUNGURAHUA': [-1.2491, -78.6168], 'CHIMBORAZO': [-1.6743, -78.6483], 'ESMERALDAS': [0.9682, -79.6517], 
-    'LOS RIOS': [-1.4558, -79.4622], 'SANTO DOMINGO DE LOS TSACHILAS': [-0.2530, -79.1754], 
-    'SANTA ELENA': [-2.2262, -80.8584], 'IMBABURA': [0.3517, -78.1223], 'COTOPAXI': [-0.9352, -78.6155], 
-    'CARCHI': [0.7384, -77.7289], 'SUCUMBIOS': [0.0847, -76.8828], 'ORELLANA': [-0.5665, -76.9872], 
-    'NAPO': [-0.9902, -77.8129], 'PASTAZA': [-1.4870, -77.9954], 'MORONA SANTIAGO': [-2.3087, -78.1114], 
-    'ZAMORA CHINCHIPE': [-4.0692, -78.9566], 'GALAPAGOS': [-0.7402, -90.3119], 'BOLIVAR': [-1.5910, -79.0022], 
-    'CANAR': [-2.5518, -78.9392]
-}
 
 diccionario_dias = {"LUNES": 0, "MARTES": 1, "MIÉRCOLES": 2, "MIERCOLES": 2, "JUEVES": 3, "VIERNES": 4, "SÁBADO": 5, "SABADO": 5, "DOMINGO": 6}
 
@@ -455,7 +443,7 @@ if df_raw is not None and not df_raw.empty:
                     st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
             # =========================================================================
-            # SECCIÓN DE ALERTAS EN TIEMPO REAL (TOMTOM CONFIGURADO EN V5)
+            # SECCIÓN DE ALERTAS EN TIEMPO REAL (TOMTOM CONFIGURADO EN V5 DINÁMICO)
             # =========================================================================
             with col_resumen_waze:
                 promedio_asistencias_dia = int(round(len(df_filtrado) / num_fechas_reales, 0))
@@ -468,26 +456,24 @@ if df_raw is not None and not df_raw.empty:
                 with c_w1:
                     if provincia_sel == "Todas":
                         alertas_filtradas = estado_global["historico_alertas"]
-                        etiqueta_cobertura = "Global"
+                        etiqueta_cobertura = "Pichincha (Def)"
                     else:
                         alertas_filtradas = [x for x in estado_global["historico_alertas"] if x["provincia"] == provincia_sel.upper().strip()]
                         etiqueta_cobertura = provincia_sel[:10]
 
                     st.markdown(f'<div class="card-saldo"><span style="font-size:9px;color:#444;">Filtro: <b>{etiqueta_cobertura}</b></span></div>', unsafe_allow_html=True)
                 with c_w2:
-                    # Monitor de Diagnóstico Unificado
                     st.markdown(f"<span style='font-size:9px; color:#777; display:block;'><b>Estado:</b> {estado_global['ultima_consulta_tomtom']}</span>", unsafe_allow_html=True)
                 
-                # Despliegue de incidencias activas en el mapa vial
                 if not alertas_filtradas:
-                    st.markdown("<span style='font-size:9px; color:#999; display:block; margin-bottom:2px;'>• Rutas estables en la red nacional.</span>", unsafe_allow_html=True)
+                    st.markdown("<span style='font-size:9px; color:#999; display:block; margin-bottom:2px;'>• Rutas estables en la zona de control.</span>", unsafe_allow_html=True)
                 else:
                     for incidente in alertas_filtradas[:2]:
                         st.markdown(f"<span style='font-size:9px; color:#d32f2f; font-weight:500; display:block; line-height:1.2;'>• {incidente['texto'][:35]}...</span>", unsafe_allow_html=True)
                 
-                # EJECUCIÓN MANUAL TOTALMENTE INTEGRADA
+                # EJECUCIÓN MANUAL PASANDO LA PROVINCIA ACTUAL
                 if st.button("🔄 CONSULTAR ALERTAS MANUALMENTE", use_container_width=True, key="btn_manual_tomtom"):
-                    ejecutar_consulta_tomtom()
+                    ejecutar_consulta_tomtom(provincia_sel)
                     st.rerun()
 
     # Planificador de feriados (Sin modificaciones estructurales)
