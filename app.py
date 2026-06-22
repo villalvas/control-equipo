@@ -128,33 +128,35 @@ def inicializar_memoria_inmune():
 
 estado_global = inicializar_memoria_inmune()
 
-# --- FUNCIÓN DE CONSULTA MANUAL CORREGIDA (EVITA ERROR 400) ---
+# --- FUNCIÓN DE CONSULTA MANUAL CON ENDPOINT SEGURO V5 (PREVIENE ERROR 400) ---
 def ejecutar_consulta_tomtom():
     # CLAVE DE API INTEGRADA
     TOMTOM_API_KEY = "BYGu8JyIsbquMfeU4Cj9P0HidHyxRbE8"
     
-    # Formato numérico limpio y estricto requerido por TomTom
-    bbox_ecuador = "-81.0,-5.0,-75.0,1.5"
+    # Bounding Box delimitada para cubrir el territorio continental de Ecuador
+    bbox_ecuador = "-81.5,-5.0,-75.0,1.5"
     try:
-        url = f"https://api.tomtom.com/traffic/services/4/incidentDetails/s3/{bbox_ecuador}/11/-1/json"
+        # Migración al endpoint estandarizado v5 de Incidentes de Tráfico
+        url = "https://api.tomtom.com/traffic/services/5/incidentDetails"
         params = {
-            "key": TOMTOM_API_KEY, 
-            "geometries": "false", 
+            "key": TOMTOM_API_KEY,
+            "bbox": bbox_ecuador,
+            "fields": "{incidents{type,geometry{type,coordinates},properties{id,iconCategory,magnitudeOfDelay,events{description,code},startTime,endTime,from,to,length,delay,roadNumbers}}}",
             "language": "es-ES"
         }
         
-        # Petición HTTP con límite de 8 segundos
+        # Llamada HTTP controlada
         respuesta_raw = requests.get(url, params=params, timeout=8)
         
         # --- FILTRO Y DIAGNÓSTICO DETALLADO DE ESTADOS HTTP ---
         if respuesta_raw.status_code == 400:
-            estado_global["ultima_consulta_tomtom"] = "❌ Error 400: Petición Incorrecta (Revisar Parámetros)"
+            estado_global["ultima_consulta_tomtom"] = "❌ Error 400: Parámetros rechazados por el servidor"
             return
         elif respuesta_raw.status_code == 401:
             estado_global["ultima_consulta_tomtom"] = "❌ Error 401: API Key Inválida"
             return
         elif respuesta_raw.status_code == 403:
-            estado_global["ultima_consulta_tomtom"] = "❌ Error 403: Cuota Excedida / Bloqueada"
+            estado_global["ultima_consulta_tomtom"] = "❌ Error 403: Cuota Excedida / Sin Permisos"
             return
         elif respuesta_raw.status_code != 200:
             estado_global["ultima_consulta_tomtom"] = f"❌ Error HTTP {respuesta_raw.status_code}"
@@ -162,15 +164,23 @@ def ejecutar_consulta_tomtom():
             
         respuesta = respuesta_raw.json()
         
-        if "tm" in respuesta and "poi" in respuesta["tm"]:
-            # Limpiar historial previo para la consulta manual fresca
+        # Procesamiento adaptado a la respuesta de la API v5
+        if "incidents" in respuesta:
             estado_global["historico_alertas"] = []
             
-            for incidente in respuesta["tm"]["poi"]:
-                descripcion = incidente.get("d", "Incidente")
-                calle = incidente.get("f", "Vía")
-                magnitud = incidente.get("ic", 1)
+            for incidente in respuesta["incidents"]:
+                propiedades = incidente.get("properties", {})
+                eventos = propiedades.get("events", [])
                 
+                # Extraer descripción del evento de tráfico
+                descripcion = eventos[0].get("description", "Incidente reportado") if eventos else "Retención vial"
+                calle_desde = propiedades.get("from", "Vía Secundaria")
+                calle_hasta = propiedades.get("to", "")
+                calle = f"{calle_desde} -> {calle_hasta}" if calle_hasta else calle_desde
+                
+                magnitud = propiedades.get("iconCategory", 1)
+                
+                # Clasificador geográfico para el filtrado del Dashboard
                 prov_detectada = "TODAS"
                 listado_provincias = ['PICHINCHA', 'GUAYAS', 'AZUAY', 'MANABI', 'EL ORO', 'LOJA', 'LOS RIOS', 'SANTA ELENA', 'TUNGURAHUA']
                 for p in listado_provincias:
@@ -178,7 +188,8 @@ def ejecutar_consulta_tomtom():
                         prov_detectada = p
                         break
                 
-                iconos = {1: "⚠️", 2: "🚗 Tráfico", 3: "💥 Choque", 4: "🚫 Vía Cerrada"}
+                # Mapeo de íconos según categoría oficial de TomTom
+                iconos = {0: "⚠️", 1: "💥 Choque", 2: "🚫 Vía Cerrada", 3: "🚧 Obras", 4: "🚗 Tráfico", 5: "🌧️ Clima"}
                 txt_final = f"{iconos.get(magnitud, '⚠️')} | {calle}: {descripcion}"
                 h_reporte = datetime.now(zona_ecuador).strftime('%I:%M %p')
                 
@@ -188,9 +199,10 @@ def ejecutar_consulta_tomtom():
                     "texto": txt_final
                 })
             
+            # Limitar almacenamiento en memoria para conservar rendimiento visual
             estado_global["historico_alertas"] = estado_global["historico_alertas"][:30]
         
-        # Guardar la hora exacta del éxito de la petición manual
+        # Registro del éxito de la llamada con estampa de tiempo
         estado_global["ultima_consulta_tomtom"] = datetime.now(zona_ecuador).strftime('%I:%M:%S %p')
         
     except requests.exceptions.Timeout:
@@ -443,7 +455,7 @@ if df_raw is not None and not df_raw.empty:
                     st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
             # =========================================================================
-            # SECCIÓN DE ALERTAS EN TIEMPO REAL (TOMTOM DESDE CLIC MANUAL)
+            # SECCIÓN DE ALERTAS EN TIEMPO REAL (TOMTOM CONFIGURADO EN V5)
             # =========================================================================
             with col_resumen_waze:
                 promedio_asistencias_dia = int(round(len(df_filtrado) / num_fechas_reales, 0))
@@ -463,17 +475,17 @@ if df_raw is not None and not df_raw.empty:
 
                     st.markdown(f'<div class="card-saldo"><span style="font-size:9px;color:#444;">Filtro: <b>{etiqueta_cobertura}</b></span></div>', unsafe_allow_html=True)
                 with c_w2:
-                    # Diagnóstico en vivo
+                    # Monitor de Diagnóstico Unificado
                     st.markdown(f"<span style='font-size:9px; color:#777; display:block;'><b>Estado:</b> {estado_global['ultima_consulta_tomtom']}</span>", unsafe_allow_html=True)
                 
-                # Despliegue de incidentes
+                # Despliegue de incidencias activas en el mapa vial
                 if not alertas_filtradas:
                     st.markdown("<span style='font-size:9px; color:#999; display:block; margin-bottom:2px;'>• Rutas estables en la red nacional.</span>", unsafe_allow_html=True)
                 else:
                     for incidente in alertas_filtradas[:2]:
                         st.markdown(f"<span style='font-size:9px; color:#d32f2f; font-weight:500; display:block; line-height:1.2;'>• {incidente['texto'][:35]}...</span>", unsafe_allow_html=True)
                 
-                # BOTÓN MANUAL TOTALMENTE OPERATIVO
+                # EJECUCIÓN MANUAL TOTALMENTE INTEGRADA
                 if st.button("🔄 CONSULTAR ALERTAS MANUALMENTE", use_container_width=True, key="btn_manual_tomtom"):
                     ejecutar_consulta_tomtom()
                     st.rerun()
