@@ -131,7 +131,7 @@ estado_global = inicializar_memoria_inmune()
 # --- FUNCIÓN DE CONSULTA MANUAL CORREGIDA CON DIAGNÓSTICO DE ERRORES ---
 def ejecutar_consulta_tomtom():
     # AGREGA TU KEY REAL DE TOMTOM DEVELOPER AQUÍ
-    TOMTOM_API_KEY = "a1b2c3d4e5f6g7h8i9j0..."
+    TOMTOM_API_KEY = "BYGu8JyIsbquMfeU4Cj9P0HidHyxRbE8"
     
     # Validación inteligente: Si no se ha configurado la clave, avisa explícitamente en lugar de colgarse
     if TOMTOM_API_KEY == "TU_API_KEY_DE_TOMTOM" or TOMTOM_API_KEY.strip() == "":
