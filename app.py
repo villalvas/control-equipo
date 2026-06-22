@@ -105,24 +105,13 @@ zona_ecuador = ZoneInfo("America/Guayaquil")
 ahora_actual = datetime.now(zona_ecuador)
 hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
 
-coordenadas_provincias = {
-    'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
-    'MANABI': [-1.0543, -80.4544], 'EL ORO': [-3.2581, -79.9553], 'LOJA': [-3.9931, -79.2042], 
-    'TUNGURAHUA': [-1.2491, -78.6168], 'CHIMBORAZO': [-1.6743, -78.6483], 'ESMERALDAS': [0.9682, -79.6517], 
-    'LOS RIOS': [-1.4558, -79.4622], 'SANTO DOMINGO DE LOS TSACHILAS': [-0.2530, -79.1754], 
-    'SANTA ELENA': [-2.2262, -80.8584], 'IMBABURA': [0.3517, -78.1223], 'COTOPAXI': [-0.9352, -78.6155], 
-    'CARCHI': [0.7384, -77.7289], 'SUCUMBIOS': [0.0847, -76.8828], 'ORELLANA': [-0.5665, -76.9872], 
-    'NAPO': [-0.9902, -77.8129], 'PASTAZA': [-1.4870, -77.9954], 'MORONA SANTIAGO': [-2.3087, -78.1114], 
-    'ZAMORA CHINCHIPE': [-4.0692, -78.9566], 'GALAPAGOS': [-0.7402, -90.3119], 'BOLIVAR': [-1.5910, -79.0022], 
-    'CANAR': [-2.5518, -78.9392]
-}
-
 # --- MEMORIA SERVIDOR ALTA DISPONIBILIDAD ---
 @st.cache_resource
 def inicializar_memoria_inmune():
     return {
-        "historico_alertas": [], 
-        "ultima_consulta_tomtom": "Nunca consultado (Manual)",
+        "creditos": 48,
+        "alertas_waze": [],
+        "ultima_hora_waze": "Nunca",
         "filtros_normal": {
             "dia_sel": "TODOS",
             "servicio_sel": "Todos",
@@ -140,81 +129,20 @@ def inicializar_memoria_inmune():
 
 estado_global = inicializar_memoria_inmune()
 
-# --- FUNCIÓN DE CONSULTA DINÁMICA CON BBOX ACORDADO (<10,000 km²) ---
-def ejecutar_consulta_tomtom(provincia_activa):
-    TOMTOM_API_KEY = "BYGu8JyIsbquMfeU4Cj9P0HidHyxRbE8"
-    
-    # Resolver centro geográfico para no exceder el límite de área de la API de TomTom
-    prov_key = provincia_activa.upper().strip()
-    if prov_key in coordenadas_provincias:
-        lat, lon = coordenadas_provincias[prov_key]
-    else:
-        lat, lon = -0.2298, -78.5249  # Centro por defecto en Pichincha
-        
-    # Crear un Bounding Box de +-0.4 grados (~80km x 80km = 6,400 km²), completamente seguro
-    min_lon = round(lon - 0.4, 4)
-    min_lat = round(lat - 0.4, 4)
-    max_lon = round(lon + 0.4, 4)
-    max_lat = round(lat + 0.4, 4)
-    bbox_dinamico = f"{min_lon},{min_lat},{max_lon},{max_lat}"
-    
-    try:
-        url = "https://api.tomtom.com/traffic/services/5/incidentDetails"
-        params = {
-            "key": TOMTOM_API_KEY,
-            "bbox": bbox_dinamico,
-            "fields": "{incidents{type,geometry{type,coordinates},properties{id,iconCategory,magnitudeOfDelay,events{description,code},startTime,endTime,from,to,length,delay,roadNumbers}}}",
-            "language": "es-ES"
-        }
-        
-        respuesta_raw = requests.get(url, params=params, timeout=8)
-        
-        if respuesta_raw.status_code == 400:
-            estado_global["ultima_consulta_tomtom"] = "❌ Error 400: Parámetros o BBox excedido"
-            return
-        elif respuesta_raw.status_code == 401:
-            estado_global["ultima_consulta_tomtom"] = "❌ Error 401: API Key Inválida"
-            return
-        elif respuesta_raw.status_code != 200:
-            estado_global["ultima_consulta_tomtom"] = f"❌ Error HTTP {respuesta_raw.status_code}"
-            return
-            
-        respuesta = respuesta_raw.json()
-        
-        if "incidents" in respuesta:
-            estado_global["historico_alertas"] = []
-            for incidente in respuesta["incidents"]:
-                propiedades = incidente.get("properties", {})
-                eventos = propiedades.get("events", [])
-                
-                descripcion = eventos[0].get("description", "Incidente reportado") if eventos else "Retención vial"
-                calle_desde = propiedades.get("from", "Vía Secundaria")
-                calle_hasta = propiedades.get("to", "")
-                calle = f"{calle_desde} -> {calle_hasta}" if calle_hasta else calle_desde
-                magnitud = propiedades.get("iconCategory", 1)
-                
-                # Clasificador de procedencia
-                prov_detectada = prov_key if prov_key != "TODAS" else "PICHINCHA"
-                
-                iconos = {0: "⚠️", 1: "💥 Choque", 2: "🚫 Vía Cerrada", 3: "🚧 Obras", 4: "🚗 Tráfico", 5: "🌧️ Clima"}
-                txt_final = f"{iconos.get(magnitud, '⚠️')} | {calle}: {descripcion}"
-                h_reporte = datetime.now(zona_ecuador).strftime('%I:%M %p')
-                
-                estado_global["historico_alertas"].append({
-                    "hora": h_reporte,
-                    "provincia": prov_detectada,
-                    "texto": txt_final
-                })
-            
-            estado_global["historico_alertas"] = estado_global["historico_alertas"][:30]
-        
-        estado_global["ultima_consulta_tomtom"] = datetime.now(zona_ecuador).strftime('%I:%M:%S %p')
-        
-    except Exception as e:
-        estado_global["ultima_consulta_tomtom"] = f"❌ Error: {str(e)}"
-
 st.markdown(f"<h2 style='margin:0px; padding:0px; font-size:26px;'>🔮 Proyección Horaria y Alerta de Flota</h2>", unsafe_allow_html=True)
 st.markdown(f"<p style='margin:0px 0px 6px 0px; font-size:11px; color:#555;'><b>Control Geoanalítico</b> | 🔄 Memoria Inmune Activa (Última Actualización: {hora_estatica_str})</p>", unsafe_allow_html=True)
+
+coordenadas_provincias = {
+    'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
+    'MANABI': [-1.0543, -80.4544], 'EL ORO': [-3.2581, -79.9553], 'LOJA': [-3.9931, -79.2042], 
+    'TUNGURAHUA': [-1.2491, -78.6168], 'CHIMBORAZO': [-1.6743, -78.6483], 'ESMERALDAS': [0.9682, -79.6517], 
+    'LOS RIOS': [-1.4558, -79.4622], 'SANTO DOMINGO DE LOS TSACHILAS': [-0.2530, -79.1754], 
+    'SANTA ELENA': [-2.2262, -80.8584], 'IMBABURA': [0.3517, -78.1223], 'COTOPAXI': [-0.9352, -78.6155], 
+    'CARCHI': [0.7384, -77.7289], 'SUCUMBIOS': [0.0847, -76.8828], 'ORELLANA': [-0.5665, -76.9872], 
+    'NAPO': [-0.9902, -77.8129], 'PASTAZA': [-1.4870, -77.9954], 'MORONA SANTIAGO': [-2.3087, -78.1114], 
+    'ZAMORA CHINCHIPE': [-4.0692, -78.9566], 'GALAPAGOS': [-0.7402, -90.3119], 'BOLIVAR': [-1.5910, -79.0022], 
+    'CANAR': [-2.5518, -78.9392]
+}
 
 diccionario_dias = {"LUNES": 0, "MARTES": 1, "MIÉRCOLES": 2, "MIERCOLES": 2, "JUEVES": 3, "VIERNES": 4, "SÁBADO": 5, "SABADO": 5, "DOMINGO": 6}
 
@@ -262,11 +190,22 @@ if df_raw is not None and not df_raw.empty:
     df_raw[col_cobertura] = df_raw[col_cobertura].astype(str).str.strip().str.upper() if col_cobertura in df_raw.columns else "LOCAL"
     df_raw[col_fecha] = df_raw[col_fecha].astype(str).str.strip().str.split().str[0]
 
+    # --- LIMPIEZA INTELIGENTE Y ROBUSTA DE LA COLUMNA DE HORAS ---
+    def extraer_hora_limpia(val):
+        val_str = str(val).strip().split('.')[0]
+        if ":" in val_str:
+            return int(val_str.split(":")[0])
+        try: return int(val_str)
+        except: return -1
+
     if col_hora_agrupada in df_raw.columns:
-        df_raw[col_hora_agrupada] = df_raw[col_hora_agrupada].apply(lambda val: int(str(val).strip().split(':')[0]) if ":" in str(val) else (int(str(val).split('.')[0]) if str(val).split('.')[0].isdigit() else -1))
+        df_raw[col_hora_agrupada] = df_raw[col_hora_agrupada].apply(extraer_hora_limpia)
 
     tab_normal, tab_feriados = st.tabs(["🔮 Operación Diaria (Normal)", "📈 Planificador de Feriados"])
 
+    # ==========================================
+    # PESTAÑA 1: OPERACIÓN NORMAL
+    # ==========================================
     with tab_normal:
         col_sidebar, col_main_content = st.columns([1.6, 8.4])
         
@@ -307,12 +246,14 @@ if df_raw is not None and not df_raw.empty:
                 estado_sel = st.multiselect("📌 Estado:", options=estados_disponibles, key="estado_sel_key", on_change=guardar_estado_callback)
             else: estado_sel = []
 
+            # --- UBICACIÓN INMUNE E INMEDIATA DEL BOTÓN REBOOT EN EL SIDEBAR ---
             st.markdown("<div style='margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 10px;'></div>", unsafe_allow_html=True)
             if st.button("🔄 REBOOT APP", use_container_width=True, key="btn_reboot_sidebar"):
                 st.cache_data.clear()
                 st.cache_resource.clear()
                 st.rerun()
 
+        # --- CÁLCULO DE FECHAS GLOBALES ---
         if dia_sel.upper() == "TODOS":
             df_filtrado_dia = df_raw.copy()
             num_fechas_reales = df_raw[col_fecha].nunique() if col_fecha in df_raw.columns else 1
@@ -351,8 +292,10 @@ if df_raw is not None and not df_raw.empty:
                 df_b = df_horas_raw[df_horas_raw[col_hora_agrupada] == hr]
                 for _, fila in df_b.iterrows():
                     cobertura_str = str(fila[col_cobertura]).upper().strip() if col_cobertura in fila else "LOCAL"
-                    if "FOR" in cobertura_str: casos_foraneos[hr] += 1
-                    else: casos_locales[hr] += 1
+                    if "FOR" in cobertura_str: 
+                        casos_foraneos[hr] += 1
+                    else: 
+                        casos_locales[hr] += 1
 
             for hr in range(24):
                 p_local, p_foraneo = casos_locales[hr] / num_fechas_reales, casos_foraneos[hr] / num_fechas_reales
@@ -385,13 +328,15 @@ if df_raw is not None and not df_raw.empty:
                 es_remolque = any(x in str(servicio_sel).upper() for x in ["REMOLQUE", "GRÚA", "GRUA", "TODOS"])
                 string_gruas = f"🚛 {gruas_necesarias} U." if es_remolque and (promedio_proyectado > 0 or gruas_necesarias > 0) else "-"
 
-                if promedio_base_calculado == 0 and gruas_necesarias == 0: motivo_asesor = "Sin demanda"
+                if promedio_base_calculado == 0 and gruas_necesarias == 0:
+                    motivo_asesor = "Sin demanda"
                 else:
                     explicaciones = []
                     if promedio_proyectado > 0:
                         if es_lluvia: explicaciones.append(f"{promedio_proyectado} por lluvia")
                         else: explicaciones.append(f"{promedio_proyectado} nuevos")
-                    if gruas_necesarias > promedio_proyectado: explicaciones.append("arrastre ant.")
+                    if gruas_necesarias > promedio_proyectado:
+                        explicaciones.append("arrastre ant.")
                     motivo_asesor = " + ".join(explicaciones) if explicaciones else "Ok"
 
                 registros_tabla.append({
@@ -400,7 +345,8 @@ if df_raw is not None and not df_raw.empty:
                 })
                 
                 data_grafico_lineas.append({
-                    "Hora": hr, "Promedio Base": promedio_base_calculado, "Proyección Ajustada": promedio_proyectado
+                    "Hora": hr, "Promedio Base": promedio_base_calculado,
+                    "Proyección Ajustada": promedio_proyectado
                 })
 
         with col_main_content:
@@ -409,12 +355,18 @@ if df_raw is not None and not df_raw.empty:
                 st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📍 Top Localidades Afectadas</span>", unsafe_allow_html=True)
                 if len(df_filtrado) > 0:
                     col_agrupar = col_provincia if provincia_sel == "Todas" else col_ciudad
-                    df_top = df_filtrado.groupby(col_agrupar).agg(Total_Casos=('SERVICIO', 'count')).reset_index()
-                    df_top['📊 Prom/Día'] = (df_top['Total_Casos'] / num_fechas_reales).round(0).astype(int)
+                    
+                    df_top = df_filtrado.groupby(col_agrupar).agg(
+                        Total_Casos=('SERVICIO', 'count')
+                    ).reset_index()
+                    
+                    df_top['📊 Prom/Día'] = (df_top['Total_Casos'] / num_fechas_reales).round(1)
                     df_top = df_top.rename(columns={col_agrupar: '📍 UBICACIÓN', 'Total_Casos': 'Casos'})
                     df_top = df_top.sort_values(by='Casos', ascending=False).head(5)
+                    
                     total_general_casos = df_filtrado.shape[0]
                     df_top['%'] = (df_top['Casos'] / total_general_casos * 100).round(1).astype(str) + '%' if total_general_casos > 0 else '0%'
+                    
                     df_top = df_top[['📍 UBICACIÓN', 'Casos', '📊 Prom/Día', '%']]
                     st.dataframe(df_top, use_container_width=True, height=140, hide_index=True)
                 else: st.info("Sin datos.")
@@ -442,41 +394,46 @@ if df_raw is not None and not df_raw.empty:
                     )
                     st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
-            # =========================================================================
-            # SECCIÓN DE ALERTAS EN TIEMPO REAL (TOMTOM CONFIGURADO EN V5 DINÁMICO)
-            # =========================================================================
             with col_resumen_waze:
-                promedio_asistencias_dia = int(round(len(df_filtrado) / num_fechas_reales, 0))
+                promedio_asistencias_dia = round(len(df_filtrado) / num_fechas_reales, 1)
                 st.markdown(f"<span style='font-size:11px; color:#555;'>Promedio ({dia_sel.title()})</span>", unsafe_allow_html=True)
                 st.markdown(f"<h3 style='margin:0px; padding:0px; font-size:28px; line-height:1;'>{promedio_asistencias_dia} Asist.</h3>", unsafe_allow_html=True)
-                
-                st.markdown("<span style='font-size:11px; font-weight:bold; color:#1e88e5; display:block; margin-top:4px;'>🚛 Alertas Nacionales Realtime</span>", unsafe_allow_html=True)
+                st.markdown("<span style='font-size:11px; font-weight:bold; color:#1e88e5; display:block; margin-top:4px;'>🚛 Alertas Waze Realtime</span>", unsafe_allow_html=True)
                 
                 c_w1, c_w2 = st.columns([4.5, 5.5])
                 with c_w1:
-                    if provincia_sel == "Todas":
-                        alertas_filtradas = estado_global["historico_alertas"]
-                        etiqueta_cobertura = "Pichincha (Def)"
-                    else:
-                        alertas_filtradas = [x for x in estado_global["historico_alertas"] if x["provincia"] == provincia_sel.upper().strip()]
-                        etiqueta_cobertura = provincia_sel[:10]
-
-                    st.markdown(f'<div class="card-saldo"><span style="font-size:9px;color:#444;">Filtro: <b>{etiqueta_cobertura}</b></span></div>', unsafe_allow_html=True)
+                    ejecutar_consulta = st.button("🔍 Escanear Mapa", use_container_width=True, key="btn_waze_comp")
+                    if ejecutar_consulta and estado_global["creditos"] > 0:
+                        bbox_nacional_ecuador = {"bottom_left": "-5.0000,-81.0000", "top_right": "1.5000,-75.0000"}
+                        def consultar_alertas_waze_real(bbox_dict):
+                            api_key = "ak_823f13app2zd9qkia4z6vdi27ttb31z9a7v7pvlhnn878w3"
+                            try:
+                                url = "https://api.openwebninja.com/waze/alerts-and-jams"
+                                headers = {"X-API-Key": api_key}
+                                params = {"bottom_left": "-2.2500,-79.9500", "top_right": "-2.1000,-79.8000"} if provincia_sel == "Todas" else {"bottom_left": bbox_dict["bottom_left"], "top_right": bbox_dict["top_right"]}
+                                respuesta = requests.get(url, headers=headers, params=params, timeout=10).json()
+                                alertas = []
+                                if "alerts" in respuesta and respuesta["alerts"]:
+                                    for item in respuesta["alerts"][:2]:
+                                        tipo = item.get("type", "TRÁFICO").replace("_", " ")
+                                        calle = item.get("street", "Vía pública")
+                                        alertas.append(f"⚠️ {tipo} en {calle[:12]}...")
+                                return alertas if alertas else ["✅ Flujo normal."]
+                            except: return ["⚠️ Error de conexión."]
+                        estado_global["alertas_waze"] = consultar_alertas_waze_real(bbox_nacional_ecuador)
+                        estado_global["ultima_hora_waze"] = ahora_actual.strftime('%I:%M %p')
+                        estado_global["creditos"] -= 1
+                    st.markdown(f'<div class="card-saldo"><span style="font-size:9px;color:#444;">Tk: <b>{estado_global["creditos"]}</b>/50</span></div>', unsafe_allow_html=True)
                 with c_w2:
-                    st.markdown(f"<span style='font-size:9px; color:#777; display:block;'><b>Estado:</b> {estado_global['ultima_consulta_tomtom']}</span>", unsafe_allow_html=True)
-                
-                if not alertas_filtradas:
-                    st.markdown("<span style='font-size:9px; color:#999; display:block; margin-bottom:2px;'>• Rutas estables en la zona de control.</span>", unsafe_allow_html=True)
-                else:
-                    for incidente in alertas_filtradas[:2]:
-                        st.markdown(f"<span style='font-size:9px; color:#d32f2f; font-weight:500; display:block; line-height:1.2;'>• {incidente['texto'][:35]}...</span>", unsafe_allow_html=True)
-                
-                # EJECUCIÓN MANUAL PASANDO LA PROVINCIA ACTUAL
-                if st.button("🔄 CONSULTAR ALERTAS MANUALMENTE", use_container_width=True, key="btn_manual_tomtom"):
-                    ejecutar_consulta_tomtom(provincia_sel)
-                    st.rerun()
+                    st.markdown(f"<span style='font-size:9px; color:#777; display:block;'>Último: {estado_global['ultima_hora_waze']}</span>", unsafe_allow_html=True)
+                    if not estado_global["alertas_waze"]: st.markdown("<span style='font-size:9px; color:#999;'>• Requiere escaneo.</span>", unsafe_allow_html=True)
+                    else:
+                        for incidente in estado_global["alertas_waze"][:1]:
+                            st.markdown(f"<span style='font-size:9px; color:#d32f2f; font-weight:500;'>• {incidente}</span>", unsafe_allow_html=True)
 
-    # Planificador de feriados (Sin modificaciones estructurales)
+    # ==========================================
+    # PESTAÑA 2: PLANIFICADOR DE FERIADOS
+    # ==========================================
     with tab_feriados:
         col_f_fer, col_c_fer = st.columns([1.6, 8.4])
         
@@ -495,6 +452,7 @@ if df_raw is not None and not df_raw.empty:
 
         with col_f_fer:
             st.markdown("<h4 style='margin:0px; font-size:14px; color:#111;'>⚙️ Planificador</h4>", unsafe_allow_html=True)
+            
             config_maestra_feriados = {
                 "Carnaval": {"fecha": "18/2/2026", "dias": 4, "espejo": None},
                 "Año Nuevo": {"fecha": "5/1/2026", "dias": 3, "espejo": None},
@@ -506,6 +464,7 @@ if df_raw is not None and not df_raw.empty:
                 "Día de los Difuntos / Cuenca": {"fecha": "4/11/2026", "dias": 4, "espejo": "Carnaval"},
                 "Navidad": {"fecha": "28/12/2026", "dias": 3, "espejo": "Año Nuevo"}
             }
+            
             feriado_seleccionado = st.selectbox("📅 Feriado Nacional:", list(config_maestra_feriados.keys()), key="feriado_sel_key", on_change=guardar_feriado_callback)
             servicio_feriado = st.selectbox("🎯 Servicio:", sorted(list(df_raw[col_servicio].dropna().unique())), key="servicio_fer_key", on_change=guardar_servicio_fer_callback)
             
@@ -531,7 +490,8 @@ if df_raw is not None and not df_raw.empty:
                 
             if provincia_feriado != "Todas" and not df_data_feriado.empty:
                 df_data_feriado = df_data_feriado[df_data_feriado[col_provincia] == provincia_feriado]
-                if ciudad_feriado: df_data_feriado = df_data_feriado[df_data_feriado[col_ciudad].isin(ciudad_feriado)]
+                if ciudad_feriado:
+                    df_data_feriado = df_data_feriado[df_data_feriado[col_ciudad].isin(ciudad_feriado)]
             
             if es_simulado:
                 st.markdown(f'<div class="banner-similitud">🔮 <b>Proyección por Similitud Activa:</b> Calculando retornos para <b>{feriado_seleccionado} ({fecha_original})</b> usando comportamiento espejo de <b>{feriado_espejo} ({meta_feriado["dias"]} días de descanso)</b></div>', unsafe_allow_html=True)
@@ -549,15 +509,49 @@ if df_raw is not None and not df_raw.empty:
                 for hr in range(24):
                     casos_reales = mapeo_casos.get(hr, 0)
                     casos_previos = mapeo_casos.get(hr - 1, 0)
+                    
                     unidades_calculadas = math.ceil(casos_reales + (0.4 * casos_previos))
-                    if casos_reales == 0 and unidades_calculadas <= 0: unidades_calculadas = 0
-                    elif unidades_calculadas <= 0: unidades_calculadas = 1
+                    if casos_reales == 0 and unidades_calculadas <= 0:
+                        unidades_calculadas = 0
+                    elif unidades_calculadas <= 0:
+                        unidades_calculadas = 1
                         
                     string_gruas = f"🚛 {unidades_calculadas} U." if unidades_calculadas > 0 else "-"
-                    registros_processed.append({"HORA": f"{hr:02d}:00", "HISTÓRICO CASOS": casos_reales, "GRÚAS REQUERIDAS": string_gruas})
-                    data_grafico_feriado.append({"Hora": hr, "Casos Históricos": casos_reales, "Grúas Proyectadas": unidades_calculadas})
+                    
+                    registros_processed.append({
+                        "HORA": f"{hr:02d}:00",
+                        "HISTÓRICO CASOS": casos_reales,
+                        "GRÚAS REQUERIDAS": string_gruas
+                    })
+                    
+                    data_grafico_feriado.append({
+                        "Hora": hr,
+                        "Casos Históricos": casos_reales,
+                        "Grúas Proyectadas": unidades_calculadas
+                    })
                 
                 col_tab_izq, col_graf_der = st.columns([4.5, 5.5])
+                
                 with col_tab_izq:
                     st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>⏰ Distribución de Demanda y Flota Requerida</span>", unsafe_allow_html=True)
-                    st.dataframe(pd.DataFrame(registros_processed), use_container_width=True, height=220, hide_index=True)
+                    df_mostrar_feriados = pd.DataFrame(registros_processed)
+                    st.dataframe(df_mostrar_feriados, use_container_width=True, height=220, hide_index=True)
+                
+                with col_graf_der:
+                    st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📈 Gráfico de Curva de Carga Operativa (Retorno)</span>", unsafe_allow_html=True)
+                    if data_grafico_feriado:
+                        df_gf = pd.DataFrame(data_grafico_feriado)
+                        fig_feriado = go.Figure()
+                        fig_feriado.add_trace(go.Scatter(x=df_gf["Hora"], y=df_gf["Casos Históricos"], name="📊 Histórico Base", mode="lines+markers", line=dict(color="#1f77b4", width=2)))
+                        fig_feriado.add_trace(go.Scatter(x=df_gf["Hora"], y=df_gf["Grúas Proyectadas"], name="🚛 Grúas Solicitadas", mode="lines+markers", line=dict(color="#d62728", width=2, dash="dot")))
+                        fig_feriado.update_layout(
+                            xaxis=dict(tickmode="linear", tick0=0, dtick=2, title=dict(text="Hora del Día", font=dict(size=9))),
+                            yaxis=dict(title=dict(text="Cantidad", font=dict(size=9))),
+                            margin=dict(l=5, r=5, t=5, b=5), height=220, showlegend=True,
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=9))
+                        )
+                        st.plotly_chart(fig_feriado, use_container_width=True, config={'displayModeBar': False})
+            else:
+                st.warning("⚠️ No existen registros históricos en la base para la fecha de retorno y filtros seleccionados.")
+else:
+    st.error("❌ No se pudo conectar con el servidor de datos de Google Sheets o la estructura de columnas es incorrecta.")
