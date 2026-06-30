@@ -1,26 +1,4 @@
-import requests
-import streamlit as st
-from config import TOMTOM_API_KEY
 
-
-st.subheader("Prueba TomTom Incidentes")
-
-url = "https://api.tomtom.com/traffic/services/5/incidentDetails"
-
-params = {
-    "key": TOMTOM_API_KEY,
-    "bbox": "-2.8,-80.5,-1.5,-79.0",
-    "language": "es-ES"
-}
-
-respuesta = requests.get(url, params=params)
-
-st.write("Código:")
-st.write(respuesta.status_code)
-
-st.json(respuesta.json())
-
-    
 import streamlit as st
 import pandas as pd
 import requests
