@@ -1,3 +1,3 @@
-import os
+import streamlit as st
 
-TOMTOM_API_KEY = os.getenv("TOMTOM_API_KEY")
+TOMTOM_API_KEY = st.secrets["TOMTOM_API_KEY"]
