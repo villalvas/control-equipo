@@ -3,27 +3,23 @@ import streamlit as st
 from config import TOMTOM_API_KEY
 
 
-st.subheader("Prueba conexión TomTom")
+st.subheader("Prueba TomTom Incidentes")
 
-url = "https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json"
+url = "https://api.tomtom.com/traffic/services/5/incidentDetails"
 
 params = {
     "key": TOMTOM_API_KEY,
-    "point": "-2.161600,-79.919600",
-    "unit": "KMPH"
+    "bbox": "-5.0,-81.5,1.5,-75.0",
+    "language": "es-ES"
 }
 
-try:
-    respuesta = requests.get(url, params=params)
+respuesta = requests.get(url, params=params)
 
-    st.write("Código respuesta:")
-    st.write(respuesta.status_code)
+st.write("Código:")
+st.write(respuesta.status_code)
 
-    st.write("Resultado:")
-    st.json(respuesta.json())
+st.json(respuesta.json())
 
-except Exception as e:
-    st.error(e)
     
 import streamlit as st
 import pandas as pd
