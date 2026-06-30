@@ -1,4 +1,4 @@
-
+import streamlit as edit
 import streamlit as st
 import pandas as pd
 import requests
@@ -191,7 +191,6 @@ if df_raw is not None and not df_raw.empty:
     df_raw[col_cobertura] = df_raw[col_cobertura].astype(str).str.strip().str.upper() if col_cobertura in df_raw.columns else "LOCAL"
     df_raw[col_fecha] = df_raw[col_fecha].astype(str).str.strip().str.split().str[0]
 
-    # --- LIMPIEZA INTELIGENTE Y ROBUSTA DE LA COLUMNA DE HORAS ---
     def extraer_hora_limpia(val):
         val_str = str(val).strip().split('.')[0]
         if ":" in val_str:
@@ -247,14 +246,12 @@ if df_raw is not None and not df_raw.empty:
                 estado_sel = st.multiselect("📌 Estado:", options=estados_disponibles, key="estado_sel_key", on_change=guardar_estado_callback)
             else: estado_sel = []
 
-            # --- UBICACIÓN INMUNE E INMEDIATA DEL BOTÓN REBOOT EN EL SIDEBAR ---
             st.markdown("<div style='margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 10px;'></div>", unsafe_allow_html=True)
             if st.button("🔄 REBOOT APP", use_container_width=True, key="btn_reboot_sidebar"):
                 st.cache_data.clear()
                 st.cache_resource.clear()
                 st.rerun()
 
-        # --- CÁLCULO DE FECHAS GLOBALES ---
         if dia_sel.upper() == "TODOS":
             df_filtrado_dia = df_raw.copy()
             num_fechas_reales = df_raw[col_fecha].nunique() if col_fecha in df_raw.columns else 1
@@ -402,35 +399,102 @@ if df_raw is not None and not df_raw.empty:
                 st.markdown("<span style='font-size:11px; font-weight:bold; color:#1e88e5; display:block; margin-top:4px;'>🚛 Alertas Waze Realtime</span>", unsafe_allow_html=True)
                 
                 c_w1, c_w2 = st.columns([4.5, 5.5])
+                
+                # --- NUEVA LÓGICA DE ALERTA SOLICITADA ---
                 with c_w1:
-                    ejecutar_consulta = st.button("🔍 Escanear Mapa", use_container_width=True, key="btn_waze_comp")
+                    ejecutar_consulta = st.button(
+                        "🔍 Escanear Vías",
+                        use_container_width=True,
+                        key="btn_waze_comp"
+                    )
+
                     if ejecutar_consulta and estado_global["creditos"] > 0:
-                        bbox_nacional_ecuador = {"bottom_left": "-5.0000,-81.0000", "top_right": "1.5000,-75.0000"}
-                        def consultar_alertas_waze_real(bbox_dict):
+                        def consultar_alertas_waze_real():
                             api_key = "ak_823f13app2zd9qkia4z6vdi27ttb31z9a7v7pvlhnn878w3"
+                            provincias_consulta = {
+                                k:v for k,v in coordenadas_provincias.items()
+                                if k != "GALAPAGOS"
+                            }
+                            alertas = []
+
                             try:
                                 url = "https://api.openwebninja.com/waze/alerts-and-jams"
-                                headers = {"X-API-Key": api_key}
-                                params = {"bottom_left": "-2.2500,-79.9500", "top_right": "-2.1000,-79.8000"} if provincia_sel == "Todas" else {"bottom_left": bbox_dict["bottom_left"], "top_right": bbox_dict["top_right"]}
-                                respuesta = requests.get(url, headers=headers, params=params, timeout=10).json()
-                                alertas = []
-                                if "alerts" in respuesta and respuesta["alerts"]:
-                                    for item in respuesta["alerts"][:2]:
-                                        tipo = item.get("type", "TRÁFICO").replace("_", " ")
-                                        calle = item.get("street", "Vía pública")
-                                        alertas.append(f"⚠️ {tipo} en {calle[:12]}...")
-                                return alertas if alertas else ["✅ Flujo normal."]
-                            except: return ["⚠️ Error de conexión."]
-                        estado_global["alertas_waze"] = consultar_alertas_waze_real(bbox_nacional_ecuador)
+                                headers = {
+                                    "X-API-Key": api_key
+                                }
+
+                                for provincia,(lat,lon) in list(provincias_consulta.items())[:5]:
+                                    bbox = {
+                                        "bottom_left": f"{lat-0.15},{lon-0.15}",
+                                        "top_right": f"{lat+0.15},{lon+0.15}"
+                                    }
+
+                                    respuesta = requests.get(
+                                        url,
+                                        headers=headers,
+                                        params=bbox,
+                                        timeout=8
+                                    ).json()
+
+                                    if "alerts" in respuesta:
+                                        for item in respuesta["alerts"][:3]:
+                                            tipo = item.get("type", "INCIDENTE")
+                                            calle = item.get("street", "Vía sin nombre")
+                                            alertas.append(f"⚠️ {provincia}: {tipo} - {calle}")
+
+                                    if "jams" in respuesta:
+                                        for item in respuesta["jams"][:3]:
+                                            calle = item.get("street", "Vía")
+                                            alertas.append(f"🚦 {provincia}: Tráfico en {calle}")
+
+                                return alertas if alertas else ["✅ Sin alertas relevantes en vías"]
+                            except Exception:
+                                return ["⚠️ Error consultando Waze"]
+
+                        estado_global["alertas_waze"] = consultar_alertas_waze_real()
                         estado_global["ultima_hora_waze"] = ahora_actual.strftime('%I:%M %p')
                         estado_global["creditos"] -= 1
-                    st.markdown(f'<div class="card-saldo"><span style="font-size:9px;color:#444;">Tk: <b>{estado_global["creditos"]}</b>/50</span></div>', unsafe_allow_html=True)
+
+                    st.markdown(
+                        f'''
+                        <div class="card-saldo">
+                        <span style="font-size:9px;color:#444;">
+                        Consultas: <b>{estado_global["creditos"]}</b>/50
+                        </span>
+                        </div>
+                        ''',
+                        unsafe_allow_html=True
+                    )
+
                 with c_w2:
-                    st.markdown(f"<span style='font-size:9px; color:#777; display:block;'>Último: {estado_global['ultima_hora_waze']}</span>", unsafe_allow_html=True)
-                    if not estado_global["alertas_waze"]: st.markdown("<span style='font-size:9px; color:#999;'>• Requiere escaneo.</span>", unsafe_allow_html=True)
+                    st.markdown(
+                        f"""
+                        <span style='font-size:9px;color:#777'>
+                        Último análisis: {estado_global['ultima_hora_waze']}
+                        </span>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+                    if not estado_global["alertas_waze"]:
+                        st.markdown(
+                            """
+                            <span style='font-size:9px;color:#999'>
+                            • Presione escanear para revisar vías
+                            </span>
+                            """,
+                            unsafe_allow_html=True
+                        )
                     else:
-                        for incidente in estado_global["alertas_waze"][:1]:
-                            st.markdown(f"<span style='font-size:9px; color:#d32f2f; font-weight:500;'>• {incidente}</span>", unsafe_allow_html=True)
+                        for incidente in estado_global["alertas_waze"][:4]:
+                            st.markdown(
+                                f"""
+                                <span style='font-size:9px; color:#d32f2f; font-weight:500'>
+                                • {incidente}
+                                </span>
+                                """,
+                                unsafe_allow_html=True
+                            )
 
     # ==========================================
     # PESTAÑA 2: PLANIFICADOR DE FERIADOS
@@ -543,16 +607,14 @@ if df_raw is not None and not df_raw.empty:
                     if data_grafico_feriado:
                         df_gf = pd.DataFrame(data_grafico_feriado)
                         fig_feriado = go.Figure()
-                        fig_feriado.add_trace(go.Scatter(x=df_gf["Hora"], y=df_gf["Casos Históricos"], name="📊 Histórico Base", mode="lines+markers", line=dict(color="#1f77b4", width=2)))
-                        fig_feriado.add_trace(go.Scatter(x=df_gf["Hora"], y=df_gf["Grúas Proyectadas"], name="🚛 Grúas Solicitadas", mode="lines+markers", line=dict(color="#d62728", width=2, dash="dot")))
+                        fig_feriado.add_trace(go.Scatter(x=df_gf["Hora"], y=df_gf["Casos Históricos"], name="Histórico", mode="lines+markers", line=dict(color="#9467bd", width=2)))
+                        fig_feriado.add_trace(go.Scatter(x=df_gf["Hora"], y=df_gf["Grúas Proyectadas"], name="Flota Req.", mode="lines+markers", line=dict(color="#2ca02c", width=2, dash="dot")))
                         fig_feriado.update_layout(
-                            xaxis=dict(tickmode="linear", tick0=0, dtick=2, title=dict(text="Hora del Día", font=dict(size=9))),
-                            yaxis=dict(title=dict(text="Cantidad", font=dict(size=9))),
+                            xaxis=dict(tickmode="linear", tick0=0, dtick=2, title=dict(text="Hora", font=dict(size=10))),
+                            yaxis=dict(title=dict(text="Casos / Unidades", font=dict(size=10))),
                             margin=dict(l=5, r=5, t=5, b=5), height=220, showlegend=True,
                             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=9))
                         )
                         st.plotly_chart(fig_feriado, use_container_width=True, config={'displayModeBar': False})
             else:
-                st.warning("⚠️ No existen registros históricos en la base para la fecha de retorno y filtros seleccionados.")
-else:
-    st.error("❌ No se pudo conectar con el servidor de datos de Google Sheets o la estructura de columnas es incorrecta.")
+                st.info("Sin registros históricos para este corte de feriado.")
