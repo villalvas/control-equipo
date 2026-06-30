@@ -9,7 +9,7 @@ url = "https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/jso
 
 params = {
     "key": TOMTOM_API_KEY,
-    "point": "-2.170998,-79.922359",
+    "point": "-2.190000,-79.890000",
     "unit": "KMPH"
 }
 
