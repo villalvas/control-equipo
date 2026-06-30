@@ -1,3 +1,30 @@
+import requests
+import streamlit as st
+from config import TOMTOM_API_KEY
+
+
+st.subheader("Prueba conexión TomTom")
+
+url = "https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json"
+
+params = {
+    "key": TOMTOM_API_KEY,
+    "point": "-2.170998,-79.922359",
+    "unit": "KMPH"
+}
+
+try:
+    respuesta = requests.get(url, params=params)
+
+    st.write("Código respuesta:")
+    st.write(respuesta.status_code)
+
+    st.write("Resultado:")
+    st.json(respuesta.json())
+
+except Exception as e:
+    st.error(e)
+    
 import streamlit as st
 import pandas as pd
 import requests
