@@ -9,7 +9,7 @@ url = "https://api.tomtom.com/traffic/services/5/incidentDetails"
 
 params = {
     "key": TOMTOM_API_KEY,
-    "bbox": "-5.0,-81.5,1.5,-75.0",
+    "bbox": "-2.8,-80.5,-1.5,-79.0",
     "language": "es-ES"
 }
 
