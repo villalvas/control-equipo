@@ -16,7 +16,7 @@ st.set_page_config(
 
 # --- CONTROL DE ACCESO MEDIANTE CONTRASEÑA (ESTADO DE SESIÓN) ---
 # Definir la contraseña de la Sala de Control
-CONTRASEÑA_SALA_CONTROL = "ControlFlota2026*"
+CONTRASEÑA_SALA_CONTROL = "Control2026*"
 
 # Inicializar variable de autenticación en la memoria de sesión si no existe
 if "autenticado" not in st.session_state:
