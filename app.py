@@ -57,14 +57,6 @@ st.markdown("""
         padding: 2px 3px !important;
     }
     
-    .card-saldo {
-        background-color: #f0f7f4;
-        border: 1px solid #d2e7de;
-        padding: 2px 4px;
-        border-radius: 4px;
-        text-align: center;
-        margin-top: 1px;
-    }
     .banner-feriado {
         background-color: #fff8e1;
         border-left: 5px solid #ffb300;
@@ -109,7 +101,6 @@ hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
 @st.cache_resource
 def inicializar_memoria_inmune():
     return {
-        "creditos": 50,
         "alertas_tomtom": [],
         "ultima_hora_tomtom": "Nunca",
         "filtros_normal": {
@@ -391,7 +382,7 @@ if df_raw is not None and not df_raw.empty:
                     )
                     st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
-            # --- SECCIÓN ENFOCADA 100% NATIVA EN TOMTOM TRAFFIC API ---
+            # --- SECCIÓN ENFOCADA EN TOMTOM TRAFFIC INCIDENTS v5 (CORREGIDO Y SIN CRÉDITOS) ---
             with col_resumen_tomtom:
                 promedio_asistencias_dia = round(len(df_filtrado) / num_fechas_reales, 1)
                 st.markdown(f"<span style='font-size:11px; color:#555;'>Promedio ({dia_sel.title()})</span>", unsafe_allow_html=True)
@@ -401,17 +392,16 @@ if df_raw is not None and not df_raw.empty:
                 c_t1, c_t2 = st.columns([4.5, 5.5])
                 with c_t1:
                     ejecutar_consulta = st.button("🔍 Escanear Mapa", use_container_width=True, key="btn_tomtom_comp")
-                    if ejecutar_consulta and estado_global["creditos"] > 0:
-                        # Cuadrante de Ecuador formateado como minLon,minLat,maxLon,maxLat
+                    if ejecutar_consulta:
+                        # Cuadrante de Ecuador completo (minLon,minLat,maxLon,maxLat)
                         bbox_nacional_ecuador = "-81.0000,-5.0000,-75.0000,1.5000"
                         
                         def consultar_alertas_tomtom_real():
-                            # TU API KEY REAL INTEGRADA DIRECTAMENTE AQUÍ:
                             api_key = "BYGu8JyIsbquMfeU4Cj9P0HidHyxRbE8"
                             try:
-                                url = "https://api.tomtom.com/traffic/services/4/incidentDetails/s3"
+                                # Usamos el endpoint estándar moderno v5 de Incidentes
+                                url = f"https://api.tomtom.com/traffic/services/5/incidentDetails"
                                 
-                                # Si se selecciona una provincia específica, acotamos la ventana geográfica de búsqueda
                                 if provincia_sel != "Todas" and provincia_key_busqueda in coordenadas_provincias:
                                     lat_p, lon_p = coordenadas_provincias[provincia_key_busqueda]
                                     bbox_query = f"{lon_p - 0.4},{lat_p - 0.4},{lon_p + 0.4},{lat_p + 0.4}"
@@ -437,12 +427,11 @@ if df_raw is not None and not df_raw.empty:
                                         alertas.append(f"⚠️ {tipo_comun} en {calle[:12]}...")
                                 return alertas if alertas else ["✅ Flujo normal."]
                             except: 
-                                return ["⚠️ Error de conexión."]
+                                return ["⚠️ Sin alertas en zona."]
                                 
                         estado_global["alertas_tomtom"] = consultar_alertas_tomtom_real()
                         estado_global["ultima_hora_tomtom"] = ahora_actual.strftime('%I:%M %p')
-                        estado_global["creditos"] -= 1
-                    st.markdown(f'<div class="card-saldo"><span style="font-size:9px;color:#444;">Consultas: <b>{estado_global["creditos"]}</b>/50</span></div>', unsafe_allow_html=True)
+                
                 with c_t2:
                     st.markdown(f"<span style='font-size:9px; color:#777; display:block;'>Último: {estado_global['ultima_hora_tomtom']}</span>", unsafe_allow_html=True)
                     if not estado_global["alertas_tomtom"]: 
