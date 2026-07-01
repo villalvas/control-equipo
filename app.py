@@ -457,49 +457,34 @@ if df_raw is not None and not df_raw.empty:
                     st.markdown('</div>', unsafe_allow_html=True)
 
                 with tab_noticias:
-                    @st.cache_data(ttl=600)  # Caché de 10 minutos para proteger tu cuota diaria
+                    @st.cache_data(ttl=600)  # Caché de 10 minutos para optimizar
                     def escanear_noticias_transito_ecuador():
-                        # Tu API Key dedicada de NewsAPI
-                        api_key = "3600e0086b484129be732265792b2654"
-                        
-                        # Construimos un query robusto de tránsito, forzando contexto de Ecuador
-                        # Buscamos en español y ordenamos por las más recientes (publishedAt)
-                        query_estricto = "ecuador AND (choque OR accidente OR tránsito OR vía OR carretera OR volcamiento)"
-                        url = "https://newsapi.org/v2/everything"
-                        
-                        params = {
-                            "q": query_estricto,
-                            "language": "es",
-                            "sortBy": "publishedAt",
-                            "pageSize": 15,
-                            "apiKey": api_key
-                        }
-                        
+                        # QUERY QUIRÚRGICO DE BÚSQUEDA: Filtra por geolocalización Ecuador (gl=EC) y obliga términos viales estrictos
+                        url_rss = "https://news.google.com/rss/search?q=location:ecuador+(choque+OR+accidente+OR+vía+OR+carretera+OR+volcamiento+OR+tránsito)+when:3d&hl=es-419&gl=EC&ceid=EC:es-419"
                         try:
-                            resp = requests.get(url, params=params, timeout=5).json()
+                            resp = requests.get(url_rss, timeout=5)
+                            root = ET.fromstring(resp.content)
                             noticias_viales = []
                             
-                            # Palabras de control vial y lista negra para mitigar falsos positivos políticos/judiciales
+                            # Filtro interno estricto de palabras clave para purgar cualquier contenido no vial
                             palabras_viales = ["choque", "accidente", "transito", "tránsito", "via", "vía", "volcamiento", "carretera", "volcado", "chocaron", "estrellamiento", "autopista", "cerrada"]
-                            lista_negra = ["política", "elecciones", "fútbol", "asamblea", "decreto", "judicial", "asesinado", "sicariato", "crimen", "voto"]
+                            # Lista negra para omitir noticias de política, economía o sucesos ajenos a siniestros de tránsito
+                            lista_negra = ["política", "elecciones", "fútbol", "asamblea", "decreto", "judicial", "asesinado", "sicariato", "crimen"]
                             
-                            if resp.get("status") == "ok" and "articles" in resp:
-                                for item in resp["articles"]:
-                                    titulo = item.get("title", "")
-                                    medio = item.get("source", {}).get("name", "Prensa")
+                            for item in root.findall('.//item')[:20]:
+                                titulo = item.find('title').text
+                                medio = item.find('source').text if item.find('source') is not None else "Prensa EC"
+                                
+                                titulo_lc = titulo.lower()
+                                
+                                # Cruce de validación: Debe tener palabra vial Y NO tener palabras de la lista negra
+                                if any(p in titulo_lc for p in palabras_viales) and not any(n in titulo_lc for n in lista_negra):
+                                    titulo_limpio = titulo.split(" - ")[0]  # Quitamos el remate del medio de comunicación
+                                    noticias_viales.append(f"📰 [{medio}] {titulo_limpio}")
                                     
-                                    if not titulo:
-                                        continue
-                                        
-                                    titulo_lc = titulo.lower()
-                                    
-                                    # Validación cruzada estricta para asegurar relevancia vial en la sala de control
-                                    if any(p in titulo_lc for p in palabras_viales) and not any(n in titulo_lc for n in lista_negra):
-                                        noticias_viales.append(f"📰 [{medio}] {titulo}")
-                                        
                             return noticias_viales if noticias_viales else ["✅ No se registran siniestros viales de magnitud en portales nacionales."]
-                        except Exception as e:
-                            return [f"⚠️ Error de conexión con NewsAPI"]
+                        except:
+                            return ["⚠️ Servidor vial de noticias temporalmente ocupado."]
 
                     alertas_prensa = escanear_noticias_transito_ecuador()
                     st.markdown('<div style="max-height:100px; overflow-y:auto; border:1px solid #eee; padding:4px; background:#fffbf2; border-radius:4px;">', unsafe_allow_html=True)
