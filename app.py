@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 import math
 import streamlit.components.v1 as components
 import plotly.graph_objects as go
+import xml.etree.ElementTree as ET
 
 # 1. Configuración de pantalla completa y compacta para salas de control
 st.set_page_config(
@@ -381,19 +382,16 @@ if df_raw is not None and not df_raw.empty:
                     df_top['%'] = (df_top['Casos'] / total_general_casos * 100).round(1).astype(str) + '%' if total_general_casos > 0 else '0%'
                     
                     df_top = df_top[['📍 UBICACIÓN', 'Casos', '📊 Prom/Día', '%']]
-                    # SE INCREMENTÓ LA ALTURA DE 140 A 175 PARA VER MÁS FILAS SIN SCROLL
                     st.dataframe(df_top, use_container_width=True, height=175, hide_index=True)
                 else: st.info("Sin datos.")
 
             with col_mando_der:
                 st.markdown(f"<span style='font-size:12px; font-weight:bold; color:#111;'>⏰ Matriz Horaria Detallada: {dia_sel.title()}</span>", unsafe_allow_html=True)
-                # SE INCREMENTÓ LA ALTURA DE 140 A 175 PARA VER MÁS HORARIOS DE UN SOLO VISTAZO
                 if registros_tabla: st.dataframe(pd.DataFrame(registros_tabla), use_container_width=True, height=175, hide_index=True)
                 else: st.info("Sin asistencias.")
 
-            # --- MARGEN DE SEPARACIÓN AGREGADO AQUÍ PARA EMPUJAR EL GRÁFICO ABAJO ---
             st.markdown("<div style='margin-top: 14px; border-top: 1px solid #ddd; padding-top: 6px;'></div>", unsafe_allow_html=True)
-            col_grafico_full, col_resumen_tomtom = st.columns([6.8, 3.2])
+            col_grafico_full, col_resumen_tomtom = st.columns([6.2, 3.8])
             
             with col_grafico_full:
                 st.markdown("<span style='font-size:13px; font-weight:bold; display:block;'>📈 Curva de Carga Operativa (24 Horas)</span>", unsafe_allow_html=True)
@@ -405,64 +403,91 @@ if df_raw is not None and not df_raw.empty:
                     fig_lineas.update_layout(
                         xaxis=dict(tickmode="linear", tick0=0, dtick=1, title=dict(text="Hora del Día", font=dict(size=10))),
                         yaxis=dict(title=dict(text="Incidentes / Asistencias", font=dict(size=10))),
-                        margin=dict(l=5, r=5, t=5, b=5), height=140, showlegend=True,
+                        margin=dict(l=5, r=5, t=5, b=5), height=150, showlegend=True,
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=9))
                     )
                     st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
-            # --- SECCIÓN TOTALMENTE AUTOMATIZADA: TOMTOM TRAFFIC INCIDENTS v5 (FIJO NACIONAL) ---
+            # --- SECCIÓN INTEGRADA AUTOMÁTICA: TOMTOM (FIJO NACIONAL) + ALERTAS DE PRENSA ---
             with col_resumen_tomtom:
-                st.markdown("<span style='font-size:11px; font-weight:bold; color:#1e88e5; display:block; margin-top:0px;'>🔄 Alertas TomTom (Auto-escaneo Activo)</span>", unsafe_allow_html=True)
+                tab_tt, tab_noticias = st.tabs(["🛰️ Satelital (TomTom)", "📻 Noticias Tránsito"])
                 
-                # Caja de coordenadas fija para todo el territorio de Ecuador
-                bbox_nacional_ecuador = "-81.0000,-5.0000,-75.0000,1.5000"
-                
-                def consultar_alertas_tomtom_real():
-                    api_key = "BYGu8JyIsbquMfeU4Cj9P0HidHyxRbE8"
-                    try:
-                        url = "https://api.tomtom.com/traffic/services/5/incidentDetails"
-                        
-                        # Forzado estricto: Búsqueda nacional independiente de los filtros del dashboard
-                        bbox_query = bbox_nacional_ecuador
-                        
-                        params = {
-                            "key": api_key,
-                            "bbox": bbox_query,
-                            "fields": "{incidents{type,properties{description,street}}}",
-                            "language": "es-ES"
-                        }
-                        
-                        respuesta = requests.get(url, params=params, timeout=10).json()
-                        alertas = []
-                        
-                        if "incidents" in respuesta and respuesta["incidents"]:
-                            for item in respuesta["incidents"]:
-                                props = item.get("properties", {})
-                                tipo_raw = item.get("type", "INCIDENTE")
-                                
-                                tipo_comun = "TRÁFICO" if tipo_raw == "JAM" else ("ACCIDENTE" if tipo_raw == "ACCIDENT" else "RESTRICCIÓN")
-                                calle = props.get("street", "Vía pública")
-                                descripcion = props.get("description", "").lower()
-                                
-                                if "accidente" in descripcion or "choque" in descripcion:
-                                    tipo_comun = "ACCIDENTE"
+                with tab_tt:
+                    bbox_nacional_ecuador = "-81.0000,-5.0000,-75.0000,1.5000"
+                    
+                    def consultar_alertas_tomtom_real():
+                        api_key = "BYGu8JyIsbquMfeU4Cj9P0HidHyxRbE8"
+                        try:
+                            url = "https://api.tomtom.com/traffic/services/5/incidentDetails"
+                            bbox_query = bbox_nacional_ecuador
+                            
+                            params = {
+                                "key": api_key,
+                                "bbox": bbox_query,
+                                "fields": "{incidents{type,properties{description,street}}}",
+                                "language": "es-ES"
+                            }
+                            
+                            respuesta = requests.get(url, params=params, timeout=10).json()
+                            alertas = []
+                            
+                            if "incidents" in respuesta and respuesta["incidents"]:
+                                for item in respuesta["incidents"]:
+                                    props = item.get("properties", {})
+                                    tipo_raw = item.get("type", "INCIDENTE")
                                     
-                                detalle_incidente = f"⚠️ {tipo_comun} en {calle}: {props.get('description', '')}"
-                                alertas.append(detalle_incidente)
+                                    tipo_comun = "TRÁFICO" if tipo_raw == "JAM" else ("ACCIDENTE" if tipo_raw == "ACCIDENT" else "RESTRICCIÓN")
+                                    calle = props.get("street", "Vía pública")
+                                    descripcion = props.get("description", "").lower()
+                                    
+                                    if "accidente" in descripcion or "choque" in descripcion:
+                                        tipo_comun = "ACCIDENTE"
+                                        
+                                    detalle_incidente = f"⚠️ {tipo_comun} en {calle}: {props.get('description', '')}"
+                                    alertas.append(detalle_incidente)
+                                    
+                            return alertas if alertas else ["✅ Flujo vehicular nacional normal."]
+                        except: 
+                            return ["⚠️ Sin alertas reportadas en la zona."]
+                    
+                    alertas_actuales = consultar_alertas_tomtom_real()
+                    st.markdown('<div style="max-height:100px; overflow-y:auto; border:1px solid #eee; padding:4px; background:#fafafa; border-radius:4px;">', unsafe_allow_html=True)
+                    for incidente in alertas_actuales:
+                        st.markdown(f"<span style='font-size:10px; color:#d32f2f; font-weight:500; display:block; margin-bottom:2px;'>• {incidente}</span>", unsafe_allow_html=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
+
+                with tab_noticias:
+                    @st.cache_data(ttl=600)  # Cache 10 minutos para no saturar las fuentes de noticias
+                    def escanear_noticias_transito_ecuador():
+                        # Usamos Google News RSS filtrado para Ecuador con palabras de alto impacto vial
+                        url_rss = "https://news.google.com/rss/search?q=ecuador+(choque+OR+accidente+OR+tránsito+OR+vía+OR+volcamiento)+when:7d&hl=es-419&gl=EC&ceid=EC:es-419"
+                        try:
+                            resp = requests.get(url_rss, timeout=5)
+                            root = ET.fromstring(resp.content)
+                            noticias_viales = []
+                            
+                            palabras_criticas = ["choque", "accidente", "transito", "tránsito", "via", "vía", "volcamiento", "bus", "camion", "fallecido", "herido", "cerrado"]
+                            
+                            for item in root.findall('.//item')[:15]:
+                                titulo = item.find('title').text
+                                medio = item.find('source').text if item.find('source') is not None else "Prensa"
                                 
-                        return alertas if alertas else ["✅ Flujo vehicular normal."]
-                    except: 
-                        return ["⚠️ Sin alertas reportadas en la zona."]
-                
-                alertas_actuales = consultar_alertas_tomtom_real()
-                ultima_hora_tomtom = ahora_actual.strftime('%I:%M %p')
-                
-                st.markdown(f"<span style='font-size:9px; color:#777; display:block; margin-bottom:4px;'>Último escaneo: {ultima_hora_tomtom}</span>", unsafe_allow_html=True)
-                
-                st.markdown('<div style="max-height:115px; overflow-y:auto; border:1px solid #eee; padding:4px; background:#fafafa; border-radius:4px;">', unsafe_allow_html=True)
-                for incidente in alertas_actuales:
-                    st.markdown(f"<span style='font-size:10px; color:#d32f2f; font-weight:500; display:block; margin-bottom:2px;'>• {incidente}</span>", unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+                                # Validar que tenga relación directa con incidentes viales reales
+                                if any(p in titulo.lower() for p in palabras_criticas):
+                                    # Limpiar el título del nombre del medio que acopla Google News al final
+                                    titulo_limpio = titulo.split(" - ")[0]
+                                    noticias_viales.append(f"📰 [{medio}] {titulo_limpio}")
+                                    
+                            return noticias_viales if noticias_viales else ["✅ No se registran novedades viales de gravedad en la prensa."]
+                        except:
+                            return ["⚠️ Servidor de noticias temporalmente ocupado."]
+
+                    alertas_prensa = escanear_noticias_transito_ecuador()
+                    st.markdown('<div style="max-height:100px; overflow-y:auto; border:1px solid #eee; padding:4px; background:#fffbf2; border-radius:4px;">', unsafe_allow_html=True)
+                    for noticia in alertas_prensa:
+                        st.markdown(f"<span style='font-size:10px; color:#e65100; font-weight:500; display:block; margin-bottom:3px;'>• {noticia}</span>", unsafe_allow_html=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
+
     # ==========================================
     # PESTAÑA 2: PLANIFICADOR DE FERIADOS
     # ==========================================
