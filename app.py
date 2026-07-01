@@ -410,10 +410,11 @@ if df_raw is not None and not df_raw.empty:
                     )
                     st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
-            # --- SECCIÓN TOTALMENTE AUTOMATIZADA: TOMTOM TRAFFIC INCIDENTS v5 ---
+            # --- SECCIÓN TOTALMENTE AUTOMATIZADA: TOMTOM TRAFFIC INCIDENTS v5 (FIJO NACIONAL) ---
             with col_resumen_tomtom:
                 st.markdown("<span style='font-size:11px; font-weight:bold; color:#1e88e5; display:block; margin-top:0px;'>🔄 Alertas TomTom (Auto-escaneo Activo)</span>", unsafe_allow_html=True)
                 
+                # Caja de coordenadas fija para todo el territorio de Ecuador
                 bbox_nacional_ecuador = "-81.0000,-5.0000,-75.0000,1.5000"
                 
                 def consultar_alertas_tomtom_real():
@@ -421,11 +422,8 @@ if df_raw is not None and not df_raw.empty:
                     try:
                         url = "https://api.tomtom.com/traffic/services/5/incidentDetails"
                         
-                        if provincia_sel != "Todas" and provincia_key_busqueda in coordenadas_provincias:
-                            lat_p, lon_p = coordenadas_provincias[provincia_key_busqueda]
-                            bbox_query = f"{lon_p - 0.5},{lat_p - 0.5},{lon_p + 0.5},{lat_p + 0.5}"
-                        else:
-                            bbox_query = bbox_nacional_ecuador
+                        # Forzado estricto: Búsqueda nacional independiente de los filtros del dashboard
+                        bbox_query = bbox_nacional_ecuador
                         
                         params = {
                             "key": api_key,
@@ -465,7 +463,6 @@ if df_raw is not None and not df_raw.empty:
                 for incidente in alertas_actuales:
                     st.markdown(f"<span style='font-size:10px; color:#d32f2f; font-weight:500; display:block; margin-bottom:2px;'>• {incidente}</span>", unsafe_allow_html=True)
                 st.markdown('</div>', unsafe_allow_html=True)
-
     # ==========================================
     # PESTAÑA 2: PLANIFICADOR DE FERIADOS
     # ==========================================
