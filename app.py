@@ -408,122 +408,96 @@ if df_raw is not None and not df_raw.empty:
                     )
                     st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
-            # --- SECCIÓN INTEGRADA AUTOMÁTICA: TOMTOM + BANNER DINÁMICO HTML DE PRENSA ECUADOR ---
+            # --- SECCIÓN INTEGRADA: MARQUESINA INDEPENDIENTE + MÓDULO SATELITAL TOMTOM ---
             with col_resumen_tomtom:
-                tab_tt, tab_noticias = st.tabs(["🛰️ Satelital (TomTom)", "📻 Vialidad Ecuador"])
+                # 1. ESCANEO GLOBAL DE PRENSA SINISETROS ECUADOR (EXTRACTOR)
+                @st.cache_data(ttl=600)
+                def escanear_noticias_transito_ecuador():
+                    api_key = "3600e0086b484129be732265792b2654"
+                    query_estricto = "ecuador AND (choque OR accidente OR tránsito OR trafico OR vial OR carretera OR volcamiento OR congestión)"
+                    url = "https://newsapi.org/v2/everything"
+                    
+                    params = {
+                        "q": query_estricto,
+                        "language": "es",
+                        "sortBy": "publishedAt",
+                        "pageSize": 20,
+                        "apiKey": api_key
+                    }
+                    try:
+                        resp = requests.get(url, params=params, timeout=5).json()
+                        noticias_viales = []
+                        palabras_viales = ["choque", "accidente", "transito", "tránsito", "trafico", "tráfico", "via", "vía", "volcamiento", "carretera", "volcado", "chocaron", "estrellamiento", "autopista", "cerrada", "congestión"]
+                        lista_negra = ["política", "elecciones", "fútbol", "asamblea", "decreto", "judicial", "asesinado", "sicariato", "crimen", "voto", "mundial", "hotel", "fuegos artificiales", "bocenazos", "batucadas", "vende su edificio", "españa", "méxico", "mexicanos"]
+                        dominios_bloqueos = ["xataka.com", "lanacion.com.ar", "jornada.com.mx", "infobae.com", "elpais.com"]
+                        
+                        if resp.get("status") == "ok" and "articles" in resp:
+                            for item in resp["articles"]:
+                                titulo = item.get("title", "")
+                                url_articulo = item.get("url", "").lower()
+                                medio = item.get("source", {}).get("name", "Prensa")
+                                if not titulo or any(dom in url_articulo for dom in dominios_bloqueos):
+                                    continue
+                                titulo_lc = titulo.lower()
+                                if any(p in titulo_lc for p in palabras_viales) and not any(n in titulo_lc for n in lista_negra):
+                                    noticias_viales.append(f"📰 [{medio}] {titulo}")
+                        return noticias_viales
+                    except:
+                        return []
+
+                alertas_prensa = escanear_noticias_transito_ecuador()
                 
-                with tab_tt:
-                    bbox_nacional_ecuador = "-81.0000,-5.0000,-75.0000,1.5000"
-                    
-                    def consultar_alertas_tomtom_real():
-                        api_key = "BYGu8JyIsbquMfeU4Cj9P0HidHyxRbE8"
-                        try:
-                            url = "https://api.tomtom.com/traffic/services/5/incidentDetails"
-                            bbox_query = bbox_nacional_ecuador
-                            
-                            params = {
-                                "key": api_key,
-                                "bbox": bbox_query,
-                                "fields": "{incidents{type,properties{description,street}}}",
-                                "language": "es-ES"
-                            }
-                            
-                            respuesta = requests.get(url, params=params, timeout=10).json()
-                            alertas = []
-                            
-                            if "incidents" in respuesta and respuesta["incidents"]:
-                                for item in respuesta["incidents"]:
-                                    props = item.get("properties", {})
-                                    tipo_raw = item.get("type", "INCIDENTE")
-                                    
-                                    tipo_comun = "TRÁFICO" if tipo_raw == "JAM" else ("ACCIDENTE" if tipo_raw == "ACCIDENT" else "RESTRICCIÓN")
-                                    calle = props.get("street", "Vía pública")
-                                    descripcion = props.get("description", "").lower()
-                                    
-                                    if "accidente" in descripcion or "choque" in descripcion:
-                                        tipo_comun = "ACCIDENTE"
-                                        
-                                    detalle_incidente = f"⚠️ {tipo_comun} en {calle}: {props.get('description', '')}"
-                                    alertas.append(detalle_incidente)
-                                    
-                            return alertas if alertas else ["✅ Flujo vehicular nacional normal."]
-                        except: 
-                            return ["⚠️ Sin alertas reportadas en la zona."]
-                    
-                    alertas_actuales = consultar_alertas_tomtom_real()
-                    st.markdown('<div style="max-height:100px; overflow-y:auto; border:1px solid #eee; padding:4px; background:#fafafa; border-radius:4px;">', unsafe_allow_html=True)
-                    for incidente in alertas_actuales:
-                        st.markdown(f"<span style='font-size:10px; color:#d32f2f; font-weight:500; display:block; margin-bottom:2px;'>• {incidente}</span>", unsafe_allow_html=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
-
-                with tab_noticias:
-                    @st.cache_data(ttl=600)
-                    def escanear_noticias_transito_ecuador():
-                        api_key = "3600e0086b484129be732265792b2654"
-                        
-                        # Restringimos la búsqueda con palabras clave viales explícitas de Ecuador
-                        query_estricto = "ecuador AND (choque OR accidente OR tránsito OR trafico OR vial OR carretera OR volcamiento OR congestión)"
-                        url = "https://newsapi.org/v2/everything"
-                        
+                # MODIFICACIÓN: Renderiza el Efecto Marquesina ARRIBA del contenedor Satelital TomTom
+                if alertas_prensa:
+                    texto_marquesina = " &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; • &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ".join(alertas_prensa)
+                    st.markdown(
+                        f"""
+                        <div style="border: 1px solid #ffe0b2; background: #fffde7; padding: 6px; border-radius: 4px; overflow: hidden; margin-bottom:6px;">
+                            <marquee behavior="scroll" direction="left" scrollamount="4" style="font-size: 11px; color: #e65100; font-weight: bold; font-family: sans-serif;">
+                                • {texto_marquesina}
+                            </marquee>
+                        </div>
+                        """, 
+                        unsafe_allow_html=True
+                    )
+                
+                # MODIFICACIÓN: Módulo Único de TomTom (Sin Pestañas cruzadas)
+                st.markdown("<span style='font-size:12px; font-weight:bold; color:#111; display:block; margin-bottom:2px;'>🛰️ Satelital (TomTom)</span>", unsafe_allow_html=True)
+                bbox_nacional_ecuador = "-81.0000,-5.0000,-75.0000,1.5000"
+                
+                def consultar_alertas_tomtom_real():
+                    api_key = "BYGu8JyIsbquMfeU4Cj9P0HidHyxRbE8"
+                    try:
+                        url = "https://api.tomtom.com/traffic/services/5/incidentDetails"
                         params = {
-                            "q": query_estricto,
-                            "language": "es",
-                            "sortBy": "publishedAt",
-                            "pageSize": 20,
-                            "apiKey": api_key
+                            "key": api_key,
+                            "bbox": bbox_nacional_ecuador,
+                            "fields": "{incidents{type,properties{description,street}}}",
+                            "language": "es-ES"
                         }
-                        
-                        try:
-                            resp = requests.get(url, params=params, timeout=5).json()
-                            noticias_viales = []
-                            
-                            # Filtro local súper estricto para evitar internacionales o noticias de fútbol/política
-                            palabras_viales = ["choque", "accidente", "transito", "tránsito", "trafico", "tráfico", "via", "vía", "volcamiento", "carretera", "volcado", "chocaron", "estrellamiento", "autopista", "cerrada", "congestión"]
-                            lista_negra = ["política", "elecciones", "fútbol", "asamblea", "decreto", "judicial", "asesinado", "sicariato", "crimen", "voto", "mundial", "hotel", "fuegos artificiales", "bocenazos", "batucadas", "vende su edificio", "españa", "méxico", "mexicanos"]
-                            
-                            # Filtro de dominios conocidos no ecuatorianos para mitigar falsos positivos internacionales
-                            dominios_bloqueos = ["xataka.com", "lanacion.com.ar", "jornada.com.mx", "infobae.com", "elpais.com"]
-                            
-                            if resp.get("status") == "ok" and "articles" in resp:
-                                for item in resp["articles"]:
-                                    titulo = item.get("title", "")
-                                    url_articulo = item.get("url", "").lower()
-                                    medio = item.get("source", {}).get("name", "Prensa")
+                        respuesta = requests.get(url, params=params, timeout=10).json()
+                        alertas = []
+                        if "incidents" in respuesta and respuesta["incidents"]:
+                            for item in respuesta["incidents"]:
+                                props = item.get("properties", {})
+                                tipo_raw = item.get("type", "INCIDENTE")
+                                tipo_comun = "TRÁFICO" if tipo_raw == "JAM" else ("ACCIDENTE" if tipo_raw == "ACCIDENT" else "RESTRICCIÓN")
+                                calle = props.get("street", "Vía pública")
+                                descripcion = props.get("description", "").lower()
+                                
+                                if "accidente" in descripcion or "choque" in descripcion:
+                                    tipo_comun = "ACCIDENTE"
                                     
-                                    if not titulo or any(dom in url_articulo for dom in dominios_bloqueos):
-                                        continue
-                                        
-                                    titulo_lc = titulo.lower()
-                                    
-                                    # Validación cruzada estricta
-                                    if any(p in titulo_lc for p in palabras_viales) and not any(n in titulo_lc for n in lista_negra):
-                                        noticias_viales.append(f"📰 [{medio}] {titulo}")
-                                        
-                            return noticias_viales
-                        except Exception as e:
-                            return []
-
-                    alertas_prensa = escanear_noticias_transito_ecuador()
-                    
-                    # CORRECCIÓN: Si no hay noticias viales reales de Ecuador, se oculta el letrero y queda vacío
-                    if alertas_prensa:
-                        # Unimos todas las noticias con una separación limpia para el letrero móvil
-                        texto_marquesina = " &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; • &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ".join(alertas_prensa)
-                        
-                        # Renderizado del Banner Dinámico tipo Marquesina (Movimiento continuo de derecha a izquierda)
-                        st.markdown(
-                            f"""
-                            <div style="border: 1px solid #ffe0b2; background: #fffde7; padding: 12px 6px; border-radius: 4px; overflow: hidden; margin-top:5px;">
-                                <marquee behavior="scroll" direction="left" scrollamount="4" style="font-size: 11px; color: #e65100; font-weight: bold; font-family: sans-serif;">
-                                    • {texto_marquesina}
-                                </marquee>
-                            </div>
-                            """, 
-                            unsafe_allow_html=True
-                        )
-                    else:
-                        # Si no hay incidencias, se muestra un contenedor limpio sin información distractora
-                        st.markdown('<div style="padding: 10px; font-size:11px; color: #4caf50; font-weight: 500; border: 1px solid #e8f5e9; background:#f1f8e9; border-radius:4px; text-align:center;">✅ Sin reportes de tráfico ni siniestros viales de prensa en este momento.</div>', unsafe_allow_html=True)
+                                alertas.append(f"⚠️ {tipo_comun} en {calle}: {props.get('description', '')}")
+                        return alertas if alertas else ["✅ Flujo vehicular nacional normal."]
+                    except: 
+                        return ["⚠️ Sin alertas reportadas en la zona."]
+                
+                alertas_actuales = consultar_alertas_tomtom_real()
+                st.markdown('<div style="max-height:100px; overflow-y:auto; border:1px solid #eee; padding:4px; background:#fafafa; border-radius:4px;">', unsafe_allow_html=True)
+                for incidente in alertas_actuales:
+                    st.markdown(f"<span style='font-size:10px; color:#d32f2f; font-weight:500; display:block; margin-bottom:2px;'>• {incidente}</span>", unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
 
     # ==========================================
     # PESTAÑA 2: PLANIFICADOR DE FERIADOS
