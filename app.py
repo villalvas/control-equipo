@@ -349,7 +349,7 @@ if df_raw is not None and not df_raw.empty:
                         if es_lluvia: explicaciones.append(f"{promedio_proyectado} por lluvia")
                         else: explicaciones.append(f"{promedio_proyectado} nuevos")
                     if gruas_necesarias > promedio_proyectado:
-                        explicaciones.append("arrastre ant.")
+                        explicaciones.append("arraste ant.")
                     motivo_asesor = " + ".join(explicaciones) if explicaciones else "Ok"
 
                 registros_tabla.append({
@@ -381,15 +381,18 @@ if df_raw is not None and not df_raw.empty:
                     df_top['%'] = (df_top['Casos'] / total_general_casos * 100).round(1).astype(str) + '%' if total_general_casos > 0 else '0%'
                     
                     df_top = df_top[['📍 UBICACIÓN', 'Casos', '📊 Prom/Día', '%']]
-                    st.dataframe(df_top, use_container_width=True, height=140, hide_index=True)
+                    # SE INCREMENTÓ LA ALTURA DE 140 A 175 PARA VER MÁS FILAS SIN SCROLL
+                    st.dataframe(df_top, use_container_width=True, height=175, hide_index=True)
                 else: st.info("Sin datos.")
 
             with col_mando_der:
                 st.markdown(f"<span style='font-size:12px; font-weight:bold; color:#111;'>⏰ Matriz Horaria Detallada: {dia_sel.title()}</span>", unsafe_allow_html=True)
-                if registros_tabla: st.dataframe(pd.DataFrame(registros_tabla), use_container_width=True, height=140, hide_index=True)
+                # SE INCREMENTÓ LA ALTURA DE 140 A 175 PARA VER MÁS HORARIOS DE UN SOLO VISTAZO
+                if registros_tabla: st.dataframe(pd.DataFrame(registros_tabla), use_container_width=True, height=175, hide_index=True)
                 else: st.info("Sin asistencias.")
 
-            st.markdown("<div style='margin-top: 4px; border-top: 1px solid #ddd; padding-top: 2px;'></div>", unsafe_allow_html=True)
+            # --- MARGEN DE SEPARACIÓN AGREGADO AQUÍ PARA EMPUJAR EL GRÁFICO ABAJO ---
+            st.markdown("<div style='margin-top: 14px; border-top: 1px solid #ddd; padding-top: 6px;'></div>", unsafe_allow_html=True)
             col_grafico_full, col_resumen_tomtom = st.columns([6.8, 3.2])
             
             with col_grafico_full:
@@ -402,7 +405,7 @@ if df_raw is not None and not df_raw.empty:
                     fig_lineas.update_layout(
                         xaxis=dict(tickmode="linear", tick0=0, dtick=1, title=dict(text="Hora del Día", font=dict(size=10))),
                         yaxis=dict(title=dict(text="Incidentes / Asistencias", font=dict(size=10))),
-                        margin=dict(l=5, r=5, t=5, b=5), height=150, showlegend=True,
+                        margin=dict(l=5, r=5, t=5, b=5), height=140, showlegend=True,
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=9))
                     )
                     st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
@@ -458,8 +461,7 @@ if df_raw is not None and not df_raw.empty:
                 
                 st.markdown(f"<span style='font-size:9px; color:#777; display:block; margin-bottom:4px;'>Último escaneo: {ultima_hora_tomtom}</span>", unsafe_allow_html=True)
                 
-                # Contenedor visual estirado para aprovechar el espacio libre
-                st.markdown('<div style="max-height:125px; overflow-y:auto; border:1px solid #eee; padding:4px; background:#fafafa; border-radius:4px;">', unsafe_allow_html=True)
+                st.markdown('<div style="max-height:115px; overflow-y:auto; border:1px solid #eee; padding:4px; background:#fafafa; border-radius:4px;">', unsafe_allow_html=True)
                 for incidente in alertas_actuales:
                     st.markdown(f"<span style='font-size:10px; color:#d32f2f; font-weight:500; display:block; margin-bottom:2px;'>• {incidente}</span>", unsafe_allow_html=True)
                 st.markdown('</div>', unsafe_allow_html=True)
