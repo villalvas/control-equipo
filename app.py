@@ -6,7 +6,6 @@ from zoneinfo import ZoneInfo
 import math
 import streamlit.components.v1 as components
 import plotly.graph_objects as go
-import xml.etree.ElementTree as ET
 
 # 1. Configuración de pantalla completa y compacta para salas de control
 st.set_page_config(
@@ -28,7 +27,7 @@ components.html(
     width=0
 )
 
-# Estilos CSS radicales para compactar todo el Dashboard en 1 sola pantalla sin scroll
+# Estilos CSS radicales para compactar y CENTRAR el contenido de las tablas
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -46,14 +45,19 @@ st.markdown("""
         margin-top: 0px !important;
     }
     
-    /* Celdas de tablas ultra compactas */
-    [data-testid="stTable"] td, [data-testid="stDataFrame"] td, div[data-testid="stDataFrame"] [role="gridcell"] {
+    /* Celdas de tablas ultra compactas y COMPLETAMENTE CENTRADAS */
+    [data-testid="stTable"] td, [data-testid="stDataFrame"] td, 
+    div[data-testid="stDataFrame"] [role="gridcell"],
+    [data-testid="stTable"] th, [data-testid="stDataFrame"] th, 
+    div[data-testid="stDataFrame"] [role="columnheader"] {
         font-size: 11px !important;
         font-weight: 500 !important;
         padding: 1px 3px !important;
+        text-align: center !important; /* Fuerza el alineado al centro de textos y números */
+        justify-content: center !important; /* Asegura el centrado en contenedores flex internos */
     }
+    
     [data-testid="stTable"] th, [data-testid="stDataFrame"] th, div[data-testid="stDataFrame"] [role="columnheader"] {
-        font-size: 11px !important;
         font-weight: bold !important;
         padding: 2px 3px !important;
     }
@@ -410,7 +414,6 @@ if df_raw is not None and not df_raw.empty:
 
             # --- SECCIÓN INTEGRADA: MARQUESINA INDEPENDIENTE + MÓDULO SATELITAL TOMTOM ---
             with col_resumen_tomtom:
-                # 1. ESCANEO GLOBAL DE PRENSA SINISETROS ECUADOR (EXTRACTOR)
                 @st.cache_data(ttl=600)
                 def escanear_noticias_transito_ecuador():
                     api_key = "3600e0086b484129be732265792b2654"
@@ -447,7 +450,6 @@ if df_raw is not None and not df_raw.empty:
 
                 alertas_prensa = escanear_noticias_transito_ecuador()
                 
-                # MODIFICACIÓN: Renderiza el Efecto Marquesina ARRIBA del contenedor Satelital TomTom
                 if alertas_prensa:
                     texto_marquesina = " &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; • &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ".join(alertas_prensa)
                     st.markdown(
@@ -461,7 +463,6 @@ if df_raw is not None and not df_raw.empty:
                         unsafe_allow_html=True
                     )
                 
-                # MODIFICACIÓN: Módulo Único de TomTom (Sin Pestañas cruzadas)
                 st.markdown("<span style='font-size:12px; font-weight:bold; color:#111; display:block; margin-bottom:2px;'>🛰️ Satelital (TomTom)</span>", unsafe_allow_html=True)
                 bbox_nacional_ecuador = "-81.0000,-5.0000,-75.0000,1.5000"
                 
