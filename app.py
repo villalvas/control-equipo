@@ -118,9 +118,6 @@ def inicializar_memoria_inmune():
 
 estado_global = inicializar_memoria_inmune()
 
-st.markdown(f"<h2 style='margin:0px; padding:0px; font-size:26px;'>🔮 Proyección Horaria y Alerta de Flota</h2>", unsafe_allow_html=True)
-st.markdown(f"<p style='margin:0px 0px 6px 0px; font-size:11px; color:#555;'><b>Control Geoanalítico</b> | 🔄 Memoria Inmune Activa (Última Actualización: {hora_estatica_str})</p>", unsafe_allow_html=True)
-
 coordenadas_provincias = {
     'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
     'MANABI': [-1.0543, -80.4544], 'EL ORO': [-3.2581, -79.9553], 'LOJA': [-3.9931, -79.2042], 
@@ -189,6 +186,56 @@ if df_raw is not None and not df_raw.empty:
     if col_hora_agrupada in df_raw.columns:
         df_raw[col_hora_agrupada] = df_raw[col_hora_agrupada].apply(extraer_hora_limpia)
 
+    # --- ENRUTAMIENTO DE FILTROS TEMPRANOS PARA LA CABECERA MÁSTER ---
+    dia_sel = estado_global["filtros_normal"]["dia_sel"]
+    if "dia_sel_key" in st.session_state:
+        dia_sel = st.session_state["dia_sel_key"]
+
+    if dia_sel.upper() == "TODOS":
+        df_filtrado_dia = df_raw.copy()
+        num_fechas_reales = df_raw[col_fecha].nunique() if col_fecha in df_raw.columns else 1
+        fecha_target_str = ahora_actual.strftime("%Y-%m-%d")
+    else:
+        dia_destino_num = diccionario_dias.get(dia_sel.upper(), ahora_actual.weekday())
+        dias_diferencia = (dia_destino_num - ahora_actual.weekday()) % 7
+        fecha_target_str = (ahora_actual + timedelta(days=dias_diferencia)).strftime("%Y-%m-%d")
+        df_filtrado_dia = df_raw[df_raw[col_dia].str.upper() == dia_sel.upper()]
+        num_fechas_reales = df_filtrado_dia[col_fecha].nunique() if col_fecha in df_filtrado_dia.columns else 1
+
+    if num_fechas_reales <= 0: num_fechas_reales = 1
+
+    servicio_sel = st.session_state.get("servicio_sel_key", estado_global["filtros_normal"]["servicio_sel"])
+    provincia_sel = st.session_state.get("provincia_sel_key", estado_global["filtros_normal"]["provincia_sel"])
+    ciudad_sel = st.session_state.get("ciudad_sel_key", estado_global["filtros_normal"]["ciudad_sel"])
+    estado_sel = st.session_state.get("estado_sel_key", estado_global["filtros_normal"]["estado_sel"])
+
+    df_filtrado = df_filtrado_dia.copy()
+    if estado_sel and col_estado in df_raw.columns: df_filtrado = df_filtrado[df_filtrado[col_estado].isin(estado_sel)]
+    if servicio_sel != "Todos": df_filtrado = df_filtrado[df_filtrado[col_servicio] == servicio_sel]
+    if provincia_sel != "Todas":
+        df_filtrado = df_filtrado[df_filtrado[col_provincia] == provincia_sel]
+        if ciudad_sel: df_filtrado = df_filtrado[df_filtrado[col_ciudad].isin(ciudad_sel)]
+
+    # --- CABECERA ESTRATÉGICA EN FORMATO HORIZONTAL ---
+    col_titulo, col_metrica_global = st.columns([7.6, 2.4])
+
+    with col_titulo:
+        st.markdown(f"<h2 style='margin:0px; padding:0px; font-size:26px;'>🔮 Proyección Horaria y Alerta de Flota</h2>", unsafe_allow_html=True)
+        st.markdown(f"<p style='margin:0px 0px 6px 0px; font-size:11px; color:#555;'><b>Control Geoanalítico</b> | 🔄 Memoria Inmune Activa (Última Actualización: {hora_estatica_str})</p>", unsafe_allow_html=True)
+
+    with col_metrica_global:
+        if len(df_filtrado) > 0:
+            promedio_asistencias_dia = round(len(df_filtrado) / num_fechas_reales, 1)
+            st.markdown(
+                f"""
+                <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 4px 10px; text-align: right; margin-top: 2px;">
+                    <span style="font-size: 10px; color: #666; display: block; font-weight: bold; text-transform: uppercase;">Promedio General ({dia_sel.title()})</span>
+                    <span style="font-size: 20px; color: #0d47a1; font-weight: 800; line-height: 1;">{promedio_asistencias_dia} Asist.</span>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
+
     tab_normal, tab_feriados = st.tabs(["🔮 Operación Diaria (Normal)", "📈 Planificador de Feriados"])
 
     # ==========================================
@@ -239,26 +286,6 @@ if df_raw is not None and not df_raw.empty:
                 st.cache_data.clear()
                 st.cache_resource.clear()
                 st.rerun()
-
-        if dia_sel.upper() == "TODOS":
-            df_filtrado_dia = df_raw.copy()
-            num_fechas_reales = df_raw[col_fecha].nunique() if col_fecha in df_raw.columns else 1
-            fecha_target_str = ahora_actual.strftime("%Y-%m-%d")
-        else:
-            dia_destino_num = diccionario_dias.get(dia_sel.upper(), ahora_actual.weekday())
-            dias_diferencia = (dia_destino_num - ahora_actual.weekday()) % 7
-            fecha_target_str = (ahora_actual + timedelta(days=dias_diferencia)).strftime("%Y-%m-%d")
-            df_filtrado_dia = df_raw[df_raw[col_dia].str.upper() == dia_sel.upper()]
-            num_fechas_reales = df_filtrado_dia[col_fecha].nunique() if col_fecha in df_filtrado_dia.columns else 1
-
-        if num_fechas_reales <= 0: num_fechas_reales = 1
-
-        df_filtrado = df_filtrado_dia.copy()
-        if estado_sel and col_estado in df_raw.columns: df_filtrado = df_filtrado[df_filtrado[col_estado].isin(estado_sel)]
-        if servicio_sel != "Todos": df_filtrado = df_filtrado[df_filtrado[col_servicio] == servicio_sel]
-        if provincia_sel != "Todas":
-            df_filtrado = df_filtrado[df_filtrado[col_provincia] == provincia_sel]
-            if ciudad_sel: df_filtrado = df_filtrado[df_filtrado[col_ciudad].isin(ciudad_sel)]
 
         provincia_key_busqueda = provincia_sel.upper().strip()
         if provincia_sel != "Todas" and provincia_key_busqueda in coordenadas_provincias:
@@ -380,14 +407,10 @@ if df_raw is not None and not df_raw.empty:
                     )
                     st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
-            # --- SECCIÓN AUTOMATIZADA: TOMTOM TRAFFIC INCIDENTS v5 ---
+            # --- SECCIÓN TOTALMENTE AUTOMATIZADA: TOMTOM TRAFFIC INCIDENTS v5 ---
             with col_resumen_tomtom:
-                promedio_asistencias_dia = round(len(df_filtrado) / num_fechas_reales, 1)
-                st.markdown(f"<span style='font-size:11px; color:#555;'>Promedio ({dia_sel.title()})</span>", unsafe_allow_html=True)
-                st.markdown(f"<h3 style='margin:0px; padding:0px; font-size:28px; line-height:1;'>{promedio_asistencias_dia} Asist.</h3>", unsafe_allow_html=True)
-                st.markdown("<span style='font-size:11px; font-weight:bold; color:#1e88e5; display:block; margin-top:4px;'>🔄 Alertas TomTom (Auto-escaneo Activo)</span>", unsafe_allow_html=True)
+                st.markdown("<span style='font-size:11px; font-weight:bold; color:#1e88e5; display:block; margin-top:0px;'>🔄 Alertas TomTom (Auto-escaneo Activo)</span>", unsafe_allow_html=True)
                 
-                # EJECUCIÓN AUTOMÁTICA EN CADENAMIENTO CON LA RECARGA DE LA APP
                 bbox_nacional_ecuador = "-81.0000,-5.0000,-75.0000,1.5000"
                 
                 def consultar_alertas_tomtom_real():
@@ -430,14 +453,13 @@ if df_raw is not None and not df_raw.empty:
                     except: 
                         return ["⚠️ Sin alertas reportadas en la zona."]
                 
-                # Ejecuta la consulta de forma transparente sin interacción del usuario
                 alertas_actuales = consultar_alertas_tomtom_real()
                 ultima_hora_tomtom = ahora_actual.strftime('%I:%M %p')
                 
-                st.markdown(f"<span style='font-size:9px; color:#777; display:block; margin-bottom:2px;'>Último escaneo: {ultima_hora_tomtom}</span>", unsafe_allow_html=True)
+                st.markdown(f"<span style='font-size:9px; color:#777; display:block; margin-bottom:4px;'>Último escaneo: {ultima_hora_tomtom}</span>", unsafe_allow_html=True)
                 
-                # Contenedor visual autocontenido
-                st.markdown('<div style="max-height:100px; overflow-y:auto; border:1px solid #eee; padding:3px; background:#fafafa; border-radius:4px;">', unsafe_allow_html=True)
+                # Contenedor visual estirado para aprovechar el espacio libre
+                st.markdown('<div style="max-height:125px; overflow-y:auto; border:1px solid #eee; padding:4px; background:#fafafa; border-radius:4px;">', unsafe_allow_html=True)
                 for incidente in alertas_actuales:
                     st.markdown(f"<span style='font-size:10px; color:#d32f2f; font-weight:500; display:block; margin-bottom:2px;'>• {incidente}</span>", unsafe_allow_html=True)
                 st.markdown('</div>', unsafe_allow_html=True)
