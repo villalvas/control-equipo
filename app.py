@@ -430,7 +430,7 @@ if df_raw is not None and not df_raw.empty:
                 else: st.info("Sin datos.")
 
             with col_mando_der:
-                st.markdown(f"<span style='font-size:12px; font-weight:bold; color:#111;'>⏰ Matriz Horaria Detallada: {dia_sel.title()}</span>", unsafe_allow_html=True)
+                st.markdown(f"<h4 style='margin:0px; font-size:12px; font-weight:bold; color:#111;'>⏰ Matriz Horaria Detallada: {dia_sel.title()}</h4>", unsafe_allow_html=True)
                 if registros_tabla:
                     st.dataframe(
                         pd.DataFrame(registros_tabla), 
@@ -466,57 +466,8 @@ if df_raw is not None and not df_raw.empty:
                     )
                     st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
-            # --- SECCIÓN INTEGRADA: MARQUESINA INDEPENDIENTE + MÓDULO SATELITAL TOMTOM ---
+            # --- SECCIÓN INTEGRADA: MÓDULO SATELITAL TOMTOM DIRECTO (SIN NOTICIAS) ---
             with col_resumen_tomtom:
-                @st.cache_data(ttl=600)
-                def escanear_noticias_transito_ecuador():
-                    api_key = "3600e0086b484129be732265792b2654"
-                    query_estricto = "ecuador AND (choque OR accidente OR tránsito OR trafico OR vial OR carretera OR volcamiento OR congestión)"
-                    url = "https://newsapi.org/v2/everything"
-                    
-                    params = {
-                        "q": query_estricto,
-                        "language": "es",
-                        "sortBy": "publishedAt",
-                        "pageSize": 20,
-                        "apiKey": api_key
-                    }
-                    try:
-                        resp = requests.get(url, params=params, timeout=5).json()
-                        noticias_viales = []
-                        palabras_viales = ["choque", "accidente", "transito", "tránsito", "trafico", "tráfico", "via", "vía", "volcamiento", "carretera", "volcado", "chocaron", "estrellamiento", "autopista", "cerrada", "congestión"]
-                        lista_negra = ["política", "elecciones", "fútbol", "asamblea", "decreto", "judicial", "asesinado", "sicariato", "crimen", "voto", "mundial", "hotel", "fuegos artificiales", "bocenazos", "batucadas", "vende su edificio", "españa", "méxico", "mexicanos"]
-                        dominios_bloqueos = ["xataka.com", "lanacion.com.ar", "jornada.com.mx", "infobae.com", "elpais.com"]
-                        
-                        if resp.get("status") == "ok" and "articles" in resp:
-                            for item in resp["articles"]:
-                                titulo = item.get("title", "")
-                                url_articulo = item.get("url", "").lower()
-                                medio = item.get("source", {}).get("name", "Prensa")
-                                if not titulo or any(dom in url_articulo for dom in dominios_bloqueos):
-                                    continue
-                                titulo_lc = titulo.lower()
-                                if any(p in titulo_lc for p in palabras_viales) and not any(n in titulo_lc for n in lista_negra):
-                                    noticias_viales.append(f"📰 [{medio}] {titulo}")
-                        return noticias_viales
-                    except:
-                        return []
-
-                alertas_prensa = escanear_noticias_transito_ecuador()
-                
-                if alertas_prensa:
-                    texto_marquesina = " &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; • &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ".join(alertas_prensa)
-                    st.markdown(
-                        f"""
-                        <div style="border: 1px solid #ffe0b2; background: #fffde7; padding: 6px; border-radius: 4px; overflow: hidden; margin-bottom:6px;">
-                            <marquee behavior="scroll" direction="left" scrollamount="4" style="font-size: 11px; color: #e65100; font-weight: bold; font-family: sans-serif;">
-                                • {texto_marquesina}
-                            </marquee>
-                        </div>
-                        """, 
-                        unsafe_allow_html=True
-                    )
-                
                 st.markdown("<span style='font-size:12px; font-weight:bold; color:#111; display:block; margin-bottom:2px;'>🛰️ Satelital (TomTom)</span>", unsafe_allow_html=True)
                 bbox_nacional_ecuador = "-81.0000,-5.0000,-75.0000,1.5000"
                 
@@ -567,25 +518,3 @@ if df_raw is not None and not df_raw.empty:
 
         def guardar_feriado_callback(): estado_global["filtros_feriados"]["feriado_sel"] = st.session_state["feriado_sel_key"]
         def guardar_servicio_fer_callback(): estado_global["filtros_feriados"]["servicio_sel"] = st.session_state["servicio_fer_key"]
-        def guardar_provincia_fer_callback():
-            estado_global["filtros_feriados"]["provincia_sel"] = st.session_state["provincia_fer_key"]
-            estado_global["filtros_feriados"]["ciudad_sel"] = []
-            st.session_state["ciudad_fer_key"] = []
-        def guardar_ciudad_fer_callback(): estado_global["filtros_feriados"]["ciudad_sel"] = st.session_state["ciudad_fer_key"]
-
-        with col_f_fer:
-            st.markdown("<h4 style='margin:0px; font-size:14px; color:#111;'>⚙️ Planificador</h4>", unsafe_allow_html=True)
-            
-            config_maestra_feriados = {
-                "Carnaval": {"fecha": "18/2/2026", "dias": 4, "espejo": None},
-                "Año Nuevo": {"fecha": "5/1/2026", "dias": 3, "espejo": None},
-                "Viernes Santo": {"fecha": "6/4/2026", "dias": 3, "espejo": None},
-                "Día del Trabajo": {"fecha": "4/5/2026", "dias": 3, "espejo": None},
-                "Batalla de Pichincha": {"fecha": "25/5/2026", "dias": 3, "espejo": None},
-                "Primer Grito de Independencia": {"fecha": "10/8/2026", "dias": 3, "espejo": "Batalla de Pichincha"},
-                "Independencia de Guayaquil": {"fecha": "12/10/2026", "dias": 3, "espejo": "Batalla de Pichincha"},
-                "Día de los Difuntos / Cuenca": {"fecha": "4/11/2026", "dias": 4, "espejo": "Carnaval"},
-                "Navidad": {"fecha": "28/12/2026", "dias": 3, "espejo": "Año Nuevo"}
-            }
-            
-            feriado_seleccionado = st.selectbox("📅 Feriado Nacional:", list(config_maestra_feriados.keys()), key="feriado_sel_key", on_change=guardar_feriado_callback)
