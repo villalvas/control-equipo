@@ -109,9 +109,9 @@ hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
 @st.cache_resource
 def inicializar_memoria_inmune():
     return {
-        "creditos": 48,
-        "alertas_waze": [],
-        "ultima_hora_waze": "Nunca",
+        "creditos": 50,
+        "alertas_tomtom": [],
+        "ultima_hora_tomtom": "Nunca",
         "filtros_normal": {
             "dia_sel": "TODOS",
             "servicio_sel": "Todos",
@@ -190,7 +190,6 @@ if df_raw is not None and not df_raw.empty:
     df_raw[col_cobertura] = df_raw[col_cobertura].astype(str).str.strip().str.upper() if col_cobertura in df_raw.columns else "LOCAL"
     df_raw[col_fecha] = df_raw[col_fecha].astype(str).str.strip().str.split().str[0]
 
-    # --- LIMPIEZA INTELIGENTE Y ROBUSTA DE LA COLUMNA DE HORAS ---
     def extraer_hora_limpia(val):
         val_str = str(val).strip().split('.')[0]
         if ":" in val_str:
@@ -246,14 +245,12 @@ if df_raw is not None and not df_raw.empty:
                 estado_sel = st.multiselect("📌 Estado:", options=estados_disponibles, key="estado_sel_key", on_change=guardar_estado_callback)
             else: estado_sel = []
 
-            # --- UBICACIÓN INMUNE E INMEDIATA DEL BOTÓN REBOOT EN EL SIDEBAR ---
             st.markdown("<div style='margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 10px;'></div>", unsafe_allow_html=True)
             if st.button("🔄 REBOOT APP", use_container_width=True, key="btn_reboot_sidebar"):
                 st.cache_data.clear()
                 st.cache_resource.clear()
                 st.rerun()
 
-        # --- CÁLCULO DE FECHAS GLOBALES ---
         if dia_sel.upper() == "TODOS":
             df_filtrado_dia = df_raw.copy()
             num_fechas_reales = df_raw[col_fecha].nunique() if col_fecha in df_raw.columns else 1
@@ -377,7 +374,7 @@ if df_raw is not None and not df_raw.empty:
                 else: st.info("Sin asistencias.")
 
             st.markdown("<div style='margin-top: 4px; border-top: 1px solid #ddd; padding-top: 2px;'></div>", unsafe_allow_html=True)
-            col_grafico_full, col_resumen_waze = st.columns([6.8, 3.2])
+            col_grafico_full, col_resumen_tomtom = st.columns([6.8, 3.2])
             
             with col_grafico_full:
                 st.markdown("<span style='font-size:13px; font-weight:bold; display:block;'>📈 Curva de Carga Operativa (24 Horas)</span>", unsafe_allow_html=True)
@@ -394,41 +391,64 @@ if df_raw is not None and not df_raw.empty:
                     )
                     st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
-            with col_resumen_waze:
+            # --- SECCIÓN ENFOCADA 100% NATIVA EN TOMTOM TRAFFIC API ---
+            with col_resumen_tomtom:
                 promedio_asistencias_dia = round(len(df_filtrado) / num_fechas_reales, 1)
                 st.markdown(f"<span style='font-size:11px; color:#555;'>Promedio ({dia_sel.title()})</span>", unsafe_allow_html=True)
                 st.markdown(f"<h3 style='margin:0px; padding:0px; font-size:28px; line-height:1;'>{promedio_asistencias_dia} Asist.</h3>", unsafe_allow_html=True)
-                st.markdown("<span style='font-size:11px; font-weight:bold; color:#1e88e5; display:block; margin-top:4px;'>🚛 Alertas Waze Realtime</span>", unsafe_allow_html=True)
+                st.markdown("<span style='font-size:11px; font-weight:bold; color:#1e88e5; display:block; margin-top:4px;'>🚛 Alertas TomTom Realtime</span>", unsafe_allow_html=True)
                 
-                c_w1, c_w2 = st.columns([4.5, 5.5])
-                with c_w1:
-                    ejecutar_consulta = st.button("🔍 Escanear Mapa", use_container_width=True, key="btn_waze_comp")
+                c_t1, c_t2 = st.columns([4.5, 5.5])
+                with c_t1:
+                    ejecutar_consulta = st.button("🔍 Escanear Mapa", use_container_width=True, key="btn_tomtom_comp")
                     if ejecutar_consulta and estado_global["creditos"] > 0:
-                        bbox_nacional_ecuador = {"bottom_left": "-5.0000,-81.0000", "top_right": "1.5000,-75.0000"}
-                        def consultar_alertas_waze_real(bbox_dict):
-                            api_key = "ak_823f13app2zd9qkia4z6vdi27ttb31z9a7v7pvlhnn878w3"
+                        # Cuadrante de Ecuador formateado como minLon,minLat,maxLon,maxLat
+                        bbox_nacional_ecuador = "-81.0000,-5.0000,-75.0000,1.5000"
+                        
+                        def consultar_alertas_tomtom_real():
+                            # TU API KEY REAL INTEGRADA DIRECTAMENTE AQUÍ:
+                            api_key = "BYGu8JyIsbquMfeU4Cj9P0HidHyxRbE8"
                             try:
-                                url = "https://api.openwebninja.com/waze/alerts-and-jams"
-                                headers = {"X-API-Key": api_key}
-                                params = {"bottom_left": "-2.2500,-79.9500", "top_right": "-2.1000,-79.8000"} if provincia_sel == "Todas" else {"bottom_left": bbox_dict["bottom_left"], "top_right": bbox_dict["top_right"]}
-                                respuesta = requests.get(url, headers=headers, params=params, timeout=10).json()
+                                url = "https://api.tomtom.com/traffic/services/4/incidentDetails/s3"
+                                
+                                # Si se selecciona una provincia específica, acotamos la ventana geográfica de búsqueda
+                                if provincia_sel != "Todas" and provincia_key_busqueda in coordenadas_provincias:
+                                    lat_p, lon_p = coordenadas_provincias[provincia_key_busqueda]
+                                    bbox_query = f"{lon_p - 0.4},{lat_p - 0.4},{lon_p + 0.4},{lat_p + 0.4}"
+                                else:
+                                    bbox_query = bbox_nacional_ecuador
+                                
+                                params = {
+                                    "key": api_key,
+                                    "bbox": bbox_query,
+                                    "fields": "{incidents{type,properties{description,street}}}",
+                                    "language": "es-ES"
+                                }
+                                
+                                respuesta = requests.get(url, params=params, timeout=10).json()
                                 alertas = []
-                                if "alerts" in respuesta and respuesta["alerts"]:
-                                    for item in respuesta["alerts"][:2]:
-                                        tipo = item.get("type", "TRÁFICO").replace("_", " ")
-                                        calle = item.get("street", "Vía pública")
-                                        alertas.append(f"⚠️ {tipo} en {calle[:12]}...")
+                                
+                                if "incidents" in respuesta and respuesta["incidents"]:
+                                    for item in respuesta["incidents"][:2]:
+                                        props = item.get("properties", {})
+                                        tipo_raw = item.get("type", "INCIDENTE")
+                                        tipo_comun = "TRÁFICO" if tipo_raw == "JAM" else ("ACCIDENTE" if tipo_raw == "ACCIDENT" else "RESTRICCIÓN")
+                                        calle = props.get("street", "Vía pública")
+                                        alertas.append(f"⚠️ {tipo_comun} en {calle[:12]}...")
                                 return alertas if alertas else ["✅ Flujo normal."]
-                            except: return ["⚠️ Error de conexión."]
-                        estado_global["alertas_waze"] = consultar_alertas_waze_real(bbox_nacional_ecuador)
-                        estado_global["ultima_hora_waze"] = ahora_actual.strftime('%I:%M %p')
+                            except: 
+                                return ["⚠️ Error de conexión."]
+                                
+                        estado_global["alertas_tomtom"] = consultar_alertas_tomtom_real()
+                        estado_global["ultima_hora_tomtom"] = ahora_actual.strftime('%I:%M %p')
                         estado_global["creditos"] -= 1
-                    st.markdown(f'<div class="card-saldo"><span style="font-size:9px;color:#444;">Tk: <b>{estado_global["creditos"]}</b>/50</span></div>', unsafe_allow_html=True)
-                with c_w2:
-                    st.markdown(f"<span style='font-size:9px; color:#777; display:block;'>Último: {estado_global['ultima_hora_waze']}</span>", unsafe_allow_html=True)
-                    if not estado_global["alertas_waze"]: st.markdown("<span style='font-size:9px; color:#999;'>• Requiere escaneo.</span>", unsafe_allow_html=True)
+                    st.markdown(f'<div class="card-saldo"><span style="font-size:9px;color:#444;">Consultas: <b>{estado_global["creditos"]}</b>/50</span></div>', unsafe_allow_html=True)
+                with c_t2:
+                    st.markdown(f"<span style='font-size:9px; color:#777; display:block;'>Último: {estado_global['ultima_hora_tomtom']}</span>", unsafe_allow_html=True)
+                    if not estado_global["alertas_tomtom"]: 
+                        st.markdown("<span style='font-size:9px; color:#999;'>• Requiere escaneo.</span>", unsafe_allow_html=True)
                     else:
-                        for incidente in estado_global["alertas_waze"][:1]:
+                        for incidente in estado_global["alertas_tomtom"][:1]:
                             st.markdown(f"<span style='font-size:9px; color:#d32f2f; font-weight:500;'>• {incidente}</span>", unsafe_allow_html=True)
 
     # ==========================================
