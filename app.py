@@ -408,9 +408,9 @@ if df_raw is not None and not df_raw.empty:
                     )
                     st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
-            # --- SECCIÓN INTEGRADA AUTOMÁTICA: TOMTOM (FIJO NACIONAL) + ALERTAS DE PRENSA ---
+            # --- SECCIÓN INTEGRADA AUTOMÁTICA: TOMTOM (FIJO NACIONAL) + ALERTAS DE PRENSA EXCLUSIVAS DE ECUADOR ---
             with col_resumen_tomtom:
-                tab_tt, tab_noticias = st.tabs(["🛰️ Satelital (TomTom)", "📻 Noticias Tránsito"])
+                tab_tt, tab_noticias = st.tabs(["🛰️ Satelital (TomTom)", "📻 Vialidad Ecuador"])
                 
                 with tab_tt:
                     bbox_nacional_ecuador = "-81.0000,-5.0000,-75.0000,1.5000"
@@ -457,30 +457,49 @@ if df_raw is not None and not df_raw.empty:
                     st.markdown('</div>', unsafe_allow_html=True)
 
                 with tab_noticias:
-                    @st.cache_data(ttl=600)  # Cache 10 minutos para no saturar las fuentes de noticias
+                    @st.cache_data(ttl=600)  # Caché de 10 minutos para proteger tu cuota diaria
                     def escanear_noticias_transito_ecuador():
-                        # Usamos Google News RSS filtrado para Ecuador con palabras de alto impacto vial
-                        url_rss = "https://news.google.com/rss/search?q=ecuador+(choque+OR+accidente+OR+tránsito+OR+vía+OR+volcamiento)+when:7d&hl=es-419&gl=EC&ceid=EC:es-419"
+                        # Tu API Key dedicada de NewsAPI
+                        api_key = "3600e0086b484129be732265792b2654"
+                        
+                        # Construimos un query robusto de tránsito, forzando contexto de Ecuador
+                        # Buscamos en español y ordenamos por las más recientes (publishedAt)
+                        query_estricto = "ecuador AND (choque OR accidente OR tránsito OR vía OR carretera OR volcamiento)"
+                        url = "https://newsapi.org/v2/everything"
+                        
+                        params = {
+                            "q": query_estricto,
+                            "language": "es",
+                            "sortBy": "publishedAt",
+                            "pageSize": 15,
+                            "apiKey": api_key
+                        }
+                        
                         try:
-                            resp = requests.get(url_rss, timeout=5)
-                            root = ET.fromstring(resp.content)
+                            resp = requests.get(url, params=params, timeout=5).json()
                             noticias_viales = []
                             
-                            palabras_criticas = ["choque", "accidente", "transito", "tránsito", "via", "vía", "volcamiento", "bus", "camion", "fallecido", "herido", "cerrado"]
+                            # Palabras de control vial y lista negra para mitigar falsos positivos políticos/judiciales
+                            palabras_viales = ["choque", "accidente", "transito", "tránsito", "via", "vía", "volcamiento", "carretera", "volcado", "chocaron", "estrellamiento", "autopista", "cerrada"]
+                            lista_negra = ["política", "elecciones", "fútbol", "asamblea", "decreto", "judicial", "asesinado", "sicariato", "crimen", "voto"]
                             
-                            for item in root.findall('.//item')[:15]:
-                                titulo = item.find('title').text
-                                medio = item.find('source').text if item.find('source') is not None else "Prensa"
-                                
-                                # Validar que tenga relación directa con incidentes viales reales
-                                if any(p in titulo.lower() for p in palabras_criticas):
-                                    # Limpiar el título del nombre del medio que acopla Google News al final
-                                    titulo_limpio = titulo.split(" - ")[0]
-                                    noticias_viales.append(f"📰 [{medio}] {titulo_limpio}")
+                            if resp.get("status") == "ok" and "articles" in resp:
+                                for item in resp["articles"]:
+                                    titulo = item.get("title", "")
+                                    medio = item.get("source", {}).get("name", "Prensa")
                                     
-                            return noticias_viales if noticias_viales else ["✅ No se registran novedades viales de gravedad en la prensa."]
-                        except:
-                            return ["⚠️ Servidor de noticias temporalmente ocupado."]
+                                    if not titulo:
+                                        continue
+                                        
+                                    titulo_lc = titulo.lower()
+                                    
+                                    # Validación cruzada estricta para asegurar relevancia vial en la sala de control
+                                    if any(p in titulo_lc for p in palabras_viales) and not any(n in titulo_lc for n in lista_negra):
+                                        noticias_viales.append(f"📰 [{medio}] {titulo}")
+                                        
+                            return noticias_viales if noticias_viales else ["✅ No se registran siniestros viales de magnitud en portales nacionales."]
+                        except Exception as e:
+                            return [f"⚠️ Error de conexión con NewsAPI"]
 
                     alertas_prensa = escanear_noticias_transito_ecuador()
                     st.markdown('<div style="max-height:100px; overflow-y:auto; border:1px solid #eee; padding:4px; background:#fffbf2; border-radius:4px;">', unsafe_allow_html=True)
