@@ -408,7 +408,7 @@ if df_raw is not None and not df_raw.empty:
                     )
                     st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
-            # --- SECCIÓN INTEGRADA AUTOMÁTICA: TOMTOM (FIJO NACIONAL) + ALERTAS DE PRENSA EXCLUSIVAS DE ECUADOR ---
+            # --- SECCIÓN INTEGRADA AUTOMÁTICA: TOMTOM + BANNER DINÁMICO HTML DE PRENSA ECUADOR ---
             with col_resumen_tomtom:
                 tab_tt, tab_noticias = st.tabs(["🛰️ Satelital (TomTom)", "📻 Vialidad Ecuador"])
                 
@@ -457,20 +457,19 @@ if df_raw is not None and not df_raw.empty:
                     st.markdown('</div>', unsafe_allow_html=True)
 
                 with tab_noticias:
-                    @st.cache_data(ttl=600)  # Caché de 10 minutos para proteger tu cuota diaria
+                    @st.cache_data(ttl=600)
                     def escanear_noticias_transito_ecuador():
-                        # Tu API Key dedicada de NewsAPI
                         api_key = "3600e0086b484129be732265792b2654"
                         
-                        # Query robusto de tránsito y tráfico forzando contexto de Ecuador
-                        query_estricto = "ecuador AND (choque OR accidente OR tránsito OR trafico OR vía OR carretera OR volcamiento)"
+                        # Restringimos la búsqueda con palabras clave viales explícitas de Ecuador
+                        query_estricto = "ecuador AND (choque OR accidente OR tránsito OR trafico OR vial OR carretera OR volcamiento OR congestión)"
                         url = "https://newsapi.org/v2/everything"
                         
                         params = {
                             "q": query_estricto,
                             "language": "es",
                             "sortBy": "publishedAt",
-                            "pageSize": 15,
+                            "pageSize": 20,
                             "apiKey": api_key
                         }
                         
@@ -478,33 +477,53 @@ if df_raw is not None and not df_raw.empty:
                             resp = requests.get(url, params=params, timeout=5).json()
                             noticias_viales = []
                             
-                            # Palabras de control vial con variables de tráfico añadidas
-                            palabras_viales = ["choque", "accidente", "transito", "tránsito", "trafico", "tráfico", "via", "vía", "volcamiento", "carretera", "volcado", "chocaron", "estrellamiento", "autopista", "cerrada", "congestión", "congelado"]
-                            lista_negra = ["política", "elecciones", "fútbol", "asamblea", "decreto", "judicial", "asesinado", "sicariato", "crimen", "voto"]
+                            # Filtro local súper estricto para evitar internacionales o noticias de fútbol/política
+                            palabras_viales = ["choque", "accidente", "transito", "tránsito", "trafico", "tráfico", "via", "vía", "volcamiento", "carretera", "volcado", "chocaron", "estrellamiento", "autopista", "cerrada", "congestión"]
+                            lista_negra = ["política", "elecciones", "fútbol", "asamblea", "decreto", "judicial", "asesinado", "sicariato", "crimen", "voto", "mundial", "hotel", "fuegos artificiales", "bocenazos", "batucadas", "vende su edificio", "españa", "méxico", "mexicanos"]
+                            
+                            # Filtro de dominios conocidos no ecuatorianos para mitigar falsos positivos internacionales
+                            dominios_bloqueos = ["xataka.com", "lanacion.com.ar", "jornada.com.mx", "infobae.com", "elpais.com"]
                             
                             if resp.get("status") == "ok" and "articles" in resp:
                                 for item in resp["articles"]:
                                     titulo = item.get("title", "")
+                                    url_articulo = item.get("url", "").lower()
                                     medio = item.get("source", {}).get("name", "Prensa")
                                     
-                                    if not titulo:
+                                    if not titulo or any(dom in url_articulo for dom in dominios_bloqueos):
                                         continue
                                         
                                     titulo_lc = titulo.lower()
                                     
-                                    # Validación cruzada estricta para asegurar relevancia vial en la sala de control
+                                    # Validación cruzada estricta
                                     if any(p in titulo_lc for p in palabras_viales) and not any(n in titulo_lc for n in lista_negra):
                                         noticias_viales.append(f"📰 [{medio}] {titulo}")
                                         
-                            return noticias_viales if noticias_viales else ["✅ No se registran siniestros viales o tráfico de magnitud en portales nacionales."]
+                            return noticias_viales
                         except Exception as e:
-                            return [f"⚠️ Error de conexión con NewsAPI"]
+                            return []
 
                     alertas_prensa = escanear_noticias_transito_ecuador()
-                    st.markdown('<div style="max-height:100px; overflow-y:auto; border:1px solid #eee; padding:4px; background:#fffbf2; border-radius:4px;">', unsafe_allow_html=True)
-                    for noticia in alertas_prensa:
-                        st.markdown(f"<span style='font-size:10px; color:#e65100; font-weight:500; display:block; margin-bottom:3px;'>• {noticia}</span>", unsafe_allow_html=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
+                    
+                    # CORRECCIÓN: Si no hay noticias viales reales de Ecuador, se oculta el letrero y queda vacío
+                    if alertas_prensa:
+                        # Unimos todas las noticias con una separación limpia para el letrero móvil
+                        texto_marquesina = " &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; • &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ".join(alertas_prensa)
+                        
+                        # Renderizado del Banner Dinámico tipo Marquesina (Movimiento continuo de derecha a izquierda)
+                        st.markdown(
+                            f"""
+                            <div style="border: 1px solid #ffe0b2; background: #fffde7; padding: 12px 6px; border-radius: 4px; overflow: hidden; margin-top:5px;">
+                                <marquee behavior="scroll" direction="left" scrollamount="4" style="font-size: 11px; color: #e65100; font-weight: bold; font-family: sans-serif;">
+                                    • {texto_marquesina}
+                                </marquee>
+                            </div>
+                            """, 
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        # Si no hay incidencias, se muestra un contenedor limpio sin información distractora
+                        st.markdown('<div style="padding: 10px; font-size:11px; color: #4caf50; font-weight: 500; border: 1px solid #e8f5e9; background:#f1f8e9; border-radius:4px; text-align:center;">✅ Sin reportes de tráfico ni siniestros viales de prensa en este momento.</div>', unsafe_allow_html=True)
 
     # ==========================================
     # PESTAÑA 2: PLANIFICADOR DE FERIADOS
