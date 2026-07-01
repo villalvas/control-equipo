@@ -27,7 +27,7 @@ components.html(
     width=0
 )
 
-# Estilos CSS radicales para compactar y CENTRAR el contenido de las tablas
+# Estilos CSS radicales para compactar y centrar elementos de texto generales
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -45,21 +45,12 @@ st.markdown("""
         margin-top: 0px !important;
     }
     
-    /* Celdas de tablas ultra compactas y COMPLETAMENTE CENTRADAS */
+    /* Forzado complementario en celdas de datos generales */
     [data-testid="stTable"] td, [data-testid="stDataFrame"] td, 
-    div[data-testid="stDataFrame"] [role="gridcell"],
-    [data-testid="stTable"] th, [data-testid="stDataFrame"] th, 
-    div[data-testid="stDataFrame"] [role="columnheader"] {
+    div[data-testid="stDataFrame"] [role="gridcell"] {
         font-size: 11px !important;
         font-weight: 500 !important;
         padding: 1px 3px !important;
-        text-align: center !important; /* Fuerza el alineado al centro de textos y números */
-        justify-content: center !important; /* Asegura el centrado en contenedores flex internos */
-    }
-    
-    [data-testid="stTable"] th, [data-testid="stDataFrame"] th, div[data-testid="stDataFrame"] [role="columnheader"] {
-        font-weight: bold !important;
-        padding: 2px 3px !important;
     }
     
     .banner-feriado {
@@ -386,12 +377,40 @@ if df_raw is not None and not df_raw.empty:
                     df_top['%'] = (df_top['Casos'] / total_general_casos * 100).round(1).astype(str) + '%' if total_general_casos > 0 else '0%'
                     
                     df_top = df_top[['📍 UBICACIÓN', 'Casos', '📊 Prom/Día', '%']]
-                    st.dataframe(df_top, use_container_width=True, height=175, hide_index=True)
+                    
+                    # CORRECCIÓN EXPLICITA DE ALINEACIÓN AL CENTRO EN FILAS NUMÉRICAS NATIVAS
+                    st.dataframe(
+                        df_top, 
+                        use_container_width=True, 
+                        height=175, 
+                        hide_index=True,
+                        column_config={
+                            "📍 UBICACIÓN": st.column_config.TextColumn(alignment="center"),
+                            "Casos": st.column_config.NumberColumn(alignment="center"),
+                            "📊 Prom/Día": st.column_config.NumberColumn(alignment="center"),
+                            "%": st.column_config.TextColumn(alignment="center")
+                        }
+                    )
                 else: st.info("Sin datos.")
 
             with col_mando_der:
                 st.markdown(f"<span style='font-size:12px; font-weight:bold; color:#111;'>⏰ Matriz Horaria Detallada: {dia_sel.title()}</span>", unsafe_allow_html=True)
-                if registros_tabla: st.dataframe(pd.DataFrame(registros_tabla), use_container_width=True, height=175, hide_index=True)
+                if registros_tabla:
+                    # CORRECCIÓN EXPLICITA DE ALINEACIÓN AL CENTRO EN FILAS NUMÉRICAS NATIVAS
+                    st.dataframe(
+                        pd.DataFrame(registros_tabla), 
+                        use_container_width=True, 
+                        height=175, 
+                        hide_index=True,
+                        column_config={
+                            "HORA": st.column_config.TextColumn(alignment="center"),
+                            "🌤️ Clima": st.column_config.TextColumn(alignment="center"),
+                            "📊 Prom": st.column_config.NumberColumn(alignment="center"),
+                            "📈 Proy": st.column_config.TextColumn(alignment="center"),
+                            "🚛 Grúas N.": st.column_config.TextColumn(alignment="center"),
+                            "📋 Diagnóstico": st.column_config.TextColumn(alignment="center")
+                        }
+                    )
                 else: st.info("Sin asistencias.")
 
             st.markdown("<div style='margin-top: 14px; border-top: 1px solid #ddd; padding-top: 6px;'></div>", unsafe_allow_html=True)
@@ -604,7 +623,19 @@ if df_raw is not None and not df_raw.empty:
                 with col_tab_izq:
                     st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>⏰ Distribución de Demanda y Flota Requerida</span>", unsafe_allow_html=True)
                     df_mostrar_feriados = pd.DataFrame(registros_processed)
-                    st.dataframe(df_mostrar_feriados, use_container_width=True, height=220, hide_index=True)
+                    
+                    # CORRECCIÓN EXPLICITA DE ALINEACIÓN AL CENTRO EN FILAS NUMÉRICAS EN FERIADOS
+                    st.dataframe(
+                        df_mostrar_feriados, 
+                        use_container_width=True, 
+                        height=220, 
+                        hide_index=True,
+                        column_config={
+                            "HORA": st.column_config.TextColumn(alignment="center"),
+                            "HISTÓRICO CASOS": st.column_config.NumberColumn(alignment="center"),
+                            "GRÚAS REQUERIDAS": st.column_config.TextColumn(alignment="center")
+                        }
+                    )
                 
                 with col_graf_der:
                     st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📈 Gráfico de Curva de Carga Operativa (Retorno)</span>", unsafe_allow_html=True)
