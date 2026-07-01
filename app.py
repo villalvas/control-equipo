@@ -382,29 +382,29 @@ if df_raw is not None and not df_raw.empty:
                     )
                     st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
-            # --- SECCIÓN ENFOCADA EN TOMTOM TRAFFIC INCIDENTS v5 (CORREGIDO Y SIN CRÉDITOS) ---
+            # --- SECCIÓN ENFOCADA EN TOMTOM TRAFFIC INCIDENTS v5 (CORREGIDO Y DETALLADO) ---
             with col_resumen_tomtom:
                 promedio_asistencias_dia = round(len(df_filtrado) / num_fechas_reales, 1)
                 st.markdown(f"<span style='font-size:11px; color:#555;'>Promedio ({dia_sel.title()})</span>", unsafe_allow_html=True)
                 st.markdown(f"<h3 style='margin:0px; padding:0px; font-size:28px; line-height:1;'>{promedio_asistencias_dia} Asist.</h3>", unsafe_allow_html=True)
                 st.markdown("<span style='font-size:11px; font-weight:bold; color:#1e88e5; display:block; margin-top:4px;'>🚛 Alertas TomTom Realtime</span>", unsafe_allow_html=True)
                 
-                c_t1, c_t2 = st.columns([4.5, 5.5])
+                c_t1, c_t2 = st.columns([3.5, 6.5])
                 with c_t1:
                     ejecutar_consulta = st.button("🔍 Escanear Mapa", use_container_width=True, key="btn_tomtom_comp")
                     if ejecutar_consulta:
-                        # Cuadrante de Ecuador completo (minLon,minLat,maxLon,maxLat)
+                        # Cuadrante geográfico que cubre todo el territorio de Ecuador
                         bbox_nacional_ecuador = "-81.0000,-5.0000,-75.0000,1.5000"
                         
                         def consultar_alertas_tomtom_real():
                             api_key = "BYGu8JyIsbquMfeU4Cj9P0HidHyxRbE8"
                             try:
-                                # Usamos el endpoint estándar moderno v5 de Incidentes
                                 url = f"https://api.tomtom.com/traffic/services/5/incidentDetails"
                                 
+                                # Si se filtra por provincia, busca en esa zona; si está en "Todas", busca a nivel nacional
                                 if provincia_sel != "Todas" and provincia_key_busqueda in coordenadas_provincias:
                                     lat_p, lon_p = coordenadas_provincias[provincia_key_busqueda]
-                                    bbox_query = f"{lon_p - 0.4},{lat_p - 0.4},{lon_p + 0.4},{lat_p + 0.4}"
+                                    bbox_query = f"{lon_p - 0.5},{lat_p - 0.5},{lon_p + 0.5},{lat_p + 0.5}"
                                 else:
                                     bbox_query = bbox_nacional_ecuador
                                 
@@ -419,26 +419,42 @@ if df_raw is not None and not df_raw.empty:
                                 alertas = []
                                 
                                 if "incidents" in respuesta and respuesta["incidents"]:
-                                    for item in respuesta["incidents"][:2]:
+                                    # Recorremos todos los incidentes devueltos sin límites artificiales
+                                    for item in respuesta["incidents"]:
                                         props = item.get("properties", {})
                                         tipo_raw = item.get("type", "INCIDENTE")
+                                        
+                                        # Traducimos el tipo técnico a lenguaje de operador
                                         tipo_comun = "TRÁFICO" if tipo_raw == "JAM" else ("ACCIDENTE" if tipo_raw == "ACCIDENT" else "RESTRICCIÓN")
+                                        
                                         calle = props.get("street", "Vía pública")
-                                        alertas.append(f"⚠️ {tipo_comun} en {calle[:12]}...")
-                                return alertas if alertas else ["✅ Flujo normal."]
+                                        descripcion = props.get("description", "").lower()
+                                        
+                                        # Si la API reporta explícitamente un accidente en la descripción, lo clasificamos como tal
+                                        if "accidente" in descripcion or "choque" in descripcion:
+                                            tipo_comun = "ACCIDENTE"
+                                            
+                                        detalle_incidente = f"⚠️ {tipo_comun} en {calle}: {props.get('description', '')}"
+                                        alertas.append(detalle_incidente)
+                                        
+                                return alertas if alertas else ["✅ Flujo vehicular normal."]
                             except: 
-                                return ["⚠️ Sin alertas en zona."]
+                                return ["⚠️ Sin alertas reportadas en la zona."]
                                 
                         estado_global["alertas_tomtom"] = consultar_alertas_tomtom_real()
                         estado_global["ultima_hora_tomtom"] = ahora_actual.strftime('%I:%M %p')
                 
                 with c_t2:
-                    st.markdown(f"<span style='font-size:9px; color:#777; display:block;'>Último: {estado_global['ultima_hora_tomtom']}</span>", unsafe_allow_html=True)
+                    st.markdown(f"<span style='font-size:9px; color:#777; display:block;'>Último escaneo: {estado_global['ultima_hora_tomtom']}</span>", unsafe_allow_html=True)
+                    
+                    # Contenedor con scroll para revisar todas las alertas cómodamente sin desconfigurar el diseño compacto
                     if not estado_global["alertas_tomtom"]: 
-                        st.markdown("<span style='font-size:9px; color:#999;'>• Requiere escaneo.</span>", unsafe_allow_html=True)
+                        st.markdown("<span style='font-size:9px; color:#999;'>• Requiere presionar Escanear Mapa.</span>", unsafe_allow_html=True)
                     else:
-                        for incidente in estado_global["alertas_tomtom"][:1]:
-                            st.markdown(f"<span style='font-size:9px; color:#d32f2f; font-weight:500;'>• {incidente}</span>", unsafe_allow_html=True)
+                        st.markdown('<div style="max-height:120px; overflow-y:auto; border:1px solid #eee; padding:3px; background:#fafafa; border-radius:4px;">', unsafe_allow_html=True)
+                        for incidente in estado_global["alertas_tomtom"]:
+                            st.markdown(f"<span style='font-size:10px; color:#d32f2f; font-weight:500; display:block; margin-bottom:2px;'>• {incidente}</span>", unsafe_allow_html=True)
+                        st.markdown('</div>', unsafe_allow_html=True)
 
     # ==========================================
     # PESTAÑA 2: PLANIFICADOR DE FERIADOS
