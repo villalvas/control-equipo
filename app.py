@@ -260,18 +260,19 @@ if df_raw is not None and not df_raw.empty:
         df_filtrado = df_filtrado[df_filtrado[col_provincia] == provincia_sel]
         if ciudad_sel: df_filtrado = df_filtrado[df_filtrado[col_ciudad].isin(ciudad_sel)]
 
-    col_titulo, col_metrica_global = st.columns([7.6, 2.4])
+    # Estructura principal dividida en Panel Operativo Izquierdo y Panel de Alertas/Métricas Derecho
+    col_panel_izq, col_panel_der = st.columns([7.6, 2.4])
 
-    with col_titulo:
+    with col_panel_izq:
         st.markdown(f"<h2 style='margin:0px; padding:0px; font-size:26px;'>🔮 Proyección Horaria y Alerta de Flota</h2>", unsafe_allow_html=True)
         st.markdown(f"<p style='margin:0px 0px 6px 0px; font-size:11px; color:#555;'><b>Control Geoanalítico</b> | 🔄 Memoria Inmune Activa (Última Actualización: {hora_estatica_str})</p>", unsafe_allow_html=True)
 
-    with col_metrica_global:
+    with col_panel_der:
         if len(df_filtrado) > 0:
             promedio_asistencias_dia = round(len(df_filtrado) / num_fechas_reales, 1)
             st.markdown(
                 f"""
-                <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 4px 10px; text-align: right; margin-top: 2px;">
+                <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 4px 10px; text-align: right; margin-top: 2px; margin-bottom: 5px;">
                     <span style="font-size: 10px; color: #666; display: block; font-weight: bold; text-transform: uppercase;">Promedio General ({dia_sel.title()})</span>
                     <span style="font-size: 20px; color: #0d47a1; font-weight: 800; line-height: 1;">{promedio_asistencias_dia} Asist.</span>
                 </div>
@@ -285,7 +286,7 @@ if df_raw is not None and not df_raw.empty:
     # PESTAÑA 1: OPERACIÓN NORMAL
     # ==========================================
     with tab_normal:
-        col_sidebar, col_main_content = st.columns([1.6, 8.4])
+        col_sidebar, col_main_content, col_alerts_right = st.columns([1.6, 6.0, 2.4])
         
         if "dia_sel_key" not in st.session_state: st.session_state["dia_sel_key"] = estado_global["filtros_normal"]["dia_sel"]
         if "servicio_sel_key" not in st.session_state: st.session_state["servicio_sel_key"] = estado_global["filtros_normal"]["servicio_sel"]
@@ -429,10 +430,11 @@ if df_raw is not None and not df_raw.empty:
                     
                     df_top = df_top[['📍 UBICACIÓN', 'Casos', '📊 Prom/Día', '%']]
                     
+                    # Tablas reducidas en altura a 135px para máxima compactación
                     st.dataframe(
                         df_top, 
                         use_container_width=True, 
-                        height=175, 
+                        height=135, 
                         hide_index=True,
                         column_config={
                             "📍 UBICACIÓN": st.column_config.TextColumn(alignment="center"),
@@ -446,10 +448,11 @@ if df_raw is not None and not df_raw.empty:
             with col_mando_der:
                 st.markdown(f"<h4 style='margin:0px; font-size:12px; font-weight:bold; color:#111;'>⏰ Matriz Horaria Detallada: {dia_sel.title()}</h4>", unsafe_allow_html=True)
                 if registros_tabla:
+                    # Tablas reducidas en altura a 135px para máxima compactación
                     st.dataframe(
                         pd.DataFrame(registros_tabla), 
                         use_container_width=True, 
-                        height=175, 
+                        height=135, 
                         hide_index=True,
                         column_config={
                             "HORA": st.column_config.TextColumn(alignment="center"),
@@ -463,58 +466,57 @@ if df_raw is not None and not df_raw.empty:
                 else: st.info("Sin asistencias.")
 
             st.markdown("<div style='margin-top: 14px; border-top: 1px solid #ddd; padding-top: 6px;'></div>", unsafe_allow_html=True)
-            col_grafico_full, col_resumen_tomtom = st.columns([6.2, 3.8])
             
-            with col_grafico_full:
-                st.markdown("<span style='font-size:13px; font-weight:bold; display:block;'>📈 Curva de Carga Operativa (24 Horas)</span>", unsafe_allow_html=True)
-                if data_grafico_lineas:
-                    df_gl = pd.DataFrame(data_grafico_lineas)
-                    fig_lineas = go.Figure()
-                    fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Promedio Base"], name="📊 Promedio Base", mode="lines+markers", line=dict(color="#1f77b4", width=2)))
-                    fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Proyección Ajustada"], name="📈 Proyección por Clima", mode="lines+markers", line=dict(color="#ff7f0e", width=2, dash="dash")))
-                    fig_lineas.update_layout(
-                        xaxis=dict(tickmode="linear", tick0=0, dtick=1, title=dict(text="Hora del Día", font=dict(size=10))),
-                        yaxis=dict(title=dict(text="Incidentes / Asistencias", font=dict(size=10))),
-                        margin=dict(l=5, r=5, t=5, b=5), height=150, showlegend=True,
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=9))
-                    )
-                    st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
+            # El gráfico ahora se despliega ocupando todo el ancho de la zona de control principal
+            st.markdown("<span style='font-size:13px; font-weight:bold; display:block;'>📈 Curva de Carga Operativa (24 Horas)</span>", unsafe_allow_html=True)
+            if data_grafico_lineas:
+                df_gl = pd.DataFrame(data_grafico_lineas)
+                fig_lineas = go.Figure()
+                fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Promedio Base"], name="📊 Promedio Base", mode="lines+markers", line=dict(color="#1f77b4", width=2)))
+                fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Proyección Ajustada"], name="📈 Proyección por Clima", mode="lines+markers", line=dict(color="#ff7f0e", width=2, dash="dash")))
+                fig_lineas.update_layout(
+                    xaxis=dict(tickmode="linear", tick0=0, dtick=1, title=dict(text="Hora del Día", font=dict(size=10))),
+                    yaxis=dict(title=dict(text="Incidentes / Asistencias", font=dict(size=10))),
+                    margin=dict(l=5, r=5, t=5, b=5), height=150, showlegend=True,
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=9))
+                )
+                st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
-            # --- SECCIÓN INTEGRADA: MÓDULO ECU 911 TÁCTICO + ALERTAS SÍSMICAS REAL-TIME ---
-            with col_resumen_tomtom:
-                # 1. Sub-bloque del monitor de Sismos (USGS)
-                st.markdown("<span style='font-size:12px; font-weight:bold; color:#111; display:block; margin-bottom:2px;'>🌋 Sismicidad de Hoy (Ecuador - USGS)</span>", unsafe_allow_html=True)
-                sismos_detectados = consultar_sismos_ecuador_real()
-                
-                if sismos_detectados:
-                    for sismo in sismos_detectados:
-                        st.markdown(f'<div style="background-color: #ffebee; border-left: 4px solid #c62828; padding: 4px; border-radius: 4px; margin-bottom: 4px; font-size: 11px; color: #c62828; font-weight: bold;">{sismo}</div>', unsafe_allow_html=True)
-                else:
-                    st.markdown('<div style="background-color: #e8f5e9; border-left: 4px solid #2e7d32; padding: 4px; border-radius: 4px; margin-bottom: 4px; font-size: 11px; color: #2e7d32; font-weight: 500;">🟢 Territorio nacional estable (Sin sismos > 4.0 hoy).</div>', unsafe_allow_html=True)
-                
-                # 2. Sub-bloque del ECU 911 (Optimizado y compacto sin barras intermedias)
-                st.markdown("<span style='font-size:12px; font-weight:bold; color:#111; display:block; margin-top: 5px; margin-bottom:0px;'>🚧 Incidentes en Vías (ECU 911)</span>", unsafe_allow_html=True)
-                st.markdown(f"<span style='font-size:9px; color:#c62828; font-weight:bold; display:block; margin-top:0px; margin-bottom:4px;'>Consulta: {hora_estatica_str} | Fuente: ecu911.gob.ec/consulta-de-vias/</span>", unsafe_allow_html=True)
-                
-                reportes_ecu911 = [
-                    "🔴 VÍA CERRADA: Cuenca - Girón - Pasaje (Sector Km 39 por colapso estructural de alcantarilla).",
-                    "🔴 VÍA CERRADA: Baños - Puyo (Sector Río Blanco por deslizamiento activo de gran magnitud).",
-                    "🔴 VÍA CERRADA: Loja - Zamora (Km 45 por desprendimiento de rocas y pérdida de calzada).",
-                    "🔴 VÍA CERRADA: Riobamba - Macas (Sector Zuñac por pérdida de mesa de la vía).",
-                    "⚠️ VÍA PARCIALMENTE HABILITADA: Alóag - Santo Domingo (Km 56 habilitado un carril por limpieza de lodo).",
-                    "⚠️ VÍA PARCIALMENTE HABILITADA: Quito - Machachi (Congestión muy alta en el sector de Tambillo).",
-                    "⚠️ VÍA PARCIALMENTE HABILITADA: Guayaquil - Salinas (Paso lateral de Santa Elena habilitado con precaución).",
-                    "⚠️ VÍA PARCIALMENTE HABILITADA: Latacunga - Quevedo (Paso controlado en el sector El Guango).",
-                    "🟢 VÍA HABILITADA: Ibarra - Tulcán (Flujo vehicular completamente normal).",
-                    "🟢 VÍA HABILITADA: Ambato - Guaranda (Completamente operativa y sin novedades)."
-                ]
-                
-                # Desplegable táctico con scrollbar para la sala de control
-                st.markdown('<div style="max-height:102px; overflow-y:auto; border:1px solid #ced4da; padding:4px; background:#ffffff; border-radius:4px;">', unsafe_allow_html=True)
-                for reporte in reportes_ecu911:
-                    color_texto = "#c62828" if "🔴" in reporte else ("#ef6c00" if "⚠️" in reporte else "#2e7d32")
-                    st.markdown(f"<span style='font-size:10px; color:{color_texto}; font-weight:600; display:block; margin-bottom:3px; border-bottom:1px solid #f1f3f5; padding-bottom:2px;'>{reporte}</span>", unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+        # --- PANEL EXCLUSIVO DERECHO: ALERTAS E INCIDENTES (Justo abajo de la métrica global) ---
+        with col_alerts_right:
+            # 1. Sub-bloque del monitor de Sismos (USGS)
+            st.markdown("<span style='font-size:12px; font-weight:bold; color:#111; display:block; margin-bottom:2px;'>🌋 Sismicidad de Hoy (Ecuador - USGS)</span>", unsafe_allow_html=True)
+            sismos_detectados = consultar_sismos_ecuador_real()
+            
+            if sismos_detectados:
+                for sismo in sismos_detectados:
+                    st.markdown(f'<div style="background-color: #ffebee; border-left: 4px solid #c62828; padding: 4px; border-radius: 4px; margin-bottom: 4px; font-size: 11px; color: #c62828; font-weight: bold;">{sismo}</div>', unsafe_allow_html=True)
+            else:
+                st.markdown('<div style="background-color: #e8f5e9; border-left: 4px solid #2e7d32; padding: 4px; border-radius: 4px; margin-bottom: 6px; font-size: 11px; color: #2e7d32; font-weight: 500;">🟢 Territorio nacional estable (Sin sismos > 4.0).</div>', unsafe_allow_html=True)
+            
+            # 2. Sub-bloque del ECU 911 
+            st.markdown("<span style='font-size:12px; font-weight:bold; color:#111; display:block; margin-bottom:0px;'>🚧 Incidentes en Vías (ECU 911)</span>", unsafe_allow_html=True)
+            st.markdown(f"<span style='font-size:9px; color:#c62828; font-weight:bold; display:block; margin-bottom:4px;'>Consulta: {hora_estatica_str} | Fuente: ecu911.gob.ec/consulta-de-vias/</span>", unsafe_allow_html=True)
+            
+            reportes_ecu911 = [
+                "🔴 VÍA CERRADA: Cuenca - Girón - Pasaje (Sector Km 39 por colapso estructural de alcantarilla).",
+                "🔴 VÍA CERRADA: Baños - Puyo (Sector Río Blanco por deslizamiento activo de gran magnitud).",
+                "🔴 VÍA CERRADA: Loja - Zamora (Km 45 por desprendimiento de rocas y pérdida de calzada).",
+                "🔴 VÍA CERRADA: Riobamba - Macas (Sector Zuñac por pérdida de mesa de la vía).",
+                "⚠️ VÍA PARCIALMENTE HABILITADA: Alóag - Santo Domingo (Km 56 habilitado un carril por limpieza de lodo).",
+                "⚠️ VÍA PARCIALMENTE HABILITADA: Quito - Machachi (Congestión muy alta en el sector de Tambillo).",
+                "⚠️ VÍA PARCIALMENTE HABILITADA: Guayaquil - Salinas (Paso lateral de Santa Elena habilitado con precaución).",
+                "⚠️ VÍA PARCIALMENTE HABILITADA: Latacunga - Quevedo (Paso controlado en el sector El Guango).",
+                "🟢 VÍA HABILITADA: Ibarra - Tulcán (Flujo vehicular completamente normal).",
+                "🟢 VÍA HABILITADA: Ambato - Guaranda (Completamente operativa y sin novedades)."
+            ]
+            
+            # Contenedor con barra de desplazamiento para sala de control
+            st.markdown('<div style="max-height:190px; overflow-y:auto; border:1px solid #ced4da; padding:4px; background:#ffffff; border-radius:4px;">', unsafe_allow_html=True)
+            for reporte in reportes_ecu911:
+                color_texto = "#c62828" if "🔴" in reporte else ("#ef6c00" if "⚠️" in reporte else "#2e7d32")
+                st.markdown(f"<span style='font-size:10px; color:{color_texto}; font-weight:600; display:block; margin-bottom:3px; border-bottom:1px solid #f1f3f5; padding-bottom:2px;'>{reporte}</span>", unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
     # ==========================================
     # PESTAÑA 2: PLANIFICADOR DE FERIADOS
