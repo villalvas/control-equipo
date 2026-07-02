@@ -430,11 +430,11 @@ if df_raw is not None and not df_raw.empty:
                     
                     df_top = df_top[['📍 UBICACIÓN', 'Casos', '📊 Prom/Día', '%']]
                     
-                    # Tablas reducidas en altura a 135px para máxima compactación
+                    # Altura ampliada a 200px para mostrar más información simultáneamente
                     st.dataframe(
                         df_top, 
                         use_container_width=True, 
-                        height=135, 
+                        height=200, 
                         hide_index=True,
                         column_config={
                             "📍 UBICACIÓN": st.column_config.TextColumn(alignment="center"),
@@ -448,11 +448,11 @@ if df_raw is not None and not df_raw.empty:
             with col_mando_der:
                 st.markdown(f"<h4 style='margin:0px; font-size:12px; font-weight:bold; color:#111;'>⏰ Matriz Horaria Detallada: {dia_sel.title()}</h4>", unsafe_allow_html=True)
                 if registros_tabla:
-                    # Tablas reducidas en altura a 135px para máxima compactación
+                    # Altura ampliada a 200px para dar más información visible con scroll bar suave
                     st.dataframe(
                         pd.DataFrame(registros_tabla), 
                         use_container_width=True, 
-                        height=135, 
+                        height=200, 
                         hide_index=True,
                         column_config={
                             "HORA": st.column_config.TextColumn(alignment="center"),
@@ -465,9 +465,10 @@ if df_raw is not None and not df_raw.empty:
                     )
                 else: st.info("Sin asistencias.")
 
-            st.markdown("<div style='margin-top: 14px; border-top: 1px solid #ddd; padding-top: 6px;'></div>", unsafe_allow_html=True)
+            # Separador estético para empujar el gráfico más abajo
+            st.markdown("<div style='margin-top: 22px; border-top: 1px solid #ddd; padding-top: 10px;'></div>", unsafe_allow_html=True)
             
-            # El gráfico ahora se despliega ocupando todo el ancho de la zona de control principal
+            # El gráfico ahora se despliega cómodamente en la parte inferior
             st.markdown("<span style='font-size:13px; font-weight:bold; display:block;'>📈 Curva de Carga Operativa (24 Horas)</span>", unsafe_allow_html=True)
             if data_grafico_lineas:
                 df_gl = pd.DataFrame(data_grafico_lineas)
@@ -482,7 +483,7 @@ if df_raw is not None and not df_raw.empty:
                 )
                 st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
-        # --- PANEL EXCLUSIVO DERECHO: ALERTAS E INCIDENTES (Justo abajo de la métrica global) ---
+        # --- PANEL EXCLUSIVO DERECHO: ALERTAS E INCIDENTES (Ubicado estratégicamente a la derecha) ---
         with col_alerts_right:
             # 1. Sub-bloque del monitor de Sismos (USGS)
             st.markdown("<span style='font-size:12px; font-weight:bold; color:#111; display:block; margin-bottom:2px;'>🌋 Sismicidad de Hoy (Ecuador - USGS)</span>", unsafe_allow_html=True)
@@ -511,8 +512,8 @@ if df_raw is not None and not df_raw.empty:
                 "🟢 VÍA HABILITADA: Ambato - Guaranda (Completamente operativa y sin novedades)."
             ]
             
-            # Contenedor con barra de desplazamiento para sala de control
-            st.markdown('<div style="max-height:190px; overflow-y:auto; border:1px solid #ced4da; padding:4px; background:#ffffff; border-radius:4px;">', unsafe_allow_html=True)
+            # Contenedor táctico con barra de desplazamiento para sala de control ajustado a la nueva proporción
+            st.markdown('<div style="max-height:262px; overflow-y:auto; border:1px solid #ced4da; padding:4px; background:#ffffff; border-radius:4px;">', unsafe_allow_html=True)
             for reporte in reportes_ecu911:
                 color_texto = "#c62828" if "🔴" in reporte else ("#ef6c00" if "⚠️" in reporte else "#2e7d32")
                 st.markdown(f"<span style='font-size:10px; color:{color_texto}; font-weight:600; display:block; margin-bottom:3px; border-bottom:1px solid #f1f3f5; padding-bottom:2px;'>{reporte}</span>", unsafe_allow_html=True)
