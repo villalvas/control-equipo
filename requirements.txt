@@ -5,3 +5,6 @@ openpyxl
 folium
 streamlit-folium
 st-gsheets-connection
+beautifulsoup4
+requests
+pytz
