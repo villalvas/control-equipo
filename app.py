@@ -15,14 +15,11 @@ st.set_page_config(
 )
 
 # --- CONTROL DE ACCESO MEDIANTE CONTRASEÑA (ESTADO DE SESIÓN) ---
-# Definir la contraseña de la Sala de Control
 CONTRASEÑA_SALA_CONTROL = "Control2026*"
 
-# Inicializar variable de autenticación en la memoria de sesión si no existe
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
 
-# Interfaz de bloqueo si el usuario no está autenticado
 if not st.session_state["autenticado"]:
     st.markdown("""
         <style>
@@ -42,9 +39,7 @@ if not st.session_state["autenticado"]:
             st.rerun()
         else:
             st.error("Contraseña incorrecta. Acceso denegado.")
-    st.stop()  # Detiene la ejecución para que no cargue nada del código inferior
-
-# --- SI ESTÁ AUTENTICADO, SE EJECUTA EL TABLERO COMPLETO ---
+    st.stop()
 
 # --- RECARGA NATIVA FORZADA DE VENTANA CADA 15 MINUTOS ---
 components.html(
@@ -68,7 +63,6 @@ st.markdown("""
     .stDataFrame [data-testid="stDataFrameDownloadButton"] {display: none;}
     button[title="View fullscreen"] {display: none;}
     
-    /* Forzado de márgenes cero para evitar scroll general */
     .block-container {
         padding-top: 0.2rem !important;
         padding-bottom: 0.1rem !important;
@@ -77,7 +71,6 @@ st.markdown("""
         margin-top: 0px !important;
     }
     
-    /* Forzado complementario en celdas de datos generales */
     [data-testid="stTable"] td, [data-testid="stDataFrame"] td, 
     div[data-testid="stDataFrame"] [role="gridcell"] {
         font-size: 11px !important;
@@ -125,7 +118,6 @@ zona_ecuador = ZoneInfo("America/Guayaquil")
 ahora_actual = datetime.now(zona_ecuador)
 hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
 
-# --- MEMORIA SERVIDOR ALTA DISPONIBILIDAD ---
 @st.cache_resource
 def inicializar_memoria_inmune():
     return {
@@ -177,6 +169,31 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
         return datos_clima
     except: return {}
 
+# --- MONITOREO SÍSMICO EN TIEMPO REAL CON USGS (ECUADOR) ---
+@st.cache_data(ttl=300) # Se actualiza cada 5 minutos de forma controlada
+def consultar_sismos_ecuador_real():
+    url = "https://earthquake.usgs.gov/fdsnws/event/1/query"
+    params = {
+        "format": "geojson",
+        "starttime": datetime.now(ZoneInfo("America/Guayaquil")).strftime("%Y-%m-%d"),
+        "minmagnitude": "4.0",
+        "minlatitude": "-5.0",
+        "maxlatitude": "1.5",
+        "minlongitude": "-81.0",
+        "maxlongitude": "-75.0"
+    }
+    try:
+        respuesta = requests.get(url, params=params, timeout=5).json()
+        eventos = []
+        for feature in respuesta.get("features", []):
+            prop = feature["properties"]
+            lugar = prop["place"]
+            mag = prop["mag"]
+            eventos.append(f"🚨 MOVIMIENTO SÍSMICO DETECTADO: Mag {mag} - {lugar}")
+        return eventos
+    except:
+        return []
+
 @st.cache_data(ttl=900)
 def cargar_datos_vía_gviz():
     try:
@@ -214,7 +231,6 @@ if df_raw is not None and not df_raw.empty:
     if col_hora_agrupada in df_raw.columns:
         df_raw[col_hora_agrupada] = df_raw[col_hora_agrupada].apply(extraer_hora_limpia)
 
-    # --- ENRUTAMIENTO DE FILTROS TEMPRANOS PARA LA CABECERA MÁSTER ---
     dia_sel = estado_global["filtros_normal"]["dia_sel"]
     if "dia_sel_key" in st.session_state:
         dia_sel = st.session_state["dia_sel_key"]
@@ -244,7 +260,6 @@ if df_raw is not None and not df_raw.empty:
         df_filtrado = df_filtrado[df_filtrado[col_provincia] == provincia_sel]
         if ciudad_sel: df_filtrado = df_filtrado[df_filtrado[col_ciudad].isin(ciudad_sel)]
 
-    # --- CABECERA ESTRATÉGICA EN FORMATO HORIZONTAL ---
     col_titulo, col_metrica_global = st.columns([7.6, 2.4])
 
     with col_titulo:
@@ -315,7 +330,6 @@ if df_raw is not None and not df_raw.empty:
                 st.cache_resource.clear()
                 st.rerun()
                 
-            # --- AGREGADO: BOTÓN DE CERRAR SESIÓN DE SEGURIDAD ---
             if st.button("🔒 CERRAR SESIÓN", use_container_width=True, key="btn_logout_sidebar"):
                 st.session_state["autenticado"] = False
                 st.rerun()
@@ -466,9 +480,20 @@ if df_raw is not None and not df_raw.empty:
                     )
                     st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
-            # --- SECCIÓN INTEGRADA: MÓDULO SATELITAL TOMTOM DIRECTO (SIN NOTICIAS) ---
+            # --- SECCIÓN INTEGRADA: MÓDULO SATELITAL TOMTOM + ALERTAS SÍSMICAS REAL-TIME ---
             with col_resumen_tomtom:
-                st.markdown("<span style='font-size:12px; font-weight:bold; color:#111; display:block; margin-bottom:2px;'>🛰️ Satelital (TomTom)</span>", unsafe_allow_html=True)
+                # 1. Sub-bloque del monitor de Sismos (USGS)
+                st.markdown("<span style='font-size:12px; font-weight:bold; color:#111; display:block; margin-bottom:2px;'>🌋 Sismicidad de Hoy (Ecuador - USGS)</span>", unsafe_allow_html=True)
+                sismos_detectados = consultar_sismos_ecuador_real()
+                
+                if sismos_detectados:
+                    for sismo in sismos_detectados:
+                        st.markdown(f'<div style="background-color: #ffebee; border-left: 4px solid #c62828; padding: 4px; border-radius: 4px; margin-bottom: 4px; font-size: 11px; color: #c62828; font-weight: bold;">{sismo}</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown('<div style="background-color: #e8f5e9; border-left: 4px solid #2e7d32; padding: 4px; border-radius: 4px; margin-bottom: 4px; font-size: 11px; color: #2e7d32; font-weight: 500;">🟢 Territorio nacional estable (Sin sismos > 4.0 hoy).</div>', unsafe_allow_html=True)
+                
+                # 2. Sub-bloque del Tráfico (TomTom)
+                st.markdown("<span style='font-size:12px; font-weight:bold; color:#111; display:block; margin-top: 4px; margin-bottom:2px;'>🛰️ Satelital (TomTom)</span>", unsafe_allow_html=True)
                 bbox_nacional_ecuador = "-81.0000,-5.0000,-75.0000,1.5000"
                 
                 def consultar_alertas_tomtom_real():
@@ -500,7 +525,7 @@ if df_raw is not None and not df_raw.empty:
                         return ["⚠️ Sin alertas reportadas en la zona."]
                 
                 alertas_actuales = consultar_alertas_tomtom_real()
-                st.markdown('<div style="max-height:100px; overflow-y:auto; border:1px solid #eee; padding:4px; background:#fafafa; border-radius:4px;">', unsafe_allow_html=True)
+                st.markdown('<div style="max-height:85px; overflow-y:auto; border:1px solid #eee; padding:4px; background:#fafafa; border-radius:4px;">', unsafe_allow_html=True)
                 for incidente in alertas_actuales:
                     st.markdown(f"<span style='font-size:10px; color:#d32f2f; font-weight:500; display:block; margin-bottom:2px;'>• {incidente}</span>", unsafe_allow_html=True)
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -610,7 +635,6 @@ if df_raw is not None and not df_raw.empty:
                     st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>⏰ Distribución de Demanda y Flota Requerida</span>", unsafe_allow_html=True)
                     df_mostrar_feriados = pd.DataFrame(registros_processed)
                     
-                    # CORRECCIÓN EXPLICITA DE ALINEACIÓN AL CENTRO EN FILAS NUMÉRICAS EN FERIADOS
                     st.dataframe(
                         df_mostrar_feriados, 
                         use_container_width=True, 
