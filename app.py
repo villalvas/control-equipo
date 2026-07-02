@@ -518,3 +518,114 @@ if df_raw is not None and not df_raw.empty:
 
         def guardar_feriado_callback(): estado_global["filtros_feriados"]["feriado_sel"] = st.session_state["feriado_sel_key"]
         def guardar_servicio_fer_callback(): estado_global["filtros_feriados"]["servicio_sel"] = st.session_state["servicio_fer_key"]
+        def guardar_provincia_fer_callback():
+            estado_global["filtros_feriados"]["provincia_sel"] = st.session_state["provincia_fer_key"]
+            estado_global["filtros_feriados"]["ciudad_sel"] = []
+            st.session_state["ciudad_fer_key"] = []
+        def guardar_ciudad_fer_callback(): estado_global["filtros_feriados"]["ciudad_sel"] = st.session_state["ciudad_fer_key"]
+
+        with col_f_fer:
+            st.markdown("<h4 style='margin:0px; font-size:14px; color:#111;'>⚙️ Planificador</h4>", unsafe_allow_html=True)
+            
+            config_maestra_feriados = {
+                "Carnaval": {"fecha": "18/2/2026", "dias": 4, "espejo": None},
+                "Año Nuevo": {"fecha": "5/1/2026", "dias": 3, "espejo": None},
+                "Viernes Santo": {"fecha": "6/4/2026", "dias": 3, "espejo": None},
+                "Día del Trabajo": {"fecha": "4/5/2026", "dias": 3, "espejo": None},
+                "Batalla de Pichincha": {"fecha": "25/5/2026", "dias": 3, "espejo": None},
+                "Primer Grito de Independencia": {"fecha": "10/8/2026", "dias": 3, "espejo": "Batalla de Pichincha"},
+                "Independencia de Guayaquil": {"fecha": "12/10/2026", "dias": 3, "espejo": "Batalla de Pichincha"},
+                "Día de los Difuntos / Cuenca": {"fecha": "4/11/2026", "dias": 4, "espejo": "Carnaval"},
+                "Navidad": {"fecha": "28/12/2026", "dias": 3, "espejo": "Año Nuevo"}
+            }
+            
+            feriado_seleccionado = st.selectbox("📅 Feriado Nacional:", list(config_maestra_feriados.keys()), key="feriado_sel_key", on_change=guardar_feriado_callback)
+            servicio_feriado = st.selectbox("🎯 Servicio:", sorted(list(df_raw[col_servicio].dropna().unique())), key="servicio_fer_key", on_change=guardar_servicio_fer_callback)
+            
+            provincia_feriado = st.selectbox("📍 Provincia:", ["Todas"] + df_raw[col_provincia].value_counts().index.tolist(), key="provincia_fer_key", on_change=guardar_provincia_fer_callback)
+            if provincia_feriado != "Todas":
+                ciudades_f_disp = sorted(df_raw[df_raw[col_provincia] == provincia_feriado][col_ciudad].dropna().unique().tolist())
+                ciudad_feriado = st.multiselect("🏙️ Ciudades:", ciudades_f_disp, key="ciudad_fer_key", on_change=guardar_ciudad_fer_callback)
+            else:
+                ciudad_feriado = st.multiselect("🏙️ Ciudades:", options=[], disabled=True, placeholder="Filtre Provincia", key="ms_ciudad_p_dis")
+
+        with col_c_fer:
+            meta_feriado = config_maestra_feriados[feriado_seleccionado]
+            fecha_original = meta_feriado["fecha"]
+            feriado_espejo = meta_feriado["espejo"]
+            
+            df_data_feriado = df_raw[(df_raw[col_fecha] == fecha_original) & (df_raw[col_servicio] == servicio_feriado)].copy()
+            es_simulado = False
+            
+            if df_data_feriado.empty and feriado_espejo is not None:
+                fecha_espejo = config_maestra_feriados[feriado_espejo]["fecha"]
+                df_data_feriado = df_raw[(df_raw[col_fecha] == fecha_espejo) & (df_raw[col_servicio] == servicio_feriado)].copy()
+                es_simulado = True
+                
+            if provincia_feriado != "Todas" and not df_data_feriado.empty:
+                df_data_feriado = df_data_feriado[df_data_feriado[col_provincia] == provincia_feriado]
+                if ciudad_feriado:
+                    df_data_feriado = df_data_feriado[df_data_feriado[col_ciudad].isin(ciudad_feriado)]
+            
+            if es_simulado:
+                st.markdown(f'<div class="banner-similitud">🔮 <b>Proyección por Similitud Activa:</b> Calculando retornos para <b>{feriado_seleccionado} ({fecha_original})</b> usando comportamiento espejo de <b>{feriado_espejo} ({meta_feriado["dias"]} días de descanso)</b></div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="banner-feriado">📈 <b>Datos Históricos Reales:</b> Analizando Primer Día Laboral de Retorno del feriado del <b>{fecha_original}</b></div>', unsafe_allow_html=True)
+            
+            if not df_data_feriado.empty:
+                df_neto_hora = df_data_feriado.groupby(col_hora_agrupada).size().reset_index(name='HISTORICO_CASOS')
+                df_neto_hora = df_neto_hora.sort_values(by=col_hora_agrupada)
+                
+                registros_processed = []
+                data_grafico_feriado = []
+                mapeo_casos = {row[col_hora_agrupada]: row['HISTORICO_CASOS'] for _, row in df_neto_hora.iterrows()}
+                
+                for hr in range(24):
+                    casos_reales = mapeo_casos.get(hr, 0)
+                    casos_previos = mapeo_casos.get(hr - 1, 0)
+                    
+                    unidades_calculadas = math.ceil(casos_reales + (0.4 * casos_previos))
+                    if casos_reales == 0 and unidades_calculadas <= 0:
+                        unidades_calculadas = 0
+                    elif unidades_calculadas <= 0:
+                        unidades_calculadas = 1
+                        
+                    string_gruas = f"🚛 {unidades_calculadas} U." if unidades_calculadas > 0 else "-"
+                    
+                    registros_processed.append({
+                        "HORA": f"{hr:02d}:00",
+                        "HISTÓRICO CASOS": casos_reales,
+                        "GRÚAS REQUERIDAS": string_gruas
+                    })
+                    
+                    data_grafico_feriado.append({
+                        "Hora": hr,
+                        "Casos Históricos": casos_reales,
+                        "Grúas Proyectadas": unidades_calculadas
+                    })
+                
+                col_tab_izq, col_graf_der = st.columns([4.5, 5.5])
+                
+                with col_tab_izq:
+                    st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>⏰ Distribución de Demanda y Flota Requerida</span>", unsafe_allow_html=True)
+                    df_mostrar_feriados = pd.DataFrame(registros_processed)
+                    st.dataframe(df_mostrar_feriados, use_container_width=True, height=220, hide_index=True)
+                
+                with col_graf_der:
+                    st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📈 Gráfico de Curva de Carga Operativa (Retorno)</span>", unsafe_allow_html=True)
+                    if data_grafico_feriado:
+                        df_gf = pd.DataFrame(data_grafico_feriado)
+                        fig_feriado = go.Figure()
+                        fig_feriado.add_trace(go.Scatter(x=df_gf["Hora"], y=df_gf["Casos Históricos"], name="📊 Histórico Base", mode="lines+markers", line=dict(color="#1f77b4", width=2)))
+                        fig_feriado.add_trace(go.Scatter(x=df_gf["Hora"], y=df_gf["Grúas Proyectadas"], name="🚛 Grúas Solicitadas", mode="lines+markers", line=dict(color="#d62728", width=2, dash="dot")))
+                        fig_feriado.update_layout(
+                            xaxis=dict(tickmode="linear", tick0=0, dtick=2, title=dict(text="Hora del Día", font=dict(size=9))),
+                            yaxis=dict(title=dict(text="Cantidad", font=dict(size=9))),
+                            margin=dict(l=5, r=5, t=5, b=5), height=220, showlegend=True,
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=9))
+                        )
+                        st.plotly_chart(fig_feriado, use_container_width=True, config={'displayModeBar': False})
+            else:
+                st.warning("⚠️ No existen registros históricos en la base para la fecha de retorno y filtros seleccionados.")
+else:
+    st.error("❌ No se pudo conectar con el servidor de datos de Google Sheets o la estructura de columnas es incorrecta.")
