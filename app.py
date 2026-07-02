@@ -609,7 +609,19 @@ if df_raw is not None and not df_raw.empty:
                 with col_tab_izq:
                     st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>⏰ Distribución de Demanda y Flota Requerida</span>", unsafe_allow_html=True)
                     df_mostrar_feriados = pd.DataFrame(registros_processed)
-                    st.dataframe(df_mostrar_feriados, use_container_width=True, height=220, hide_index=True)
+                    
+                    # CORRECCIÓN EXPLICITA DE ALINEACIÓN AL CENTRO EN FILAS NUMÉRICAS EN FERIADOS
+                    st.dataframe(
+                        df_mostrar_feriados, 
+                        use_container_width=True, 
+                        height=220, 
+                        hide_index=True,
+                        column_config={
+                            "HORA": st.column_config.TextColumn(alignment="center"),
+                            "HISTÓRICO CASOS": st.column_config.NumberColumn(alignment="center"),
+                            "GRÚAS REQUERIDAS": st.column_config.TextColumn(alignment="center")
+                        }
+                    )
                 
                 with col_graf_der:
                     st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📈 Gráfico de Curva de Carga Operativa (Retorno)</span>", unsafe_allow_html=True)
