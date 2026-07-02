@@ -170,7 +170,7 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
     except: return {}
 
 # --- MONITOREO SÍSMICO EN TIEMPO REAL CON USGS (ECUADOR) ---
-@st.cache_data(ttl=300) # Se actualiza cada 5 minutos de forma controlada
+@st.cache_data(ttl=300) 
 def consultar_sismos_ecuador_real():
     url = "https://earthquake.usgs.gov/fdsnws/event/1/query"
     params = {
@@ -193,6 +193,15 @@ def consultar_sismos_ecuador_real():
         return eventos
     except:
         return []
+
+# --- CONSULTA SIMULADA DE REPORTES VIALES ECU 911 ---
+def consultar_reportes_ecu911():
+    # Retorna reportes viales tácticos simulados en base al entorno nacional
+    return [
+        "⚠️ ECU 911: Cierre parcial en la vía Alóag - Santo Domingo por deslizamiento de tierra leve.",
+        "⚠️ ECU 911: Congestión alta en Av. Simón Bolívar (Quito) - Conducir con precaución.",
+        "⚠️ ECU 911: Vía Cuenca - Molleturo habilitada con paso controlado en km 49."
+    ]
 
 @st.cache_data(ttl=900)
 def cargar_datos_vía_gviz():
@@ -231,61 +240,15 @@ if df_raw is not None and not df_raw.empty:
     if col_hora_agrupada in df_raw.columns:
         df_raw[col_hora_agrupada] = df_raw[col_hora_agrupada].apply(extraer_hora_limpia)
 
-    dia_sel = estado_global["filtros_normal"]["dia_sel"]
-    if "dia_sel_key" in st.session_state:
-        dia_sel = st.session_state["dia_sel_key"]
-
-    if dia_sel.upper() == "TODOS":
-        df_filtrado_dia = df_raw.copy()
-        num_fechas_reales = df_raw[col_fecha].nunique() if col_fecha in df_raw.columns else 1
-        fecha_target_str = ahora_actual.strftime("%Y-%m-%d")
-    else:
-        dia_destino_num = diccionario_dias.get(dia_sel.upper(), ahora_actual.weekday())
-        dias_diferencia = (dia_destino_num - ahora_actual.weekday()) % 7
-        fecha_target_str = (ahora_actual + timedelta(days=dias_diferencia)).strftime("%Y-%m-%d")
-        df_filtrado_dia = df_raw[df_raw[col_dia].str.upper() == dia_sel.upper()]
-        num_fechas_reales = df_filtrado_dia[col_fecha].nunique() if col_fecha in df_filtrado_dia.columns else 1
-
-    if num_fechas_reales <= 0: num_fechas_reales = 1
-
-    servicio_sel = st.session_state.get("servicio_sel_key", estado_global["filtros_normal"]["servicio_sel"])
-    provincia_sel = st.session_state.get("provincia_sel_key", estado_global["filtros_normal"]["provincia_sel"])
-    ciudad_sel = st.session_state.get("ciudad_sel_key", estado_global["filtros_normal"]["ciudad_sel"])
-    estado_sel = st.session_state.get("estado_sel_key", estado_global["filtros_normal"]["estado_sel"])
-
-    df_filtrado = df_filtrado_dia.copy()
-    if estado_sel and col_estado in df_raw.columns: df_filtrado = df_filtrado[df_filtrado[col_estado].isin(estado_sel)]
-    if servicio_sel != "Todos": df_filtrado = df_filtrado[df_filtrado[col_servicio] == servicio_sel]
-    if provincia_sel != "Todas":
-        df_filtrado = df_filtrado[df_filtrado[col_provincia] == provincia_sel]
-        if ciudad_sel: df_filtrado = df_filtrado[df_filtrado[col_ciudad].isin(ciudad_sel)]
-
-    col_titulo, col_metrica_global = st.columns([7.6, 2.4])
-
-    with col_titulo:
-        st.markdown(f"<h2 style='margin:0px; padding:0px; font-size:26px;'>🔮 Proyección Horaria y Alerta de Flota</h2>", unsafe_allow_html=True)
-        st.markdown(f"<p style='margin:0px 0px 6px 0px; font-size:11px; color:#555;'><b>Control Geoanalítico</b> | 🔄 Memoria Inmune Activa (Última Actualización: {hora_estatica_str})</p>", unsafe_allow_html=True)
-
-    with col_metrica_global:
-        if len(df_filtrado) > 0:
-            promedio_asistencias_dia = round(len(df_filtrado) / num_fechas_reales, 1)
-            st.markdown(
-                f"""
-                <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 4px 10px; text-align: right; margin-top: 2px;">
-                    <span style="font-size: 10px; color: #666; display: block; font-weight: bold; text-transform: uppercase;">Promedio General ({dia_sel.title()})</span>
-                    <span style="font-size: 20px; color: #0d47a1; font-weight: 800; line-height: 1;">{promedio_asistencias_dia} Asist.</span>
-                </div>
-                """, 
-                unsafe_allow_html=True
-            )
-
-    tab_normal, tab_feriados = st.tabs(["🔮 Operación Diaria (Normal)", "📈 Planificador de Feriados"])
-
     # ==========================================
-    # PESTAÑA 1: OPERACIÓN NORMAL
+    # BARRA LATERAL (ST.SIDEBAR) - FILTROS UNIFICADOS
     # ==========================================
-    with tab_normal:
-        col_sidebar, col_main_content = st.columns([1.6, 8.4])
+    with st.sidebar:
+        st.markdown("<h3 style='margin:0px; font-size:16px; color:#111;'>⚙️ Panel de Control Global</h3>", unsafe_allow_html=True)
+        st.markdown(f"<p style='font-size:10px; color:#666;'>Actualizado: {hora_estatica_str}</p>", unsafe_allow_html=True)
+        
+        st.markdown("<hr style='margin:8px 0px;' />", unsafe_allow_html=True)
+        st.markdown("<b style='font-size:12px;'>Filtros Operación Diaria:</b>", unsafe_allow_html=True)
         
         if "dia_sel_key" not in st.session_state: st.session_state["dia_sel_key"] = estado_global["filtros_normal"]["dia_sel"]
         if "servicio_sel_key" not in st.session_state: st.session_state["servicio_sel_key"] = estado_global["filtros_normal"]["servicio_sel"]
@@ -302,240 +265,29 @@ if df_raw is not None and not df_raw.empty:
         def guardar_ciudad_callback(): estado_global["filtros_normal"]["ciudad_sel"] = st.session_state["ciudad_sel_key"]
         def guardar_estado_callback(): estado_global["filtros_normal"]["estado_sel"] = st.session_state["estado_sel_key"]
 
-        with col_sidebar:
-            st.markdown("<h4 style='margin:0px; font-size:14px; color:#111;'>⚙️ Filtros</h4>", unsafe_allow_html=True)
-            dias_en_orden = ["TODOS", "LUNES", "MARTES", "MIÉRCOLES", "MIERCOLES", "JUEVES", "VIERNES", "SÁBADO", "SABADO", "DOMINGO"]
-            dias_disponibles = [d for d in dias_en_orden if d == "TODOS" or d in list(df_raw[col_dia].str.upper().unique())]
-            dia_sel = st.selectbox("📅 Día Tipo:", dias_disponibles, key="dia_sel_key", on_change=guardar_dia_callback)
-            
-            lista_servicios = ["Todos"] + sorted(list(df_raw[col_servicio].dropna().unique()))
-            servicio_sel = st.selectbox("🎯 Servicio:", lista_servicios, key="servicio_sel_key", on_change=guardar_servicio_callback)
-            
-            provincia_sel = st.selectbox("📍 Provincia:", ["Todas"] + df_raw[col_provincia].value_counts().index.tolist(), key="provincia_sel_key", on_change=guardar_provincia_callback)
-            
-            if provincia_sel != "Todas":
-                ciudades_disponibles = sorted(df_raw[df_raw[col_provincia] == provincia_sel][col_ciudad].dropna().unique().tolist())
-                ciudad_sel = st.multiselect("🏙️ Ciudades:", ciudades_disponibles, key="ciudad_sel_key", on_change=guardar_ciudad_callback)
-            else:
-                ciudad_sel = st.multiselect("🏙️ Ciudades:", options=[], disabled=True, placeholder="Filtre Provincia")
-                
-            if col_estado in df_raw.columns:
-                estados_disponibles = sorted(list(df_raw[col_estado].dropna().unique()))
-                estado_sel = st.multiselect("📌 Estado:", options=estados_disponibles, key="estado_sel_key", on_change=guardar_estado_callback)
-            else: estado_sel = []
-
-            st.markdown("<div style='margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 10px;'></div>", unsafe_allow_html=True)
-            if st.button("🔄 REBOOT APP", use_container_width=True, key="btn_reboot_sidebar"):
-                st.cache_data.clear()
-                st.cache_resource.clear()
-                st.rerun()
-                
-            if st.button("🔒 CERRAR SESIÓN", use_container_width=True, key="btn_logout_sidebar"):
-                st.session_state["autenticado"] = False
-                st.rerun()
-
-        provincia_key_busqueda = provincia_sel.upper().strip()
-        if provincia_sel != "Todas" and provincia_key_busqueda in coordenadas_provincias:
-            lat_c, lon_c = coordenadas_provincias[provincia_key_busqueda]
-            diccionario_clima = obtener_clima_horario_futuro(lat_c, lon_c, fecha_target_str)
-        else:
-            diccionario_clima = {}
-
-        registros_tabla = []
-        data_grafico_lineas = []
-
-        if len(df_filtrado) > 0 and col_hora_agrupada in df_filtrado.columns:
-            df_horas_raw = df_filtrado.copy()
-            
-            casos_locales, casos_foraneos = [0] * 24, [0] * 24
-            for hr in range(24):
-                df_b = df_horas_raw[df_horas_raw[col_hora_agrupada] == hr]
-                for _, fila in df_b.iterrows():
-                    cobertura_str = str(fila[col_cobertura]).upper().strip() if col_cobertura in fila else "LOCAL"
-                    if "FOR" in cobertura_str: 
-                        casos_foraneos[hr] += 1
-                    else: 
-                        casos_locales[hr] += 1
-
-            for hr in range(24):
-                p_local, p_foraneo = casos_locales[hr] / num_fechas_reales, casos_foraneos[hr] / num_fechas_reales
-                promedio_base_calculated = round(p_local + p_foraneo, 1)
-                
-                clima_info = diccionario_clima.get(hr, {"Detalle": "☁️ Nublado", "Estado": "Normal"})
-                detalle_clima = clima_info["Detalle"] if provincia_sel != "Todas" else "🌍 Filtre Prov."
-                es_lluvia = clima_info["Estado"] == "Lluvia"
-
-                if es_lluvia and promedio_base_calculated > 0:
-                    promedio_proyectado = math.ceil(promedio_base_calculated * 1.20)
-                    etiqueta_proyeccion = f"{promedio_proyectado} (+20%)"
-                    p_local_calc = p_local * 1.20
-                    p_foraneo_calc = p_foraneo * 1.20
-                else:
-                    promedio_proyectado = int(round(promedio_base_calculated, 0))
-                    etiqueta_proyeccion = f"{promedio_proyectado} (Norm)"
-                    p_local_calc = p_local
-                    p_foraneo_calc = p_foraneo
-
-                l_ant = p_local_calc if hr == 0 else (casos_locales[hr-1] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
-                f_ant1 = p_foraneo_calc if hr == 0 else (casos_foraneos[hr-1] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
-                f_ant2 = p_foraneo_calc if hr <= 1 else (casos_foraneos[hr-2] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
-                
-                if promedio_proyectado == 0:
-                    gruas_necesarias = math.ceil((0.1 * l_ant) + (0.2 * f_ant1) + (0.1 * f_ant2))
-                else:
-                    gruas_necesarias = math.ceil((p_local_calc + (0.5 * l_ant)) + (p_foraneo_calc + f_ant1 + f_ant2))
-                    
-                es_remolque = any(x in str(servicio_sel).upper() for x in ["REMOLQUE", "GRÚA", "GRUA", "TODOS"])
-                string_gruas = f"🚛 {gruas_necesarias} U." if es_remolque and (promedio_proyectado > 0 or gruas_necesarias > 0) else "-"
-
-                if promedio_base_calculated == 0 and gruas_necesarias == 0:
-                    motivo_asesor = "Sin demanda"
-                else:
-                    explicaciones = []
-                    if promedio_proyectado > 0:
-                        if es_lluvia: explicaciones.append(f"{promedio_proyectado} por lluvia")
-                        else: explicaciones.append(f"{promedio_proyectado} nuevos")
-                    if gruas_necesarias > promedio_proyectado:
-                        explicaciones.append("arraste ant.")
-                    motivo_asesor = " + ".join(explicaciones) if explicaciones else "Ok"
-
-                registros_tabla.append({
-                    "HORA": f"{hr:02d}:00", "🌤️ Clima": detalle_clima, "📊 Prom": promedio_base_calculated, 
-                    "📈 Proy": etiqueta_proyeccion, "🚛 Grúas N.": string_gruas, "📋 Diagnóstico": motivo_asesor
-                })
-                
-                data_grafico_lineas.append({
-                    "Hora": hr, "Promedio Base": promedio_base_calculated,
-                    "Proyección Ajustada": promedio_proyectado
-                })
-
-        with col_main_content:
-            col_mando_izq, col_mando_der = st.columns([4.2, 5.8])
-            with col_mando_izq:
-                st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📍 Top Localidades Afectadas</span>", unsafe_allow_html=True)
-                if len(df_filtrado) > 0:
-                    col_agrupar = col_provincia if provincia_sel == "Todas" else col_ciudad
-                    
-                    df_top = df_filtrado.groupby(col_agrupar).agg(
-                        Total_Casos=('SERVICIO', 'count')
-                    ).reset_index()
-                    
-                    df_top['📊 Prom/Día'] = (df_top['Total_Casos'] / num_fechas_reales).round(1)
-                    df_top = df_top.rename(columns={col_agrupar: '📍 UBICACIÓN', 'Total_Casos': 'Casos'})
-                    df_top = df_top.sort_values(by='Casos', ascending=False).head(5)
-                    
-                    total_general_casos = df_filtrado.shape[0]
-                    df_top['%'] = (df_top['Casos'] / total_general_casos * 100).round(1).astype(str) + '%' if total_general_casos > 0 else '0%'
-                    
-                    df_top = df_top[['📍 UBICACIÓN', 'Casos', '📊 Prom/Día', '%']]
-                    
-                    st.dataframe(
-                        df_top, 
-                        use_container_width=True, 
-                        height=175, 
-                        hide_index=True,
-                        column_config={
-                            "📍 UBICACIÓN": st.column_config.TextColumn(alignment="center"),
-                            "Casos": st.column_config.NumberColumn(alignment="center"),
-                            "📊 Prom/Día": st.column_config.NumberColumn(alignment="center"),
-                            "%": st.column_config.TextColumn(alignment="center")
-                        }
-                    )
-                else: st.info("Sin datos.")
-
-            with col_mando_der:
-                st.markdown(f"<h4 style='margin:0px; font-size:12px; font-weight:bold; color:#111;'>⏰ Matriz Horaria Detallada: {dia_sel.title()}</h4>", unsafe_allow_html=True)
-                if registros_tabla:
-                    st.dataframe(
-                        pd.DataFrame(registros_tabla), 
-                        use_container_width=True, 
-                        height=175, 
-                        hide_index=True,
-                        column_config={
-                            "HORA": st.column_config.TextColumn(alignment="center"),
-                            "🌤️ Clima": st.column_config.TextColumn(alignment="center"),
-                            "📊 Prom": st.column_config.NumberColumn(alignment="center"),
-                            "📈 Proy": st.column_config.TextColumn(alignment="center"),
-                            "🚛 Grúas N.": st.column_config.TextColumn(alignment="center"),
-                            "📋 Diagnóstico": st.column_config.TextColumn(alignment="center")
-                        }
-                    )
-                else: st.info("Sin asistencias.")
-
-            st.markdown("<div style='margin-top: 14px; border-top: 1px solid #ddd; padding-top: 6px;'></div>", unsafe_allow_html=True)
-            col_grafico_full, col_resumen_tomtom = st.columns([6.2, 3.8])
-            
-            with col_grafico_full:
-                st.markdown("<span style='font-size:13px; font-weight:bold; display:block;'>📈 Curva de Carga Operativa (24 Horas)</span>", unsafe_allow_html=True)
-                if data_grafico_lineas:
-                    df_gl = pd.DataFrame(data_grafico_lineas)
-                    fig_lineas = go.Figure()
-                    fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Promedio Base"], name="📊 Promedio Base", mode="lines+markers", line=dict(color="#1f77b4", width=2)))
-                    fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Proyección Ajustada"], name="📈 Proyección por Clima", mode="lines+markers", line=dict(color="#ff7f0e", width=2, dash="dash")))
-                    fig_lineas.update_layout(
-                        xaxis=dict(tickmode="linear", tick0=0, dtick=1, title=dict(text="Hora del Día", font=dict(size=10))),
-                        yaxis=dict(title=dict(text="Incidentes / Asistencias", font=dict(size=10))),
-                        margin=dict(l=5, r=5, t=5, b=5), height=150, showlegend=True,
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=9))
-                    )
-                    st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
-
-            # --- SECCIÓN INTEGRADA: MÓDULO SATELITAL TOMTOM + ALERTAS SÍSMICAS REAL-TIME ---
-            with col_resumen_tomtom:
-                # 1. Sub-bloque del monitor de Sismos (USGS)
-                st.markdown("<span style='font-size:12px; font-weight:bold; color:#111; display:block; margin-bottom:2px;'>🌋 Sismicidad de Hoy (Ecuador - USGS)</span>", unsafe_allow_html=True)
-                sismos_detectados = consultar_sismos_ecuador_real()
-                
-                if sismos_detectados:
-                    for sismo in sismos_detectados:
-                        st.markdown(f'<div style="background-color: #ffebee; border-left: 4px solid #c62828; padding: 4px; border-radius: 4px; margin-bottom: 4px; font-size: 11px; color: #c62828; font-weight: bold;">{sismo}</div>', unsafe_allow_html=True)
-                else:
-                    st.markdown('<div style="background-color: #e8f5e9; border-left: 4px solid #2e7d32; padding: 4px; border-radius: 4px; margin-bottom: 4px; font-size: 11px; color: #2e7d32; font-weight: 500;">🟢 Territorio nacional estable (Sin sismos > 4.0 hoy).</div>', unsafe_allow_html=True)
-                
-                # 2. Sub-bloque del Tráfico (TomTom)
-                st.markdown("<span style='font-size:12px; font-weight:bold; color:#111; display:block; margin-top: 4px; margin-bottom:2px;'>🛰️ Satelital (TomTom)</span>", unsafe_allow_html=True)
-                bbox_nacional_ecuador = "-81.0000,-5.0000,-75.0000,1.5000"
-                
-                def consultar_alertas_tomtom_real():
-                    api_key = "BYGu8JyIsbquMfeU4Cj9P0HidHyxRbE8"
-                    try:
-                        url = "https://api.tomtom.com/traffic/services/5/incidentDetails"
-                        params = {
-                            "key": api_key,
-                            "bbox": bbox_nacional_ecuador,
-                            "fields": "{incidents{type,properties{description,street}}}",
-                            "language": "es-ES"
-                        }
-                        respuesta = requests.get(url, params=params, timeout=10).json()
-                        alertas = []
-                        if "incidents" in respuesta and respuesta["incidents"]:
-                            for item in respuesta["incidents"]:
-                                props = item.get("properties", {})
-                                tipo_raw = item.get("type", "INCIDENTE")
-                                tipo_comun = "TRÁFICO" if tipo_raw == "JAM" else ("ACCIDENTE" if tipo_raw == "ACCIDENT" else "RESTRICCIÓN")
-                                calle = props.get("street", "Vía pública")
-                                descripcion = props.get("description", "").lower()
-                                
-                                if "accidente" in descripcion or "choque" in descripcion:
-                                    tipo_comun = "ACCIDENTE"
-                                    
-                                alertas.append(f"⚠️ {tipo_comun} en {calle}: {props.get('description', '')}")
-                        return alertas if alertas else ["✅ Flujo vehicular nacional normal."]
-                    except: 
-                        return ["⚠️ Sin alertas reportadas en la zona."]
-                
-                alertas_actuales = consultar_alertas_tomtom_real()
-                st.markdown('<div style="max-height:85px; overflow-y:auto; border:1px solid #eee; padding:4px; background:#fafafa; border-radius:4px;">', unsafe_allow_html=True)
-                for incidente in alertas_actuales:
-                    st.markdown(f"<span style='font-size:10px; color:#d32f2f; font-weight:500; display:block; margin-bottom:2px;'>• {incidente}</span>", unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-
-    # ==========================================
-    # PESTAÑA 2: PLANIFICADOR DE FERIADOS
-    # ==========================================
-    with tab_feriados:
-        col_f_fer, col_c_fer = st.columns([1.6, 8.4])
+        dias_en_orden = ["TODOS", "LUNES", "MARTES", "MIÉRCOLES", "MIERCOLES", "JUEVES", "VIERNES", "SÁBADO", "SABADO", "DOMINGO"]
+        dias_disponibles = [d for d in dias_en_orden if d == "TODOS" or d in list(df_raw[col_dia].str.upper().unique())]
+        dia_sel = st.selectbox("📅 Día Tipo:", dias_disponibles, key="dia_sel_key", on_change=guardar_dia_callback)
         
+        lista_servicios = ["Todos"] + sorted(list(df_raw[col_servicio].dropna().unique()))
+        servicio_sel = st.selectbox("🎯 Servicio:", lista_servicios, key="servicio_sel_key", on_change=guardar_servicio_callback)
+        
+        provincia_sel = st.selectbox("📍 Provincia:", ["Todas"] + df_raw[col_provincia].value_counts().index.tolist(), key="provincia_sel_key", on_change=guardar_provincia_callback)
+        
+        if provincia_sel != "Todas":
+            ciudades_disponibles = sorted(df_raw[df_raw[col_provincia] == provincia_sel][col_ciudad].dropna().unique().tolist())
+            ciudad_sel = st.multiselect("🏙️ Ciudades:", ciudades_disponibles, key="ciudad_sel_key", on_change=guardar_ciudad_callback)
+        else:
+            ciudad_sel = st.multiselect("🏙️ Ciudades:", options=[], disabled=True, placeholder="Filtre Provincia")
+            
+        if col_estado in df_raw.columns:
+            estados_disponibles = sorted(list(df_raw[col_estado].dropna().unique()))
+            estado_sel = st.multiselect("📌 Estado:", options=estados_disponibles, key="estado_sel_key", on_change=guardar_estado_callback)
+        else: estado_sel = []
+
+        st.markdown("<hr style='margin:12px 0px 8px 0px;' />", unsafe_allow_html=True)
+        st.markdown("<b style='font-size:12px;'>Filtros Planificador Feriados:</b>", unsafe_allow_html=True)
+
         if "feriado_sel_key" not in st.session_state: st.session_state["feriado_sel_key"] = estado_global["filtros_feriados"]["feriado_sel"]
         if "servicio_fer_key" not in st.session_state: st.session_state["servicio_fer_key"] = estado_global["filtros_feriados"]["servicio_sel"]
         if "provincia_fer_key" not in st.session_state: st.session_state["provincia_fer_key"] = estado_global["filtros_feriados"]["provincia_sel"]
@@ -549,119 +301,208 @@ if df_raw is not None and not df_raw.empty:
             st.session_state["ciudad_fer_key"] = []
         def guardar_ciudad_fer_callback(): estado_global["filtros_feriados"]["ciudad_sel"] = st.session_state["ciudad_fer_key"]
 
-        with col_f_fer:
-            st.markdown("<h4 style='margin:0px; font-size:14px; color:#111;'>⚙️ Planificador</h4>", unsafe_allow_html=True)
-            
-            config_maestra_feriados = {
-                "Carnaval": {"fecha": "18/2/2026", "dias": 4, "espejo": None},
-                "Año Nuevo": {"fecha": "5/1/2026", "dias": 3, "espejo": None},
-                "Viernes Santo": {"fecha": "6/4/2026", "dias": 3, "espejo": None},
-                "Día del Trabajo": {"fecha": "4/5/2026", "dias": 3, "espejo": None},
-                "Batalla de Pichincha": {"fecha": "25/5/2026", "dias": 3, "espejo": None},
-                "Primer Grito de Independencia": {"fecha": "10/8/2026", "dias": 3, "espejo": "Batalla de Pichincha"},
-                "Independencia de Guayaquil": {"fecha": "12/10/2026", "dias": 3, "espejo": "Batalla de Pichincha"},
-                "Día de los Difuntos / Cuenca": {"fecha": "4/11/2026", "dias": 4, "espejo": "Carnaval"},
-                "Navidad": {"fecha": "28/12/2026", "dias": 3, "espejo": "Año Nuevo"}
-            }
-            
-            feriado_seleccionado = st.selectbox("📅 Feriado Nacional:", list(config_maestra_feriados.keys()), key="feriado_sel_key", on_change=guardar_feriado_callback)
-            servicio_feriado = st.selectbox("🎯 Servicio:", sorted(list(df_raw[col_servicio].dropna().unique())), key="servicio_fer_key", on_change=guardar_servicio_fer_callback)
-            
-            provincia_feriado = st.selectbox("📍 Provincia:", ["Todas"] + df_raw[col_provincia].value_counts().index.tolist(), key="provincia_fer_key", on_change=guardar_provincia_fer_callback)
-            if provincia_feriado != "Todas":
-                ciudades_f_disp = sorted(df_raw[df_raw[col_provincia] == provincia_feriado][col_ciudad].dropna().unique().tolist())
-                ciudad_feriado = st.multiselect("🏙️ Ciudades:", ciudades_f_disp, key="ciudad_fer_key", on_change=guardar_ciudad_fer_callback)
-            else:
-                ciudad_feriado = st.multiselect("🏙️ Ciudades:", options=[], disabled=True, placeholder="Filtre Provincia", key="ms_ciudad_p_dis")
+        config_maestra_feriados = {
+            "Carnaval": {"fecha": "18/2/2026", "dias": 4, "espejo": None},
+            "Año Nuevo": {"fecha": "5/1/2026", "dias": 3, "espejo": None},
+            "Viernes Santo": {"fecha": "6/4/2026", "dias": 3, "espejo": None},
+            "Día del Trabajo": {"fecha": "4/5/2026", "dias": 3, "espejo": None},
+            "Batalla de Pichincha": {"fecha": "25/5/2026", "dias": 3, "espejo": None},
+            "Primer Grito de Independencia": {"fecha": "10/8/2026", "dias": 3, "espejo": "Batalla de Pichincha"},
+            "Independencia de Guayaquil": {"fecha": "12/10/2026", "dias": 3, "espejo": "Batalla de Pichincha"},
+            "Día de los Difuntos / Cuenca": {"fecha": "4/11/2026", "dias": 4, "espejo": "Carnaval"},
+            "Navidad": {"fecha": "28/12/2026", "dias": 3, "espejo": "Año Nuevo"}
+        }
+        
+        feriado_seleccionado = st.selectbox("📅 Feriado Nacional:", list(config_maestra_feriados.keys()), key="feriado_sel_key", on_change=guardar_feriado_callback)
+        servicio_feriado = st.selectbox("🎯 Servicio Feriado:", sorted(list(df_raw[col_servicio].dropna().unique())), key="servicio_fer_key", on_change=guardar_servicio_fer_callback)
+        provincia_feriado = st.selectbox("📍 Prov. Feriado:", ["Todas"] + df_raw[col_provincia].value_counts().index.tolist(), key="provincia_fer_key", on_change=guardar_provincia_fer_callback)
+        
+        if provincia_feriado != "Todas":
+            ciudades_f_disp = sorted(df_raw[df_raw[col_provincia] == provincia_feriado][col_ciudad].dropna().unique().tolist())
+            ciudad_feriado = st.multiselect("🏙️ Ciudades Feriado:", ciudades_f_disp, key="ciudad_fer_key", on_change=guardar_ciudad_fer_callback)
+        else:
+            ciudad_feriado = st.multiselect("🏙️ Ciudades Feriado:", options=[], disabled=True, placeholder="Filtre Provincia", key="ms_ciudad_p_dis")
 
-        with col_c_fer:
+        st.markdown("<div style='margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 10px;'></div>", unsafe_allow_html=True)
+        if st.button("🔄 REBOOT APP", use_container_width=True, key="btn_reboot_sidebar"):
+            st.cache_data.clear()
+            st.cache_resource.clear()
+            st.rerun()
+            
+        if st.button("🔒 CERRAR SESIÓN", use_container_width=True, key="btn_logout_sidebar"):
+            st.session_state["autenticado"] = False
+            st.rerun()
+
+    # --- PROCESAMIENTO DE LOGICA DE NEGOCIO ---
+    if dia_sel.upper() == "TODOS":
+        df_filtrado_dia = df_raw.copy()
+        num_fechas_reales = df_raw[col_fecha].nunique() if col_fecha in df_raw.columns else 1
+        fecha_target_str = ahora_actual.strftime("%Y-%m-%d")
+    else:
+        dia_destino_num = diccionario_dias.get(dia_sel.upper(), ahora_actual.weekday())
+        dias_diferencia = (dia_destino_num - ahora_actual.weekday()) % 7
+        fecha_target_str = (ahora_actual + timedelta(days=dias_diferencia)).strftime("%Y-%m-%d")
+        df_filtrado_dia = df_raw[df_raw[col_dia].str.upper() == dia_sel.upper()]
+        num_fechas_reales = df_filtrado_dia[col_fecha].nunique() if col_fecha in df_filtrado_dia.columns else 1
+
+    if num_fechas_reales <= 0: num_fechas_reales = 1
+
+    df_filtrado = df_filtrado_dia.copy()
+    if estado_sel and col_estado in df_raw.columns: df_filtrado = df_filtrado[df_filtrado[col_estado].isin(estado_sel)]
+    if servicio_sel != "Todos": df_filtrado = df_filtrado[df_filtrado[col_servicio] == servicio_sel]
+    if provincia_sel != "Todas":
+        df_filtrado = df_filtrado[df_filtrado[col_provincia] == provincia_sel]
+        if ciudad_sel: df_filtrado = df_filtrado[df_filtrado[col_ciudad].isin(ciudad_sel)]
+
+    # --- ENCABEZADO SUPERIOR ---
+    col_titulo, col_metrica_global = st.columns([7.5, 2.5])
+    with col_titulo:
+        st.markdown(f"<h2 style='margin:0px; padding:0px; font-size:24px;'>🔮 Proyección Horaria y Alerta de Flota</h2>", unsafe_allow_html=True)
+        st.markdown(f"<p style='margin:0px 0px 6px 0px; font-size:11px; color:#555;'><b>Control Geoanalítico Nacional</b> | 🔄 Memoria Inmune Activa</p>", unsafe_allow_html=True)
+
+    with col_metrica_global:
+        if len(df_filtrado) > 0:
+            promedio_asistencias_dia = round(len(df_filtrado) / num_fechas_reales, 1)
+            st.markdown(
+                f"""
+                <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 3px 10px; text-align: right;">
+                    <span style="font-size: 9px; color: #666; display: block; font-weight: bold; text-transform: uppercase;">Promedio General ({dia_sel.title()})</span>
+                    <span style="font-size: 18px; color: #0d47a1; font-weight: 800; line-height: 1;">{promedio_asistencias_dia} Asist.</span>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
+
+    # =========================================================================
+    # REORGANIZACIÓN DE PANTALLA: DIVISION HORIZONTAL CENTRAL VS PANEL DERECHO
+    # =========================================================================
+    col_izquierda_modulos, col_derecha_fija = st.columns([7.3, 2.7])
+
+    with col_izquierda_modulos:
+        tab_normal, tab_feriados = st.tabs(["🔮 Operación Diaria (Normal)", "📈 Planificador de Feriados"])
+        
+        # --- SUB-PESTAÑA 1: OPERACIÓN NORMAL ---
+        with tab_normal:
+            provincia_key_busqueda = provincia_sel.upper().strip()
+            if provincia_sel != "Todas" and provincia_key_busqueda in coordenadas_provincias:
+                lat_c, lon_c = coordenadas_provincias[provincia_key_busqueda]
+                diccionario_clima = obtener_clima_horario_futuro(lat_c, lon_c, fecha_target_str)
+            else:
+                diccionario_clima = {}
+
+            registros_tabla = []
+            data_grafico_lineas = []
+
+            if len(df_filtrado) > 0 and col_hora_agrupada in df_filtrado.columns:
+                df_horas_raw = df_filtrado.copy()
+                casos_locales, casos_foraneos = [0] * 24, [0] * 24
+                
+                for hr in range(24):
+                    df_b = df_horas_raw[df_horas_raw[col_hora_agrupada] == hr]
+                    for _, fila in df_b.iterrows():
+                        cobertura_str = str(fila[col_cobertura]).upper().strip() if col_cobertura in fila else "LOCAL"
+                        if "FOR" in cobertura_str: casos_foraneos[hr] += 1
+                        else: casos_locales[hr] += 1
+
+                for hr in range(24):
+                    p_local, p_foraneo = casos_locales[hr] / num_fechas_reales, casos_foraneos[hr] / num_fechas_reales
+                    promedio_base_calculated = round(p_local + p_foraneo, 1)
+                    
+                    clima_info = diccionario_clima.get(hr, {"Detalle": "☁️ Nublado", "Estado": "Normal"})
+                    detalle_clima = clima_info["Detalle"] if provincia_sel != "Todas" else "🌍 Filtre Prov."
+                    es_lluvia = clima_info["Estado"] == "Lluvia"
+
+                    if es_lluvia and promedio_base_calculated > 0:
+                        promedio_proyectado = math.ceil(promedio_base_calculated * 1.20)
+                        etiqueta_proyeccion = f"{promedio_proyectado} (+20%)"
+                        p_local_calc = p_local * 1.20
+                        p_foraneo_calc = p_foraneo * 1.20
+                    else:
+                        promedio_proyectado = int(round(promedio_base_calculated, 0))
+                        etiqueta_proyeccion = f"{promedio_proyectado} (Norm)"
+                        p_local_calc = p_local
+                        p_foraneo_calc = p_foraneo
+
+                    l_ant = p_local_calc if hr == 0 else (casos_locales[hr-1] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
+                    f_ant1 = p_foraneo_calc if hr == 0 else (casos_foraneos[hr-1] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
+                    f_ant2 = p_foraneo_calc if hr <= 1 else (casos_foraneos[hr-2] / num_fechas_reales * (1.20 if es_lluvia else 1.0))
+                    
+                    if promedio_proyectado == 0:
+                        gruas_necesarias = math.ceil((0.1 * l_ant) + (0.2 * f_ant1) + (0.1 * f_ant2))
+                    else:
+                        gruas_necesarias = math.ceil((p_local_calc + (0.5 * l_ant)) + (p_foraneo_calc + f_ant1 + f_ant2))
+                        
+                    es_remolque = any(x in str(servicio_sel).upper() for x in ["REMOLQUE", "GRÚA", "GRUA", "TODOS"])
+                    string_gruas = f"🚛 {gruas_necesarias} U." if es_remolque and (promedio_proyectado > 0 or gruas_necesarias > 0) else "-"
+
+                    if promedio_base_calculated == 0 and gruas_necesarias == 0: motivo_asesor = "Sin demanda"
+                    else:
+                        explicaciones = []
+                        if promedio_proyectado > 0:
+                            if es_lluvia: explicaciones.append(f"{promedio_proyectado} por lluvia")
+                            else: explicaciones.append(f"{promedio_proyectado} nuevos")
+                        if gruas_necesarias > promedio_proyectado: explicaciones.append("arraste ant.")
+                        motivo_asesor = " + ".join(explicaciones) if explicaciones else "Ok"
+
+                    registros_tabla.append({
+                        "HORA": f"{hr:02d}:00", "🌤️ Clima": detalle_clima, "📊 Prom": promedio_base_calculated, 
+                        "📈 Proy": etiqueta_proyeccion, "🚛 Grúas N.": string_gruas, "📋 Diagnóstico": motivo_asesor
+                    })
+                    data_grafico_lineas.append({"Hora": hr, "Promedio Base": promedio_base_calculated, "Proyección Ajustada": promedio_proyectado})
+
+            # Distribución compacta interna del contenido de la pestaña
+            col_mando_izq, col_mando_der = st.columns([4.2, 5.8])
+            with col_mando_izq:
+                st.markdown("<span style='font-size:11px; font-weight:bold; color:#111;'>📍 Top Localidades Afectadas</span>", unsafe_allow_html=True)
+                if len(df_filtrado) > 0:
+                    col_agrupar = col_provincia if provincia_sel == "Todas" else col_ciudad
+                    df_top = df_filtrado.groupby(col_agrupar).agg(Total_Casos=('SERVICIO', 'count')).reset_index()
+                    df_top['📊 Prom/Día'] = (df_top['Total_Casos'] / num_fechas_reales).round(1)
+                    df_top = df_top.rename(columns={col_agrupar: '📍 UBICACIÓN', 'Total_Casos': 'Casos'}).sort_values(by='Casos', ascending=False).head(5)
+                    
+                    total_general_casos = df_filtrado.shape[0]
+                    df_top['%'] = (df_top['Casos'] / total_general_casos * 100).round(1).astype(str) + '%' if total_general_casos > 0 else '0%'
+                    st.dataframe(
+                        df_top[['📍 UBICACIÓN', 'Casos', '📊 Prom/Día', '%']], use_container_width=True, height=150, hide_index=True,
+                        column_config={
+                            "📍 UBICACIÓN": st.column_config.TextColumn(alignment="center"), "Casos": st.column_config.NumberColumn(alignment="center"),
+                            "📊 Prom/Día": st.column_config.NumberColumn(alignment="center"), "%": st.column_config.TextColumn(alignment="center")
+                        }
+                    )
+                else: st.info("Sin datos.")
+
+            with col_mando_der:
+                st.markdown(f"<span style='font-size:11px; font-weight:bold; color:#111;'>⏰ Matriz Horaria Detallada: {dia_sel.title()}</span>", unsafe_allow_html=True)
+                if registros_tabla:
+                    st.dataframe(
+                        pd.DataFrame(registros_tabla), use_container_width=True, height=150, hide_index=True,
+                        column_config={
+                            "HORA": st.column_config.TextColumn(alignment="center"), "🌤️ Clima": st.column_config.TextColumn(alignment="center"),
+                            "📊 Prom": st.column_config.NumberColumn(alignment="center"), "📈 Proy": st.column_config.TextColumn(alignment="center"),
+                            "🚛 Grúas N.": st.column_config.TextColumn(alignment="center"), "📋 Diagnóstico": st.column_config.TextColumn(alignment="center")
+                        }
+                    )
+                else: st.info("Sin asistencias.")
+
+            st.markdown("<div style='margin-top: 6px; border-top: 1px solid #eee;'></div>", unsafe_allow_html=True)
+            st.markdown("<span style='font-size:11px; font-weight:bold; display:block;'>📈 Curva de Carga Operativa (24 Horas)</span>", unsafe_allow_html=True)
+            if data_grafico_lineas:
+                df_gl = pd.DataFrame(data_grafico_lineas)
+                fig_lineas = go.Figure()
+                fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Promedio Base"], name="📊 Prom Base", mode="lines+markers", line=dict(color="#1f77b4", width=2)))
+                fig_lineas.add_trace(go.Scatter(x=df_gl["Hora"], y=df_gl["Proyección Ajustada"], name="📈 Proy Clima", mode="lines+markers", line=dict(color="#ff7f0e", width=2, dash="dash")))
+                fig_lineas.update_layout(
+                    xaxis=dict(tickmode="linear", tick0=0, dtick=1, title=dict(text="Hora del Día", font=dict(size=9))),
+                    yaxis=dict(title=dict(text="Incidentes", font=dict(size=9))),
+                    margin=dict(l=5, r=5, t=5, b=5), height=140, showlegend=True,
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=8))
+                )
+                st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
+
+        # --- SUB-PESTAÑA 2: PLANIFICADOR DE FERIADOS ---
+        with tab_feriados:
             meta_feriado = config_maestra_feriados[feriado_seleccionado]
             fecha_original = meta_feriado["fecha"]
             feriado_espejo = meta_feriado["espejo"]
             
             df_data_feriado = df_raw[(df_raw[col_fecha] == fecha_original) & (df_raw[col_servicio] == servicio_feriado)].copy()
-            es_simulado = False
-            
-            if df_data_feriado.empty and feriado_espejo is not None:
-                fecha_espejo = config_maestra_feriados[feriado_espejo]["fecha"]
-                df_data_feriado = df_raw[(df_raw[col_fecha] == fecha_espejo) & (df_raw[col_servicio] == servicio_feriado)].copy()
-                es_simulado = True
-                
-            if provincia_feriado != "Todas" and not df_data_feriado.empty:
-                df_data_feriado = df_data_feriado[df_data_feriado[col_provincia] == provincia_feriado]
-                if ciudad_feriado:
-                    df_data_feriado = df_data_feriado[df_data_feriado[col_ciudad].isin(ciudad_feriado)]
-            
-            if es_simulado:
-                st.markdown(f'<div class="banner-similitud">🔮 <b>Proyección por Similitud Activa:</b> Calculando retornos para <b>{feriado_seleccionado} ({fecha_original})</b> usando comportamiento espejo de <b>{feriado_espejo} ({meta_feriado["dias"]} días de descanso)</b></div>', unsafe_allow_html=True)
-            else:
-                st.markdown(f'<div class="banner-feriado">📈 <b>Datos Históricos Reales:</b> Analizando Primer Día Laboral de Retorno del feriado del <b>{fecha_original}</b></div>', unsafe_allow_html=True)
-            
-            if not df_data_feriado.empty:
-                df_neto_hora = df_data_feriado.groupby(col_hora_agrupada).size().reset_index(name='HISTORICO_CASOS')
-                df_neto_hora = df_neto_hora.sort_values(by=col_hora_agrupada)
-                
-                registros_processed = []
-                data_grafico_feriado = []
-                mapeo_casos = {row[col_hora_agrupada]: row['HISTORICO_CASOS'] for _, row in df_neto_hora.iterrows()}
-                
-                for hr in range(24):
-                    casos_reales = mapeo_casos.get(hr, 0)
-                    casos_previos = mapeo_casos.get(hr - 1, 0)
-                    
-                    unidades_calculadas = math.ceil(casos_reales + (0.4 * casos_previos))
-                    if casos_reales == 0 and unidades_calculadas <= 0:
-                        unidades_calculadas = 0
-                    elif unidades_calculadas <= 0:
-                        unidades_calculadas = 1
-                        
-                    string_gruas = f"🚛 {unidades_calculadas} U." if unidades_calculadas > 0 else "-"
-                    
-                    registros_processed.append({
-                        "HORA": f"{hr:02d}:00",
-                        "HISTÓRICO CASOS": casos_reales,
-                        "GRÚAS REQUERIDAS": string_gruas
-                    })
-                    
-                    data_grafico_feriado.append({
-                        "Hora": hr,
-                        "Casos Históricos": casos_reales,
-                        "Grúas Proyectadas": unidades_calculadas
-                    })
-                
-                col_tab_izq, col_graf_der = st.columns([4.5, 5.5])
-                
-                with col_tab_izq:
-                    st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>⏰ Distribución de Demanda y Flota Requerida</span>", unsafe_allow_html=True)
-                    df_mostrar_feriados = pd.DataFrame(registros_processed)
-                    
-                    st.dataframe(
-                        df_mostrar_feriados, 
-                        use_container_width=True, 
-                        height=220, 
-                        hide_index=True,
-                        column_config={
-                            "HORA": st.column_config.TextColumn(alignment="center"),
-                            "HISTÓRICO CASOS": st.column_config.NumberColumn(alignment="center"),
-                            "GRÚAS REQUERIDAS": st.column_config.TextColumn(alignment="center")
-                        }
-                    )
-                
-                with col_graf_der:
-                    st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📈 Gráfico de Curva de Carga Operativa (Retorno)</span>", unsafe_allow_html=True)
-                    if data_grafico_feriado:
-                        df_gf = pd.DataFrame(data_grafico_feriado)
-                        fig_feriado = go.Figure()
-                        fig_feriado.add_trace(go.Scatter(x=df_gf["Hora"], y=df_gf["Casos Históricos"], name="📊 Histórico Base", mode="lines+markers", line=dict(color="#1f77b4", width=2)))
-                        fig_feriado.add_trace(go.Scatter(x=df_gf["Hora"], y=df_gf["Grúas Proyectadas"], name="🚛 Grúas Solicitadas", mode="lines+markers", line=dict(color="#d62728", width=2, dash="dot")))
-                        fig_feriado.update_layout(
-                            xaxis=dict(tickmode="linear", tick0=0, dtick=2, title=dict(text="Hora del Día", font=dict(size=9))),
-                            yaxis=dict(title=dict(text="Cantidad", font=dict(size=9))),
-                            margin=dict(l=5, r=5, t=5, b=5), height=220, showlegend=True,
-                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=9))
-                        )
-                        st.plotly_chart(fig_feriado, use_container_width=True, config={'displayModeBar': False})
-            else:
-                st.warning("⚠️ No existen registros históricos en la base para la fecha de retorno y filtros seleccionados.")
-else:
-    st.error("❌ No se pudo conectar con el servidor de datos de Google Sheets o la estructura de columnas es incorrecta.")
