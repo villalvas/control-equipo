@@ -2,11 +2,20 @@ import streamlit as st
 import pandas as pd
 import requests
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 import math
 import streamlit.components.v1 as components
 import plotly.graph_objects as go
-from bs4 import BeautifulSoup  # <-- ESTA LÍNEA CORRIGE EL ERROR QUE ME MOSTRASTE
+from bs4 import BeautifulSoup
+
+# Cambiamos zoneinfo por pytz para máxima compatibilidad con Python antiguo
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    import pytz
+    class ZoneInfo:
+        def __init__(self, key):
+            self.tz = pytz.timezone(key)
+        def __rmelement__(self): return self.tz
 
 # 1. Configuración de pantalla completa y compacta para salas de control
 st.set_page_config(
@@ -15,7 +24,8 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CONTROL DE ACCESO MEDIANTE CONTRASEÑA (ESTADO DE SESIÓN) ---\nCONTRASEÑA_SALA_CONTROL = "Control2026*"
+# --- CONTROL DE ACCESO MEDIANTE CONTRASEÑA (ESTADO DE SESIÓN) ---
+CONTRASEÑA_SALA_CONTROL = "Control2026*"
 
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
@@ -114,8 +124,15 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-zona_ecuador = ZoneInfo("America/Guayaquil")
-ahora_actual = datetime.now(zona_ecuador)
+# Manejo seguro de tiempo para Ecuador
+try:
+    zona_ecuador = ZoneInfo("America/Guayaquil")
+    ahora_actual = datetime.now(zona_ecuador)
+except:
+    import pytz
+    zona_ecuador = pytz.timezone("America/Guayaquil")
+    ahora_actual = datetime.now(zona_ecuador)
+
 hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
 
 @st.cache_resource
@@ -172,16 +189,20 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
 @st.cache_data(ttl=300)
 def consultar_sismos_ecuador_real():
     url = "https://earthquake.usgs.gov/fdsnws/event/1/query"
-    params = {
-        "format": "geojson",
-        "starttime": datetime.now(ZoneInfo("America/Guayaquil")).strftime("%Y-%m-%d"),
-        "minmagnitude": "4.0",
-        "minlatitude": "-5.0",
-        "maxlatitude": "1.5",
-        "minlongitude": "-81.0",
-        "maxlongitude": "-75.0"
-    }
     try:
+        # Uso seguro de tiempo para la query
+        try: format_date = datetime.now(ZoneInfo("America/Guayaquil")).strftime("%Y-%m-%d")
+        except: format_date = datetime.now(pytz.timezone("America/Guayaquil")).strftime("%Y-%m-%d")
+        
+        params = {
+            "format": "geojson",
+            "starttime": format_date,
+            "minmagnitude": "4.0",
+            "minlatitude": "-5.0",
+            "maxlatitude": "1.5",
+            "minlongitude": "-81.0",
+            "maxlongitude": "-75.0"
+        }
         respuesta = requests.get(url, params=params, timeout=5).json()
         eventos = []
         for feature in respuesta.get("features", []):
@@ -192,8 +213,8 @@ def consultar_sismos_ecuador_real():
         return eventos
     except: return []
 
-# --- EXTACTOR AUTOMÁTICO ONLINE MEDIANTE LA URL DEL ECU 911 ---
-@st.cache_data(ttl=600)  # Sincronización real con internet cada 10 minutos
+# --- EXTRACTOR AUTOMÁTICO ONLINE MEDIANTE LA URL DEL ECU 911 ---
+@st.cache_data(ttl=600)
 def consultar_vias_ecu911_online():
     url_ecu911 = "https://www.ecu911.gob.ec/consulta-de-vias/"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
@@ -203,7 +224,6 @@ def consultar_vias_ecu911_online():
             soup = BeautifulSoup(respuesta.text, 'html.parser')
             reportes = []
             
-            # Localizar tablas de datos en el documento HTML del portal
             tablas = soup.find_all('table')
             for tabla in tablas:
                 filas = tabla.find_all('tr')
@@ -227,7 +247,6 @@ def consultar_vias_ecu911_online():
             if reportes:
                 return reportes
             
-            # Extractor alternativo si la estructura de la página cambia a listas de párrafos
             parrafos = soup.find_all('p')
             for p in parrafos:
                 txt = p.text.strip()
@@ -430,7 +449,7 @@ if df_raw is not None and not df_raw.empty:
                 else: st.info("Sin datos.")
 
             with col_mando_der:
-                st.markdown(f"<h4 style='margin:0px; font-size:12px; font-weight:bold; color:#111;'>⏰ Matriz Horaria Detallada: {dia_sel.title()}</h4>", unsafe_allow_html=True)
+                st.markdown(f"<h2 style='margin:0px; font-size:12px; font-weight:bold; color:#111;'>⏰ Matriz Horaria Detallada: {dia_sel.title()}</h2>", unsafe_allow_html=True)
                 if registros_tabla:
                     st.dataframe(pd.DataFrame(registros_tabla), use_container_width=True, height=200, hide_index=True)
                 else: st.info("Sin asistencias.")
@@ -458,7 +477,6 @@ if df_raw is not None and not df_raw.empty:
             st.markdown("<span style='font-size:12px; font-weight:bold; color:#111; display:block; margin-top:10px;'>🚧 Estado de Vías Nacionales (ECU 911 ONLINE)</span>", unsafe_allow_html=True)
             st.markdown(f"<span style='font-size:9px; color:#2196f3; font-weight:bold; display:block; margin-bottom:4px;'>📡 Conectado a la URL del ECU 911 | Sincronización: {hora_estatica_str}</span>", unsafe_allow_html=True)
             
-            # Consumir la función raspadora viva
             vias_reales_ecu911 = consultar_vias_ecu911_online()
             
             st.markdown('<div style="max-height:262px; overflow-y:auto; border:1px solid #ced4da; padding:4px; background:#ffffff; border-radius:4px;">', unsafe_allow_html=True)
