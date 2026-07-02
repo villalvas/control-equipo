@@ -14,13 +14,32 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CONTROL DE ACCESO MEDIANTE CONTRASEÑA (ESTADO DE SESIÓN) ---
+# --- MEMORIA INMUNE PARA FILTROS Y AUTENTICACIÓN ---
+@st.cache_resource
+def inicializar_memoria_inmune():
+    return {
+        "autenticado": False,  # Guardamos el estado de login aquí para que sea inmune al refresh
+        "filtros_normal": {
+            "dia_sel": "TODOS",
+            "servicio_sel": "Todos",
+            "provincia_sel": "Todas",
+            "ciudad_sel": [],
+            "estado_sel": []
+        },
+        "filtros_feriados": {
+            "feriado_sel": "Carnaval",
+            "servicio_sel": "REMOLQUE DE AUTOMOVIL ( GRUA )",
+            "provincia_sel": "Todas",
+            "ciudad_sel": []
+        }
+    }
+
+estado_global = inicializar_memoria_inmune()
+
+# --- CONTROL DE ACCESO MEDIANTE CONTRASEÑA INMUNE A REFRESH ---
 CONTRASEÑA_SALA_CONTROL = "Control2026*"
 
-if "autenticado" not in st.session_state:
-    st.session_state["autenticado"] = False
-
-if not st.session_state["autenticado"]:
+if not estado_global["autenticado"]:
     st.markdown("""
         <style>
         .block-container { padding-top: 5rem !important; text-align: center; max-width: 450px !important; margin: 0 auto !important; }
@@ -35,7 +54,7 @@ if not st.session_state["autenticado"]:
     
     if st.button("Ingresar al Tablero", use_container_width=True):
         if clave_ingresada == CONTRASEÑA_SALA_CONTROL:
-            st.session_state["autenticado"] = True
+            estado_global["autenticado"] = True  # Guardado en la memoria inmune
             st.rerun()
         else:
             st.error("Contraseña incorrecta. Acceso denegado.")
@@ -118,26 +137,6 @@ zona_ecuador = ZoneInfo("America/Guayaquil")
 ahora_actual = datetime.now(zona_ecuador)
 hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
 
-@st.cache_resource
-def inicializar_memoria_inmune():
-    return {
-        "filtros_normal": {
-            "dia_sel": "TODOS",
-            "servicio_sel": "Todos",
-            "provincia_sel": "Todas",
-            "ciudad_sel": [],
-            "estado_sel": []
-        },
-        "filtros_feriados": {
-            "feriado_sel": "Carnaval",
-            "servicio_sel": "REMOLQUE DE AUTOMOVIL ( GRUA )",
-            "provincia_sel": "Todas",
-            "ciudad_sel": []
-        }
-    }
-
-estado_global = inicializar_memoria_inmune()
-
 coordenadas_provincias = {
     'PICHINCHA': [-0.2298, -78.5249], 'GUAYAS': [-2.1894, -79.8890], 'AZUAY': [-2.9001, -79.0059],
     'MANABI': [-1.0543, -80.4544], 'EL ORO': [-3.2581, -79.9553], 'LOJA': [-3.9931, -79.2042], 
@@ -170,7 +169,7 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
     except: return {}
 
 # --- MONITOREO SÍSMICO EN TIEMPO REAL CON USGS (ECUADOR) ---
-@st.cache_data(ttl=300) # Se actualiza cada 5 minutos de forma controlada
+@st.cache_data(ttl=300)
 def consultar_sismos_ecuador_real():
     url = "https://earthquake.usgs.gov/fdsnws/event/1/query"
     params = {
@@ -331,7 +330,7 @@ if df_raw is not None and not df_raw.empty:
                 st.rerun()
                 
             if st.button("🔒 CERRAR SESIÓN", use_container_width=True, key="btn_logout_sidebar"):
-                st.session_state["autenticado"] = False
+                estado_global["autenticado"] = False
                 st.rerun()
 
         provincia_key_busqueda = provincia_sel.upper().strip()
@@ -482,7 +481,6 @@ if df_raw is not None and not df_raw.empty:
 
             # --- SECCIÓN INTEGRADA: MÓDULO SATELITAL TOMTOM + ALERTAS SÍSMICAS REAL-TIME ---
             with col_resumen_tomtom:
-                # 1. Sub-bloque del monitor de Sismos (USGS)
                 st.markdown("<span style='font-size:12px; font-weight:bold; color:#111; display:block; margin-bottom:2px;'>🌋 Sismicidad de Hoy (Ecuador - USGS)</span>", unsafe_allow_html=True)
                 sismos_detectados = consultar_sismos_ecuador_real()
                 
@@ -492,7 +490,6 @@ if df_raw is not None and not df_raw.empty:
                 else:
                     st.markdown('<div style="background-color: #e8f5e9; border-left: 4px solid #2e7d32; padding: 4px; border-radius: 4px; margin-bottom: 4px; font-size: 11px; color: #2e7d32; font-weight: 500;">🟢 Territorio nacional estable (Sin sismos > 4.0 hoy).</div>', unsafe_allow_html=True)
                 
-                # 2. Sub-bloque del Tráfico (TomTom)
                 st.markdown("<span style='font-size:12px; font-weight:bold; color:#111; display:block; margin-top: 4px; margin-bottom:2px;'>🛰️ Satelital (TomTom)</span>", unsafe_allow_html=True)
                 bbox_nacional_ecuador = "-81.0000,-5.0000,-75.0000,1.5000"
                 
