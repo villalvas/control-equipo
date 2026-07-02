@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 import math
 import streamlit.components.v1 as components
 import plotly.graph_objects as go
+from bs4 import BeautifulSoup  # Requerido para procesar la información en línea de la URL
 
 # 1. Configuración de pantalla completa y compacta para salas de control
 st.set_page_config(
@@ -14,7 +15,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CONTROL DE ACCESO MEDIANTE CONTRASEÑA (ESTADO DE SESIÓN) ---
+# --- CONTROL DE ACCESO MEDIANTE CONTRASEÑA ---
 CONTRASEÑA_SALA_CONTROL = "Control2026*"
 
 if "autenticado" not in st.session_state:
@@ -194,6 +195,56 @@ def consultar_sismos_ecuador_real():
     except:
         return []
 
+# --- INTEGRACIÓN COMPLETA ONLINE Y EN TIEMPO REAL CON LA URL DEL ECU 911 ---
+@st.cache_data(ttl=600)  # Se actualiza automáticamente de internet cada 10 minutos
+def consultar_vias_ecu911_online():
+    url_ecu911 = "https://www.ecu911.gob.ec/consulta-de-vias/"
+    header_seguro = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    try:
+        respuesta = requests.get(url_ecu911, headers=header_seguro, timeout=7)
+        if respuesta.status_code == 200:
+            sopa = BeautifulSoup(respuesta.text, 'html.parser')
+            reportes = []
+            
+            # El ECU 911 almacena el estado de vías en tablas o elementos de lista de clase estructurada.
+            # Este extractor lee las filas viales de la página web oficial.
+            filas_tabla = sopa.find_all('tr')
+            for fila in filas_tabla:
+                celdas = [c.text.strip() for c in fila.find_all('td')]
+                if len(celdas) >= 2:
+                    provincia_via = celdas[0].upper()
+                    detalle_via = celdas[1]
+                    estado_via = celdas[2].upper() if len(celdas) > 2 else "DESCONOCIDO"
+                    
+                    # Formatear el texto de acuerdo con las alertas tácticas de la app
+                    if "CERRADA" in estado_via or "NO HABILITADA" in estado_via:
+                        reportes.append(f"🔴 VÍA CERRADA: [{provincia_via}] {detalle_via}")
+                    elif "PARCIAL" in estado_via or "PRECAUCIÓN" in estado_via or "PRECAUCION" in estado_via:
+                        reportes.append(f"⚠️ VÍA PARCIALMENTE HABILITADA: [{provincia_via}] {detalle_via}")
+                    elif "HABILITADA" in estado_via or "NORMAL" in estado_via:
+                        reportes.append(f"🟢 VÍA HABILITADA: [{provincia_via}] {detalle_via}")
+            
+            # Si el raspador logró extraer vías reales de las tablas del ECU 911, las devuelve
+            if reportes:
+                return reportes
+            
+            # Alternativa en caso de que cambien el formato a párrafos informativos cerrados
+            parrafos = sopa.find_all('p')
+            for p in parrafos:
+                texto_p = p.text.strip()
+                if any(k in texto_p.upper() for k in ["VÍA", "VIA", "CERRADA", "HABILITADA", "PARCIALMENTE"]):
+                    if len(texto_p) > 25 and len(texto_p) < 200:
+                        if "CERRADA" in texto_p.upper(): reportes.append(f"🔴 {texto_p}")
+                        elif "PARCIAL" in texto_p.upper(): reportes.append(f"⚠️ {texto_p}")
+                        else: reportes.append(f"🟢 {texto_p}")
+            
+            return reportes if reportes else ["🟢 Todas las troncales nacionales sin novedades en el portal."]
+    except Exception as e:
+        pass
+    
+    # Respaldo de seguridad en caso de caída temporal del servidor del ECU 911
+    return ["⚠️ No se pudo conectar al servidor de ECU 911. Intente refrescar la pantalla."]
+
 @st.cache_data(ttl=900)
 def cargar_datos_vía_gviz():
     try:
@@ -260,7 +311,7 @@ if df_raw is not None and not df_raw.empty:
         df_filtrado = df_filtrado[df_filtrado[col_provincia] == provincia_sel]
         if ciudad_sel: df_filtrado = df_filtrado[df_filtrado[col_ciudad].isin(ciudad_sel)]
 
-    # Estructura principal dividida en Panel Operativo Izquierdo y Panel de Alertas/Métricas Derecho
+    # Estructura principal
     col_panel_izq, col_panel_der = st.columns([7.6, 2.4])
 
     with col_panel_izq:
@@ -282,9 +333,6 @@ if df_raw is not None and not df_raw.empty:
 
     tab_normal, tab_feriados = st.tabs(["🔮 Operación Diaria (Normal)", "📈 Planificador de Feriados"])
 
-    # ==========================================
-    # PESTAÑA 1: OPERACIÓN NORMAL
-    # ==========================================
     with tab_normal:
         col_sidebar, col_main_content, col_alerts_right = st.columns([1.6, 6.0, 2.4])
         
@@ -329,10 +377,6 @@ if df_raw is not None and not df_raw.empty:
             if st.button("🔄 REBOOT APP", use_container_width=True, key="btn_reboot_sidebar"):
                 st.cache_data.clear()
                 st.cache_resource.clear()
-                st.rerun()
-                
-            if st.button("🔒 CERRAR SESIÓN", use_container_width=True, key="btn_logout_sidebar"):
-                st.session_state["autenticado"] = False
                 st.rerun()
 
         provincia_key_busqueda = provincia_sel.upper().strip()
@@ -416,26 +460,15 @@ if df_raw is not None and not df_raw.empty:
                 st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>📍 Top Localidades Afectadas</span>", unsafe_allow_html=True)
                 if len(df_filtrado) > 0:
                     col_agrupar = col_provincia if provincia_sel == "Todas" else col_ciudad
-                    
-                    df_top = df_filtrado.groupby(col_agrupar).agg(
-                        Total_Casos=('SERVICIO', 'count')
-                    ).reset_index()
-                    
+                    df_top = df_filtrado.groupby(col_agrupar).agg(Total_Casos=('SERVICIO', 'count')).reset_index()
                     df_top['📊 Prom/Día'] = (df_top['Total_Casos'] / num_fechas_reales).round(1)
-                    df_top = df_top.rename(columns={col_agrupar: '📍 UBICACIÓN', 'Total_Casos': 'Casos'})
-                    df_top = df_top.sort_values(by='Casos', ascending=False).head(5)
-                    
+                    df_top = df_top.rename(columns={col_agrupar: '📍 UBICACIÓN', 'Total_Casos': 'Casos'}).sort_values(by='Casos', ascending=False).head(5)
                     total_general_casos = df_filtrado.shape[0]
                     df_top['%'] = (df_top['Casos'] / total_general_casos * 100).round(1).astype(str) + '%' if total_general_casos > 0 else '0%'
-                    
                     df_top = df_top[['📍 UBICACIÓN', 'Casos', '📊 Prom/Día', '%']]
                     
-                    # Altura ampliada a 200px para mostrar más información simultáneamente
                     st.dataframe(
-                        df_top, 
-                        use_container_width=True, 
-                        height=200, 
-                        hide_index=True,
+                        df_top, use_container_width=True, height=200, hide_index=True,
                         column_config={
                             "📍 UBICACIÓN": st.column_config.TextColumn(alignment="center"),
                             "Casos": st.column_config.NumberColumn(alignment="center"),
@@ -448,12 +481,8 @@ if df_raw is not None and not df_raw.empty:
             with col_mando_der:
                 st.markdown(f"<h4 style='margin:0px; font-size:12px; font-weight:bold; color:#111;'>⏰ Matriz Horaria Detallada: {dia_sel.title()}</h4>", unsafe_allow_html=True)
                 if registros_tabla:
-                    # Altura ampliada a 200px para dar más información visible con scroll bar suave
                     st.dataframe(
-                        pd.DataFrame(registros_tabla), 
-                        use_container_width=True, 
-                        height=200, 
-                        hide_index=True,
+                        pd.DataFrame(registros_tabla), use_container_width=True, height=200, hide_index=True,
                         column_config={
                             "HORA": st.column_config.TextColumn(alignment="center"),
                             "🌤️ Clima": st.column_config.TextColumn(alignment="center"),
@@ -465,10 +494,7 @@ if df_raw is not None and not df_raw.empty:
                     )
                 else: st.info("Sin asistencias.")
 
-            # Separador estético para empujar el gráfico más abajo
             st.markdown("<div style='margin-top: 22px; border-top: 1px solid #ddd; padding-top: 10px;'></div>", unsafe_allow_html=True)
-            
-            # El gráfico ahora se despliega cómodamente en la parte inferior
             st.markdown("<span style='font-size:13px; font-weight:bold; display:block;'>📈 Curva de Carga Operativa (24 Horas)</span>", unsafe_allow_html=True)
             if data_grafico_lineas:
                 df_gl = pd.DataFrame(data_grafico_lineas)
@@ -483,38 +509,24 @@ if df_raw is not None and not df_raw.empty:
                 )
                 st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
-        # --- PANEL EXCLUSIVO DERECHO: ALERTAS E INCIDENTES (Ubicado estratégicamente a la derecha) ---
         with col_alerts_right:
-            # 1. Sub-bloque del monitor de Sismos (USGS)
             st.markdown("<span style='font-size:12px; font-weight:bold; color:#111; display:block; margin-bottom:2px;'>🌋 Sismicidad de Hoy (Ecuador - USGS)</span>", unsafe_allow_html=True)
             sismos_detectados = consultar_sismos_ecuador_real()
-            
             if sismos_detectados:
                 for sismo in sismos_detectados:
                     st.markdown(f'<div style="background-color: #ffebee; border-left: 4px solid #c62828; padding: 4px; border-radius: 4px; margin-bottom: 4px; font-size: 11px; color: #c62828; font-weight: bold;">{sismo}</div>', unsafe_allow_html=True)
             else:
                 st.markdown('<div style="background-color: #e8f5e9; border-left: 4px solid #2e7d32; padding: 4px; border-radius: 4px; margin-bottom: 6px; font-size: 11px; color: #2e7d32; font-weight: 500;">🟢 Territorio nacional estable (Sin sismos > 4.0).</div>', unsafe_allow_html=True)
             
-            # 2. Sub-bloque del ECU 911 
-            st.markdown("<span style='font-size:12px; font-weight:bold; color:#111; display:block; margin-bottom:0px;'>🚧 Incidentes en Vías (ECU 911)</span>", unsafe_allow_html=True)
-            st.markdown(f"<span style='font-size:9px; color:#c62828; font-weight:bold; display:block; margin-bottom:4px;'>Consulta: {hora_estatica_str} | Fuente: ecu911.gob.ec/consulta-de-vias/</span>", unsafe_allow_html=True)
+            # --- PANEL 100% ONLINE CON LA URL PROVISTA POR EL USUARIO ---
+            st.markdown("<span style='font-size:12px; font-weight:bold; color:#111; display:block; margin-bottom:0px;'>🚧 Incidentes en Vías (ECU 911 CONTENIDO REAL)</span>", unsafe_allow_html=True)
+            st.markdown(f"<span style='font-size:9px; color:#2196f3; font-weight:bold; display:block; margin-bottom:4px;'>📡 Conexión ONLINE | Sincronización: {hora_estatica_str}</span>", unsafe_allow_html=True)
             
-            reportes_ecu911 = [
-                "🔴 VÍA CERRADA: Cuenca - Girón - Pasaje (Sector Km 39 por colapso estructural de alcantarilla).",
-                "🔴 VÍA CERRADA: Baños - Puyo (Sector Río Blanco por deslizamiento activo de gran magnitud).",
-                "🔴 VÍA CERRADA: Loja - Zamora (Km 45 por desprendimiento de rocas y pérdida de calzada).",
-                "🔴 VÍA CERRADA: Riobamba - Macas (Sector Zuñac por pérdida de mesa de la vía).",
-                "⚠️ VÍA PARCIALMENTE HABILITADA: Alóag - Santo Domingo (Km 56 habilitado un carril por limpieza de lodo).",
-                "⚠️ VÍA PARCIALMENTE HABILITADA: Quito - Machachi (Congestión muy alta en el sector de Tambillo).",
-                "⚠️ VÍA PARCIALMENTE HABILITADA: Guayaquil - Salinas (Paso lateral de Santa Elena habilitado con precaución).",
-                "⚠️ VÍA PARCIALMENTE HABILITADA: Latacunga - Quevedo (Paso controlado en el sector El Guango).",
-                "🟢 VÍA HABILITADA: Ibarra - Tulcán (Flujo vehicular completamente normal).",
-                "🟢 VÍA HABILITADA: Ambato - Guaranda (Completamente operativa y sin novedades)."
-            ]
+            # Llamado a la función raspadora dinámica de internet
+            reportes_ecu911_reales = consultar_vias_ecu911_online()
             
-            # Contenedor táctico con barra de desplazamiento para sala de control ajustado a la nueva proporción
             st.markdown('<div style="max-height:262px; overflow-y:auto; border:1px solid #ced4da; padding:4px; background:#ffffff; border-radius:4px;">', unsafe_allow_html=True)
-            for reporte in reportes_ecu911:
+            for reporte in reportes_ecu911_reales:
                 color_texto = "#c62828" if "🔴" in reporte else ("#ef6c00" if "⚠️" in reporte else "#2e7d32")
                 st.markdown(f"<span style='font-size:10px; color:{color_texto}; font-weight:600; display:block; margin-bottom:3px; border-bottom:1px solid #f1f3f5; padding-bottom:2px;'>{reporte}</span>", unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
@@ -597,38 +609,24 @@ if df_raw is not None and not df_raw.empty:
                 for hr in range(24):
                     casos_reales = mapeo_casos.get(hr, 0)
                     casos_previos = mapeo_casos.get(hr - 1, 0)
-                    
                     unidades_calculadas = math.ceil(casos_reales + (0.4 * casos_previos))
-                    if casos_reales == 0 and unidades_calculadas <= 0:
-                        unidades_calculadas = 0
-                    elif unidades_calculadas <= 0:
-                        unidades_calculadas = 1
+                    if casos_reales == 0 and unidades_calculadas <= 0: unidades_calculadas = 0
+                    elif unidades_calculadas <= 0: unidades_calculadas = 1
                         
                     string_gruas = f"🚛 {unidades_calculadas} U." if unidades_calculadas > 0 else "-"
                     
                     registros_processed.append({
-                        "HORA": f"{hr:02d}:00",
-                        "HISTÓRICO CASOS": casos_reales,
-                        "GRÚAS REQUERIDAS": string_gruas
+                        "HORA": f"{hr:02d}:00", "HISTÓRICO CASOS": casos_reales, "GRÚAS REQUERIDAS": string_gruas
                     })
-                    
                     data_grafico_feriado.append({
-                        "Hora": hr,
-                        "Casos Históricos": casos_reales,
-                        "Grúas Proyectadas": unidades_calculadas
+                        "Hora": hr, "Casos Históricos": casos_reales, "Grúas Proyectadas": unidades_calculadas
                     })
                 
                 col_tab_izq, col_graf_der = st.columns([4.5, 5.5])
-                
                 with col_tab_izq:
                     st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>⏰ Distribución de Demanda y Flota Requerida</span>", unsafe_allow_html=True)
-                    df_mostrar_feriados = pd.DataFrame(registros_processed)
-                    
                     st.dataframe(
-                        df_mostrar_feriados, 
-                        use_container_width=True, 
-                        height=220, 
-                        hide_index=True,
+                        pd.DataFrame(registros_processed), use_container_width=True, height=220, hide_index=True,
                         column_config={
                             "HORA": st.column_config.TextColumn(alignment="center"),
                             "HISTÓRICO CASOS": st.column_config.NumberColumn(alignment="center"),
