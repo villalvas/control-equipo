@@ -172,7 +172,7 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
         return datos_clima
     except: return {}
 
-@st.cache_data(ttl=900)
+@st.cache_data(ttl=840)
 def cargar_datos_vía_gviz():
     try:
         url_base = "https://docs.google.com/spreadsheets/d/1UWQy9XJy8UOdef1IcXWDt2Nmn7hTnsQLHby_3BhpJnc/edit"
