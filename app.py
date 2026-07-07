@@ -46,20 +46,42 @@ if not st.session_state["autenticado"]:
 
 # --- SI ESTÁ AUTENTICADO, SE EJECUTA EL TABLERO COMPLETO ---
 
-# --- REFRESCO INMUNE A CIERRES DE SESIÓN CADA 15 MINUTOS ---
-# Esto fuerza a Streamlit a recalcular los datos sin perder el st.session_state
-components.html(
-    """
-    <script>
-        setTimeout(function(){
-            // Busca el botón de rerender interno de Streamlit o dispara un cambio sutil
-            window.parent.document.dispatchEvent(new CustomEvent("streamlit:rerun"));
-        }, 900000);
-    </script>
-    """,
-    height=0,
-    width=0
-)
+# Estilos CSS radicales para compactar y centrar elementos (Mantén tu CSS igual)
+st.markdown("""
+    <style>
+    ... (Tu CSS actual) ...
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- CREAMOS EL FRAGMENTO DE AUTOREFRESCO NATIVO (CADA 15 MINUTOS = 900 SEGUNDOS) ---
+@st.fragment(run_every=900)
+def renderizar_tablero_dinamico():
+    # Volvemos a calcular la hora exacta en cada ciclo de refresco
+    zona_ecuador = ZoneInfo("America/Guayaquil")
+    ahora_actual = datetime.now(zona_ecuador)
+    hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
+    
+    # Forzamos a limpiar la caché interna para traer datos nuevos de Google Sheets y TomTom
+    st.cache_data.clear() 
+    
+    # Aquí se mete toda tu lógica actual de procesamiento y renderizado:
+    df_raw = cargar_datos_vía_gviz()
+    
+    if df_raw is not None and not df_raw.empty:
+        # ... TODO TU CÓDIGO POSTERIOR DE FILTROS, TABS, GRAFICOS Y TABLAS ...
+        # (Copia exactamente desde 'df_raw.columns = df_raw.columns.str.strip().str.upper()' 
+        # hasta el final de la pestaña de feriados dentro de esta función)
+        
+        # Ejemplo de la cabecera usando la nueva hora_estatica_str dinámica:
+        col_titulo, col_metrica_global = st.columns([7.6, 2.4])
+        with col_titulo:
+            st.markdown(f"<h2 style='margin:0px; padding:0px; font-size:26px;'>🔮 Proyección Horaria y Alerta de Flota</h2>", unsafe_allow_html=True)
+            st.markdown(f"<p style='margin:0px 0px 6px 0px; font-size:11px; color:#555;'><b>Control Geoanalítico</b> | 🔄 Refresco Automático Activo (Última Actualización: {hora_estatica_str})</p>", unsafe_allow_html=True)
+            
+        # ... El resto de tus Tabs (tab_normal, tab_feriados) va aquí adentro ...
+
+# --- EJECUCIÓN DEL TABLERO ---
+renderizar_tablero_dinamico()
 
 # Estilos CSS radicales para compactar y centrar elementos de texto generales
 st.markdown("""
