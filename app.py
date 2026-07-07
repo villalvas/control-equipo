@@ -155,7 +155,7 @@ coordenadas_provincias = {
 
 diccionario_dias = {"LUNES": 0, "MARTES": 1, "MIÉRCOLES": 2, "MIERCOLES": 2, "JUEVES": 3, "VIERNES": 4, "SÁBADO": 5, "SABADO": 5, "DOMINGO": 6}
 
-@st.cache_data(ttl=900)
+@st.cache_data(ttl=840)
 def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
     try:
         url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,weathercode&timezone=auto&forecast_days=7"
