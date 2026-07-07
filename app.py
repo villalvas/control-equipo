@@ -7,6 +7,33 @@ import math
 import streamlit.components.v1 as components
 import plotly.graph_objects as go
 
+# --- COMPONENTE DE AUTOREFRESCO NATIVO INTEGRADO ---
+# Función para autorefrescar la app desde el backend sin romper st.session_state
+def autorefresco_sala_control(intervalo_ms=900000):
+    """Refresca la aplicación internamente cada N milisegundos (900000 ms = 15 min)"""
+    components.html(
+        f"""
+        <script>
+            if (!window.intervalSet) {{
+                setInterval(function() {{
+                    window.parent.document.querySelector('.stApp').dispatchEvent(new CustomEvent('render'));
+                    // Dispara un cambio sutil en un elemento nativo para forzar el rerun de Streamlit
+                    var buttons = window.parent.document.querySelectorAll('button');
+                    for (var i = 0; i < buttons.length; i++) {{
+                        if (buttons[i].innerText.includes('⚙️ Filtros') || buttons[i].innerText.includes('🔮')) {{
+                            buttons[i].click();
+                            break;
+                        }}
+                    }}
+                }}, {intervalo_ms});
+                window.intervalSet = true;
+            }}
+        </script>
+        """,
+        height=0,
+        width=0
+    )
+
 # 1. Configuración de pantalla completa y compacta para salas de control
 st.set_page_config(
     layout="wide", 
@@ -15,14 +42,11 @@ st.set_page_config(
 )
 
 # --- CONTROL DE ACCESO MEDIANTE CONTRASEÑA (ESTADO DE SESIÓN) ---
-# Definir la contraseña de la Sala de Control
 CONTRASEÑA_SALA_CONTROL = "Control2026*"
 
-# Inicializar variable de autenticación en la memoria de sesión si no existe
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
 
-# Interfaz de bloqueo si el usuario no está autenticado
 if not st.session_state["autenticado"]:
     st.markdown("""
         <style>
@@ -42,46 +66,12 @@ if not st.session_state["autenticado"]:
             st.rerun()
         else:
             st.error("Contraseña incorrecta. Acceso denegado.")
-    st.stop()  # Detiene la ejecución para que no cargue nada del código inferior
+    st.stop()
 
-# --- SI ESTÁ AUTENTICADO, SE EJECUTA EL TABLERO COMPLETO ---
+# --- SI ESTÁ AUTENTICADO, SE EJECUTA EL TABLERO ---
 
-# Estilos CSS radicales para compactar y centrar elementos (Mantén tu CSS igual)
-st.markdown("""
-    <style>
-    ... (Tu CSS actual) ...
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- CREAMOS EL FRAGMENTO DE AUTOREFRESCO NATIVO (CADA 15 MINUTOS = 900 SEGUNDOS) ---
-@st.fragment(run_every=900)
-def renderizar_tablero_dinamico():
-    # Volvemos a calcular la hora exacta en cada ciclo de refresco
-    zona_ecuador = ZoneInfo("America/Guayaquil")
-    ahora_actual = datetime.now(zona_ecuador)
-    hora_estatica_str = ahora_actual.strftime('%I:%M:%S %p')
-    
-    # Forzamos a limpiar la caché interna para traer datos nuevos de Google Sheets y TomTom
-    st.cache_data.clear() 
-    
-    # Aquí se mete toda tu lógica actual de procesamiento y renderizado:
-    df_raw = cargar_datos_vía_gviz()
-    
-    if df_raw is not None and not df_raw.empty:
-        # ... TODO TU CÓDIGO POSTERIOR DE FILTROS, TABS, GRAFICOS Y TABLAS ...
-        # (Copia exactamente desde 'df_raw.columns = df_raw.columns.str.strip().str.upper()' 
-        # hasta el final de la pestaña de feriados dentro de esta función)
-        
-        # Ejemplo de la cabecera usando la nueva hora_estatica_str dinámica:
-        col_titulo, col_metrica_global = st.columns([7.6, 2.4])
-        with col_titulo:
-            st.markdown(f"<h2 style='margin:0px; padding:0px; font-size:26px;'>🔮 Proyección Horaria y Alerta de Flota</h2>", unsafe_allow_html=True)
-            st.markdown(f"<p style='margin:0px 0px 6px 0px; font-size:11px; color:#555;'><b>Control Geoanalítico</b> | 🔄 Refresco Automático Activo (Última Actualización: {hora_estatica_str})</p>", unsafe_allow_html=True)
-            
-        # ... El resto de tus Tabs (tab_normal, tab_feriados) va aquí adentro ...
-
-# --- EJECUCIÓN DEL TABLERO ---
-renderizar_tablero_dinamico()
+# Ejecutar el actualizador automático seguro (Cada 15 minutos)
+autorefresco_sala_control(900000)
 
 # Estilos CSS radicales para compactar y centrar elementos de texto generales
 st.markdown("""
@@ -92,7 +82,6 @@ st.markdown("""
     .stDataFrame [data-testid="stDataFrameDownloadButton"] {display: none;}
     button[title="View fullscreen"] {display: none;}
     
-    /* Forzado de márgenes cero para evitar scroll general */
     .block-container {
         padding-top: 0.2rem !important;
         padding-bottom: 0.1rem !important;
@@ -101,7 +90,6 @@ st.markdown("""
         margin-top: 0px !important;
     }
     
-    /* Forzado complementario en celdas de datos generales */
     [data-testid="stTable"] td, [data-testid="stDataFrame"] td, 
     div[data-testid="stDataFrame"] [role="gridcell"] {
         font-size: 11px !important;
@@ -210,6 +198,7 @@ def cargar_datos_vía_gviz():
         return pd.read_csv(csv_url)
     except: return None
 
+# Ejecución de carga de datos segura
 df_raw = cargar_datos_vía_gviz()
 
 if df_raw is not None and not df_raw.empty:
@@ -238,7 +227,6 @@ if df_raw is not None and not df_raw.empty:
     if col_hora_agrupada in df_raw.columns:
         df_raw[col_hora_agrupada] = df_raw[col_hora_agrupada].apply(extraer_hora_limpia)
 
-    # --- ENRUTAMIENTO DE FILTROS TEMPRANOS PARA LA CABECERA MÁSTER ---
     dia_sel = estado_global["filtros_normal"]["dia_sel"]
     if "dia_sel_key" in st.session_state:
         dia_sel = st.session_state["dia_sel_key"]
@@ -268,7 +256,7 @@ if df_raw is not None and not df_raw.empty:
         df_filtrado = df_filtrado[df_filtrado[col_provincia] == provincia_sel]
         if ciudad_sel: df_filtrado = df_filtrado[df_filtrado[col_ciudad].isin(ciudad_sel)]
 
-    # --- CABECERA ESTRATÉGICA EN FORMATO HORIZONTAL ---
+    # --- CABECERA ---
     col_titulo, col_metrica_global = st.columns([7.6, 2.4])
 
     with col_titulo:
@@ -290,9 +278,6 @@ if df_raw is not None and not df_raw.empty:
 
     tab_normal, tab_feriados = st.tabs(["🔮 Operación Diaria (Normal)", "📈 Planificador de Feriados"])
 
-    # ==========================================
-    # PESTAÑA 1: OPERACIÓN NORMAL
-    # ==========================================
     with tab_normal:
         col_sidebar, col_main_content = st.columns([1.6, 8.4])
         
@@ -339,7 +324,6 @@ if df_raw is not None and not df_raw.empty:
                 st.cache_resource.clear()
                 st.rerun()
                 
-            # --- AGREGADO: BOTÓN DE CERRAR SESIÓN DE SEGURIDAD ---
             if st.button("🔒 CERRAR SESIÓN", use_container_width=True, key="btn_logout_sidebar"):
                 st.session_state["autenticado"] = False
                 st.rerun()
@@ -490,7 +474,6 @@ if df_raw is not None and not df_raw.empty:
                     )
                     st.plotly_chart(fig_lineas, use_container_width=True, config={'displayModeBar': False})
 
-            # --- SECCIÓN INTEGRADA: MÓDULO SATELITAL TOMTOM DIRECTO (SIN NOTICIAS) ---
             with col_resumen_tomtom:
                 st.markdown("<span style='font-size:12px; font-weight:bold; color:#111; display:block; margin-bottom:2px;'>🛰️ Satelital (TomTom)</span>", unsafe_allow_html=True)
                 bbox_nacional_ecuador = "-81.0000,-5.0000,-75.0000,1.5000"
@@ -529,9 +512,6 @@ if df_raw is not None and not df_raw.empty:
                     st.markdown(f"<span style='font-size:10px; color:#d32f2f; font-weight:500; display:block; margin-bottom:2px;'>• {incidente}</span>", unsafe_allow_html=True)
                 st.markdown('</div>', unsafe_allow_html=True)
 
-    # ==========================================
-    # PESTAÑA 2: PLANIFICADOR DE FERIADOS
-    # ==========================================
     with tab_feriados:
         col_f_fer, col_c_fer = st.columns([1.6, 8.4])
         
@@ -634,7 +614,6 @@ if df_raw is not None and not df_raw.empty:
                     st.markdown("<span style='font-size:12px; font-weight:bold; color:#111;'>⏰ Distribución de Demanda y Flota Requerida</span>", unsafe_allow_html=True)
                     df_mostrar_feriados = pd.DataFrame(registros_processed)
                     
-                    # CORRECCIÓN EXPLICITA DE ALINEACIÓN AL CENTRO EN FILAS NUMÉRICAS EN FERIADOS
                     st.dataframe(
                         df_mostrar_feriados, 
                         use_container_width=True, 
