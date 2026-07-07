@@ -4,34 +4,17 @@ import requests
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import math
-import streamlit.components.v1 as components
+from streamlit_autorefresh import st_autorefresh
 import plotly.graph_objects as go
 
 # --- COMPONENTE DE AUTOREFRESCO NATIVO INTEGRADO ---
-# Función para autorefrescar la app desde el backend sin romper st.session_state
+# Refresca la app cada 15 minutos sin cerrar sesión ni perder filtros,
+# porque st.session_state se mantiene entre reruns de Streamlit.
 def autorefresco_sala_control(intervalo_ms=900000):
-    """Refresca la aplicación internamente cada N milisegundos (900000 ms = 15 min)"""
-    components.html(
-        f"""
-        <script>
-            if (!window.intervalSet) {{
-                setInterval(function() {{
-                    window.parent.document.querySelector('.stApp').dispatchEvent(new CustomEvent('render'));
-                    // Dispara un cambio sutil en un elemento nativo para forzar el rerun de Streamlit
-                    var buttons = window.parent.document.querySelectorAll('button');
-                    for (var i = 0; i < buttons.length; i++) {{
-                        if (buttons[i].innerText.includes('⚙️ Filtros') || buttons[i].innerText.includes('🔮')) {{
-                            buttons[i].click();
-                            break;
-                        }}
-                    }}
-                }}, {intervalo_ms});
-                window.intervalSet = true;
-            }}
-        </script>
-        """,
-        height=0,
-        width=0
+    """Refresca la aplicación internamente cada N milisegundos (900000 ms = 15 min)."""
+    st_autorefresh(
+        interval=intervalo_ms,
+        key="autorefresco_sala_control"
     )
 
 # 1. Configuración de pantalla completa y compacta para salas de control
