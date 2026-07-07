@@ -14,6 +14,7 @@ def autorefresco_sala_control(intervalo_ms=900000):
     """Refresca la aplicación internamente cada N milisegundos (900000 ms = 15 min)."""
     st_autorefresh(
         interval=intervalo_ms,
+        limit=None,
         key="autorefresco_sala_control"
     )
 
