@@ -8,3 +8,4 @@ st-gsheets-connection
 beautifulsoup4
 requests
 pytz
+streamlit-autorefresh
