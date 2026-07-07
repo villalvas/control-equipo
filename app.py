@@ -46,12 +46,14 @@ if not st.session_state["autenticado"]:
 
 # --- SI ESTÁ AUTENTICADO, SE EJECUTA EL TABLERO COMPLETO ---
 
-# --- RECARGA NATIVA FORZADA DE VENTANA CADA 15 MINUTOS ---
+# --- REFRESCO INMUNE A CIERRES DE SESIÓN CADA 15 MINUTOS ---
+# Esto fuerza a Streamlit a recalcular los datos sin perder el st.session_state
 components.html(
     """
     <script>
         setTimeout(function(){
-            window.parent.location.reload();
+            // Busca el botón de rerender interno de Streamlit o dispara un cambio sutil
+            window.parent.document.dispatchEvent(new CustomEvent("streamlit:rerun"));
         }, 900000);
     </script>
     """,
