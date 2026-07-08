@@ -168,7 +168,7 @@ def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
             if fecha_part == fecha_objetivo_str:
                 hora_int = int(hora_part.split(":")[0])
                 estado = "Lluvia" if codigo in [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99] else "Normal"
-                if estado == "Lluvia":
+if estado == "Lluvia":
     icono = "🌧️"
 elif codigo == 0:
     icono = "☀️" if 6 <= hora_int <= 18 else "🌙"
