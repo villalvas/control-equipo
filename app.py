@@ -159,24 +159,77 @@ diccionario_dias = {"LUNES": 0, "MARTES": 1, "MIÉRCOLES": 2, "MIERCOLES": 2, "J
 @st.cache_data(ttl=840)
 def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
     try:
-        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,weathercode&timezone=auto&forecast_days=7"
-        respuesta = requests.get(url, timeout=5).json()
-        horas_raw, temperaturas, codigos_clima = respuesta['hourly']['time'], respuesta['hourly']['temperature_2m'], respuesta['hourly']['weathercode']
+        url = (
+            f"https://api.open-meteo.com/v1/forecast?"
+            f"latitude={lat}&longitude={lon}"
+            f"&hourly=temperature_2m,weathercode"
+            f"&timezone=auto&forecast_days=7"
+        )
+
+        respuesta_http = requests.get(url, timeout=8)
+
+        if respuesta_http.status_code != 200:
+            st.warning(f"⚠️ Open-Meteo respondió con error HTTP {respuesta_http.status_code}.")
+            return {}
+
+        respuesta = respuesta_http.json()
+
+        if "hourly" not in respuesta:
+            st.warning("⚠️ Open-Meteo no devolvió información horaria.")
+            return {}
+
+        campos_requeridos = ["time", "temperature_2m", "weathercode"]
+        for campo in campos_requeridos:
+            if campo not in respuesta["hourly"]:
+                st.warning(f"⚠️ Open-Meteo no devolvió el campo requerido: {campo}.")
+                return {}
+
+        horas_raw = respuesta["hourly"]["time"]
+        temperaturas = respuesta["hourly"]["temperature_2m"]
+        codigos_clima = respuesta["hourly"]["weathercode"]
+
         datos_clima = {}
+
         for h, temp, codigo in zip(horas_raw, temperaturas, codigos_clima):
             fecha_part, hora_part = h.split("T")
+
             if fecha_part == fecha_objetivo_str:
                 hora_int = int(hora_part.split(":")[0])
-                estado = "Lluvia" if codigo in [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99] else "Normal"
-if estado == "Lluvia":
-    icono = "🌧️"
-elif codigo == 0:
-    icono = "☀️" if 6 <= hora_int <= 18 else "🌙"
-else:
-    icono = "☁️"
-                datos_clima[hora_int] = {"Detalle": f"{icono} {temp}°C", "Estado": estado}
+
+                es_lluvia = codigo in [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99]
+                estado = "Lluvia" if es_lluvia else "Normal"
+
+                # Open-Meteo usa weathercode 0 para cielo despejado.
+                # En la noche no debe mostrarse como sol, sino como luna.
+                if es_lluvia:
+                    icono = "🌧️"
+                elif codigo == 0:
+                    icono = "☀️" if 6 <= hora_int < 18 else "🌙"
+                else:
+                    icono = "☁️"
+
+                datos_clima[hora_int] = {
+                    "Detalle": f"{icono} {temp}°C",
+                    "Estado": estado,
+                    "Codigo": codigo
+                }
+
+        if not datos_clima:
+            st.warning(f"⚠️ Open-Meteo respondió, pero no encontró datos para la fecha {fecha_objetivo_str}.")
+
         return datos_clima
-    except: return {}
+
+    except requests.exceptions.Timeout:
+        st.warning("⚠️ Open-Meteo no respondió a tiempo. Se mantiene el tablero sin clima actualizado.")
+        return {}
+
+    except requests.exceptions.RequestException as e:
+        st.warning(f"⚠️ No se pudo conectar con Open-Meteo: {e}")
+        return {}
+
+    except Exception as e:
+        st.warning(f"⚠️ Error procesando la respuesta de Open-Meteo: {e}")
+        return {}
 
 @st.cache_data(ttl=840)
 def cargar_datos_vía_gviz():
