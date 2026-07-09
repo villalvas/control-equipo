@@ -156,6 +156,106 @@ coordenadas_provincias = {
 
 diccionario_dias = {"LUNES": 0, "MARTES": 1, "MIÉRCOLES": 2, "MIERCOLES": 2, "JUEVES": 3, "VIERNES": 4, "SÁBADO": 5, "SABADO": 5, "DOMINGO": 6}
 
+# --- RESOLUCIÓN DINÁMICA DE COORDENADAS PARA CLIMA ---
+def normalizar_texto_clima(valor):
+    """Normaliza provincia/ciudad para comparar textos sin tildes ni espacios extra."""
+    if valor is None:
+        return ""
+    return (
+        str(valor)
+        .strip()
+        .upper()
+        .replace("Á", "A")
+        .replace("É", "E")
+        .replace("Í", "I")
+        .replace("Ó", "O")
+        .replace("Ú", "U")
+        .replace("Ñ", "N")
+    )
+
+@st.cache_data(ttl=86400)
+def geocodificar_ciudad_open_meteo(ciudad, provincia=""):
+    """
+    Busca coordenadas de una ciudad ecuatoriana usando el geocodificador gratuito de Open-Meteo.
+    Si no encuentra coincidencia confiable, devuelve None para usar el fallback por provincia.
+    """
+    try:
+        ciudad_limpia = str(ciudad).strip()
+        provincia_norm = normalizar_texto_clima(provincia)
+
+        if not ciudad_limpia:
+            return None
+
+        url = "https://geocoding-api.open-meteo.com/v1/search"
+        params = {
+            "name": ciudad_limpia,
+            "count": 10,
+            "language": "es",
+            "format": "json"
+        }
+
+        respuesta_http = requests.get(url, params=params, timeout=8)
+        if respuesta_http.status_code != 200:
+            return None
+
+        data = respuesta_http.json()
+        resultados = data.get("results", [])
+        if not resultados:
+            return None
+
+        # Solo Ecuador
+        resultados_ec = [r for r in resultados if r.get("country_code") == "EC"]
+        if not resultados_ec:
+            return None
+
+        # Preferir coincidencia de provincia/admin1 cuando exista.
+        for r in resultados_ec:
+            admin1_norm = normalizar_texto_clima(r.get("admin1", ""))
+            if provincia_norm and (provincia_norm in admin1_norm or admin1_norm in provincia_norm):
+                return {
+                    "lat": r.get("latitude"),
+                    "lon": r.get("longitude"),
+                    "nombre": r.get("name", ciudad_limpia),
+                    "provincia": r.get("admin1", provincia)
+                }
+
+        # Si no hay match por provincia, usar la primera coincidencia de Ecuador.
+        r = resultados_ec[0]
+        return {
+            "lat": r.get("latitude"),
+            "lon": r.get("longitude"),
+            "nombre": r.get("name", ciudad_limpia),
+            "provincia": r.get("admin1", provincia)
+        }
+
+    except Exception:
+        return None
+
+def resolver_coordenadas_clima(provincia_sel, ciudad_sel):
+    """
+    Regla de uso del clima:
+    1) Si se selecciona una ciudad, usa coordenadas de esa ciudad.
+    2) Si no hay ciudad o no se encuentra, usa coordenadas de la provincia.
+    3) Si no hay provincia, no consulta clima.
+    """
+    if provincia_sel == "Todas":
+        return None, None, "Nacional"
+
+    provincia_key = normalizar_texto_clima(provincia_sel)
+
+    if ciudad_sel:
+        ciudad_referencia = str(ciudad_sel[0]).strip()
+        geo_ciudad = geocodificar_ciudad_open_meteo(ciudad_referencia, provincia_sel)
+        if geo_ciudad and geo_ciudad.get("lat") is not None and geo_ciudad.get("lon") is not None:
+            return geo_ciudad["lat"], geo_ciudad["lon"], f"{geo_ciudad['nombre']}"
+
+    if provincia_key in coordenadas_provincias:
+        lat_p, lon_p = coordenadas_provincias[provincia_key]
+        return lat_p, lon_p, provincia_sel
+
+    return None, None, "Sin ubicación"
+
+
 @st.cache_data(ttl=840)
 def obtener_clima_horario_futuro(lat, lon, fecha_objetivo_str):
     try:
@@ -370,9 +470,8 @@ if df_raw is not None and not df_raw.empty:
                 st.session_state["autenticado"] = False
                 st.rerun()
 
-        provincia_key_busqueda = provincia_sel.upper().strip()
-        if provincia_sel != "Todas" and provincia_key_busqueda in coordenadas_provincias:
-            lat_c, lon_c = coordenadas_provincias[provincia_key_busqueda]
+        lat_c, lon_c, ubicacion_clima = resolver_coordenadas_clima(provincia_sel, ciudad_sel)
+        if lat_c is not None and lon_c is not None:
             diccionario_clima = obtener_clima_horario_futuro(lat_c, lon_c, fecha_target_str)
         else:
             diccionario_clima = {}
